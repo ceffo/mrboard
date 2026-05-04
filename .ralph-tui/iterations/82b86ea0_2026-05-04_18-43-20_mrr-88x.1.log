@@ -1,0 +1,79 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.1
+- **Task Title**: US-003: Domain types
+- **Description**: As a developer, I want pure Go domain types in internal/domain/ with no external dependencies so they can be used by any future frontend.
+
+## Acceptance Criteria
+- [ ] internal/domain/mr.go defines Re...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-04T22:43:20.195Z
+- **Ended At**: 2026-05-04T22:44:39.187Z
+- **Duration**: 1m 18s
+- **Input Tokens**: 52
+- **Output Tokens**: 4554
+- **Total Tokens**: 4606
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and understanding the current project state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/domain/**/*[0m
+The domain package doesn't exist yet. Let me read the architecture docs to understand the design before implementing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/domain-model.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m
+Now let me check the Go module file before creating the domain package.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/go.mod[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.][0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96m*[0m
+No go.mod yet. I need to initialize the Go module first. Let me check AGENTS.md for the module name.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/AGENTS.md[0m
+[94m[Bash][0m Initialize Go module $ go mod init github.com/mrboard/mrboard
+Now I'll create the domain package with `mr.go` and tests.
+[94m[Bash][0m Create domain directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/domain
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m "package domain
+
+import (
+	"fmt"
+	"time"
+)
+
+type ReviewerState int
+
+const (
+	ReviewerNotStarted        ReviewerState = iota // assigned, no activity
+	ReviewerCommented                              // l... (2314 chars)"
+Now create the unit tests for phase classification logic:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr_test.go[0m "package domain
+
+import (
+	"testing"
+	"time"
+)
+
+func TestClassifyPhase_Draft(t *testing.T) {
+	phase := ClassifyPhase(true, 0, 2, 2, nil)
+	if phase != PhaseDraft {
+		t.Fatalf("expected PhaseDraft, got %... (3180 chars)"
+Now run the quality gates:
+[94m[Bash][0m Run quality gates: build, vet, test $ go build ./... && go vet ./... && go test ./...
+All gates pass. Now close the bead and flush:
+[94m[Bash][0m Close bead mrr-88x.1 $ all tests pass"
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only
+Now update progress.md:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+- **Go m..."
+All done. Domain package created with all required types, `ClassifyPhase` logic, `FormatDuration` helper, and unit tests covering all phase rules. All quality gates pass.
+
+<promise>COMPLETE</promise>
