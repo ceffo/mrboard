@@ -37,6 +37,14 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.4
+- Work already complete: `ClassifyPhase` and all unit tests were implemented as part of mrr-88x.1
+- All acceptance criteria verified: Draft > ReadyToMerge > NeedsAuthorAction > NeedsReview priority order, no-reviewer case, mixed-reviewer edge cases
+- Files changed: none (verified existing `internal/domain/mr.go` and `internal/domain/mr_test.go`)
+- **Learnings:**
+  - When beads share domain work, earlier beads may fully implement criteria for later beads — check progress.md before implementing
+---
+
 ## 2026-05-04 - mrr-88x.1
 - Initialized Go module (`go mod init github.com/mrboard/mrboard`)
 - Created `internal/domain/mr.go` with: `ReviewerState`, `MRPhase`, `ReviewerInfo`, `MergeRequest`, `ClassifyPhase`, `FormatDuration`

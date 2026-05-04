@@ -1,0 +1,81 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.3
+- **Task Title**: US-002: GitLab API client
+- **Description**: As a developer, I want a GitLab API client wrapper in internal/gitlab/ that fetches raw MR data so the fetcher can build domain types from it.
+
+## Acceptance Criteria
+- [ ] Client in internal/gitlab/c...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-04T22:46:00.587Z
+- **Ended At**: 2026-05-04T22:48:09.090Z
+- **Duration**: 2m 8s
+- **Input Tokens**: 59
+- **Output Tokens**: 8118
+- **Total Tokens**: 8177
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me check the current state of the codebase and progress notes before implementing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/gitlab/**/*[0m
+The `internal/gitlab` directory doesn't exist yet. Let me check the go.mod and existing code structure first.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/go.mod[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+Now let me check the domain types to understand the data model, then check the architecture docs.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m
+Now I have a clear picture. Let me implement `internal/gitlab/client.go` by first adding the `xanzy/go-gitlab` dependency, then writing the client.
+[94m[Bash][0m Add xanzy/go-gitlab dependency $ go get github.com/xanzy/go-gitlab 2>&1
+The package is deprecated but the architecture spec calls for `github.com/xanzy/go-gitlab` explicitly, so I'll use it as specified. Let me check the API to get exact types/methods right.
+[94m[Bash][0m Check xanzy/go-gitlab type and function signatures $ grep -r "ListMergeRequestDiscussionsOptions\|ListGroupMergeRequestsOptions\|ListMergeRequestsOptions...
+[94m[Bash][0m Check ListMergeRequestsOptions fields $ grep -A 30 "^type ListMergeRequestsOptions struct" $(go env GOPATH)/pkg/mod/github.com/xanzy/go-gitl...
+[94m[Bash][0m Check ListMergeRequestDiscussionsOptions definition $ grep -A 5 "^type ListMergeRequestDiscussionsOptions" $(go env GOPATH)/pkg/mod/github.com/xanzy/go-gi...
+[94m[Bash][0m Check ListOptions struct $ grep -A 10 "^type ListOptions struct" $(go env GOPATH)/pkg/mod/github.com/xanzy/go-gitlab@v0.115.0/g...
+Now I have everything I need. Let me create the client:
+[94m[Bash][0m Create internal/gitlab directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/gitlab
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m "package gitlab
+
+import (
+	"fmt"
+
+	"github.com/mrboard/mrboard/internal/config"
+	gl "github.com/xanzy/go-gitlab"
+)
+
+// Client wraps the xanzy/go-gitlab client and exposes the methods needed by
+// the f... (2835 chars)"
+Now let me write a basic test:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m "package gitlab
+
+import (
+	"testing"
+
+	"github.com/mrboard/mrboard/internal/config"
+)
+
+func TestNewClient_ValidConfig(t *testing.T) {
+	cfg := &config.Config{
+		GitLab: config.GitLab{
+			URL:   "https:/... (676 chars)"
+[94m[Bash][0m Run go build $ go build ./... 2>&1
+[94m[Bash][0m Run go vet and go test $ go vet ./... 2>&1 && go test ./... 2>&1
+All three quality gates pass. Let me close the bead and update the progress log:
+[94m[Bash][0m Close bead mrr-88x.3 $ all quality gates pass" 2>&1
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-04 - mrr-88x.2" → "---
+
+## 2026-05-04 - mrr-88x.3
+- Implemented `inte..."
+All done. `internal/gitlab/client.go` implements the four required methods with full pagination, wrapping `xanzy/go-gitlab` v0.115.0. Key gotchas documented: `ListMergeRequestDiscussionsOptions` is a type alias (not embedded), approvals use `MergeRequestsService.GetMergeRequestApprovals`, and the pointer helper is `gl.Ptr()`.
+
+<promise>COMPLETE</promise>
