@@ -17,10 +17,10 @@ const (
 type MRPhase int
 
 const (
-	PhaseDraft           MRPhase = iota // MR is still a draft
-	PhaseNeedsReview                    // ball is in reviewer(s)' court
-	PhaseNeedsAuthorAction              // ball is in author's court
-	PhaseReadyToMerge                   // all threads resolved + enough approvals
+	PhaseDraft             MRPhase = iota // MR is still a draft
+	PhaseNeedsReview                      // ball is in reviewer(s)' court
+	PhaseNeedsAuthorAction                // ball is in author's court
+	PhaseReadyToMerge                     // all threads resolved + enough approvals
 )
 
 type ReviewerInfo struct {
@@ -31,12 +31,12 @@ type ReviewerInfo struct {
 }
 
 type MergeRequest struct {
-	ID         int
-	IID        int
-	ProjectID  int
-	Title      string
-	Author     string
-	WebURL     string
+	ID        int
+	IID       int
+	ProjectID int
+	Title     string
+	Author    string
+	WebURL    string
 
 	Phase     MRPhase
 	Reviewers []ReviewerInfo
