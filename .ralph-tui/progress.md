@@ -11,6 +11,19 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.3
+- Implemented `internal/gitlab/client.go`: `Client` struct wrapping `xanzy/go-gitlab`; `NewClient(cfg)` builds authenticated client; four methods: `ListGroupMRs`, `ListUserMRs`, `GetMRDiscussions`, `GetMRApprovals` — all paginate fully and return errors
+- Created `internal/gitlab/client_test.go` covering valid construction and invalid URL error
+- Added `github.com/xanzy/go-gitlab v0.115.0` (+ transitive deps) to `go.mod`
+- Files changed: `internal/gitlab/client.go`, `internal/gitlab/client_test.go`, `go.mod`, `go.sum`
+- **Learnings:**
+  - `ListMergeRequestDiscussionsOptions` is a **type alias** (`type X Y`), not a struct embedding — fields are set directly (`opts.Page`, `opts.PerPage`), no nested `ListOptions`
+  - Approvals live on `MergeRequestsService.GetMergeRequestApprovals`, not on `MergeRequestApprovalsService` (which handles project-level approval config)
+  - `gl.Ptr(v)` is the helper for pointer values in v0.115.0 (older versions used `gl.String()`)
+  - `xanzy/go-gitlab` is deprecated; canonical successor is `gitlab.com/gitlab-org/api/client-go` — keep in mind for future upgrades
+
+---
+
 ## 2026-05-04 - mrr-88x.2
 - Implemented `internal/config/config.go`: `Config`, `GitLab`, `Source` structs; `Load()` reads `./mrboard.toml` or `$MRBOARD_CONFIG`; `$GITLAB_TOKEN` overrides file token; `RequiredApprovals` defaults to 2; `validate()` returns clear errors for missing URL/token/sources
 - Created `internal/config/config_test.go` covering: valid load, explicit approvals, env token override, missing URL/token/sources, default path fallback via `os.Chdir`
