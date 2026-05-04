@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "sessionId": "82b86ea0-bffb-43f2-b3d8-ca6e9d039a80",
+  "status": "running",
+  "startedAt": "2026-05-04T22:42:28.915Z",
+  "updatedAt": "2026-05-04T22:44:39.228Z",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "beads-rust",
+    "epicId": "mrr-88x",
+    "totalTasks": 12,
+    "tasks": [
+      {
+        "id": "mrr-88x.1",
+        "title": "US-003: Domain types",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.2",
+        "title": "US-001: Config loading",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.3",
+        "title": "US-002: GitLab API client",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.4",
+        "title": "US-005: MR phase classification",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.5",
+        "title": "US-006: Time tracking",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.6",
+        "title": "US-004: Reviewer state derivation",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.7",
+        "title": "US-007: Round-trip counting",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.8",
+        "title": "US-008: Data fetching and deduplication",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.9",
+        "title": "US-009: Kanban board TUI",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.10",
+        "title": "US-010: Keyboard navigation and interactions",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.11",
+        "title": "US-011: Loading and error states",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-88x.12",
+        "title": "US-012: Backend/frontend decoupling verification",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/moncefnaji/code/github.com/mrboard",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}
