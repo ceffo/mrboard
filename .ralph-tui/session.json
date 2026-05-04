@@ -3,10 +3,10 @@
   "sessionId": "82b86ea0-bffb-43f2-b3d8-ca6e9d039a80",
   "status": "running",
   "startedAt": "2026-05-04T22:42:28.915Z",
-  "updatedAt": "2026-05-04T22:48:46.266Z",
-  "currentIteration": 3,
+  "updatedAt": "2026-05-04T22:49:51.421Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 3,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -35,8 +35,8 @@
       {
         "id": "mrr-88x.4",
         "title": "US-005: MR phase classification",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-88x.5",
@@ -118,6 +118,16 @@
       "durationMs": 128503,
       "startedAt": "2026-05-04T22:46:00.587Z",
       "endedAt": "2026-05-04T22:48:09.090Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "mrr-88x.4",
+      "taskTitle": "US-005: MR phase classification",
+      "taskCompleted": true,
+      "durationMs": 35449,
+      "startedAt": "2026-05-04T22:48:10.774Z",
+      "endedAt": "2026-05-04T22:48:46.223Z"
     }
   ],
   "skippedTaskIds": [],

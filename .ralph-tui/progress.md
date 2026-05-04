@@ -11,6 +11,15 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.5
+- Work already complete: `NonDraftSince`, `WaitingSince` fields and `FormatDuration` were implemented as part of mrr-88x.1
+- All acceptance criteria verified: field presence in `domain.MergeRequest`, all `FormatDuration` edge cases (< 1m, Xm, Xh Xm, Xh, Xd Xh, Xd), full unit test coverage
+- Files changed: none (verified existing `internal/domain/mr.go` and `internal/domain/mr_test.go`)
+- **Learnings:**
+  - Time tracking fields (NonDraftSince, WaitingSince) live in domain types from day one — the population logic (parsing GitLab system notes) belongs to the fetcher/mapper layer in a later bead
+  - When beads share domain work, earlier beads may fully implement criteria for later beads — always check progress.md before implementing
+---
+
 ## 2026-05-04 - mrr-88x.3
 - Implemented `internal/gitlab/client.go`: `Client` struct wrapping `xanzy/go-gitlab`; `NewClient(cfg)` builds authenticated client; four methods: `ListGroupMRs`, `ListUserMRs`, `GetMRDiscussions`, `GetMRApprovals` — all paginate fully and return errors
 - Created `internal/gitlab/client_test.go` covering valid construction and invalid URL error
