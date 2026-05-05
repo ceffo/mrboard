@@ -4,3 +4,6 @@ mrboard.yml
 mrboard.yaml 
 
 mrboard.toml
+
+# bv (beads viewer) local config and caches
+.bv/

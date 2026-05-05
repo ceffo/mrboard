@@ -10,6 +10,7 @@ type Styles struct {
 	Card                lipgloss.Style
 	CardFocused         lipgloss.Style
 	CardTitle           lipgloss.Style
+	CardAuthor          lipgloss.Style
 	CardMeta            lipgloss.Style
 	PillNotStarted      lipgloss.Style
 	PillCommented       lipgloss.Style
@@ -31,6 +32,7 @@ func NewStyles() Styles {
 		Card:                lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1),
 		CardFocused:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99")).Background(lipgloss.Color("236")).Padding(0, 1),
 		CardTitle:           lipgloss.NewStyle().Bold(true),
+		CardAuthor:          lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true),
 		CardMeta:            lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
 		PillNotStarted:      lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
 		PillCommented:       lipgloss.NewStyle().Foreground(lipgloss.Color("39")),

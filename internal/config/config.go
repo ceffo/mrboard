@@ -27,9 +27,10 @@ type Source struct {
 
 // Config is the top-level application configuration loaded from mrboard.yaml.
 type Config struct {
-	GitLab          GitLab   `yaml:"gitlab"`
-	Sources         []Source `yaml:"sources"`
-	ExcludedAuthors []string `yaml:"excluded_authors"`
+	GitLab             GitLab   `yaml:"gitlab"`
+	Sources            []Source `yaml:"sources"`
+	ExcludedAuthors    []string `yaml:"excluded_authors"`
+	StaleThresholdDays int      `yaml:"stale_threshold_days"` // 0 = no stale filtering
 }
 
 // Load reads and validates the configuration from mrboard.yaml or $MRBOARD_CONFIG.

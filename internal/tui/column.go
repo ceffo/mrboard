@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	lip "charm.land/lipgloss/v2"
 	"github.com/mrboard/mrboard/internal/domain"
 )
 
@@ -120,11 +121,22 @@ func (c columnWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
 func (c columnWidget) View() tea.View                          { return tea.NewView(c.render()) }
 
 func (c columnWidget) render() string {
+	// contentW is the column's inner content width (excluding border).
+	contentW := c.width - 2
+
 	header := c.styles.ColumnHeader.Render(fmt.Sprintf("%s (%d)", c.name, len(c.cards)))
+	// Pad header to contentW so the column border is always the right width.
+	if w := lip.Width(header); w < contentW {
+		header += strings.Repeat(" ", contentW-w)
+	}
 
 	var cardLines []string
 	if len(c.cards) == 0 {
-		cardLines = append(cardLines, c.styles.EmptyColumn.Render("(empty)"))
+		empty := c.styles.EmptyColumn.Render("(empty)")
+		if w := lip.Width(empty); w < contentW {
+			empty += strings.Repeat(" ", contentW-w)
+		}
+		cardLines = append(cardLines, empty)
 	} else {
 		for i := range c.cards {
 			cardLines = append(cardLines, c.cards[i].render())
@@ -136,5 +148,7 @@ func (c columnWidget) render() string {
 	if c.focused {
 		borderStyle = c.styles.ColumnBorderFocused
 	}
-	return borderStyle.Width(c.width - 2).Render(content)
+	// No Width() — content is manually padded to contentW above so the border
+	// adapts to the correct width without enabling lipgloss word-wrap.
+	return borderStyle.Render(content)
 }

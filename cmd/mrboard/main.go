@@ -150,15 +150,15 @@ func loadTimeout() time.Duration {
 
 // mrJSON is the JSON representation of a domain.MergeRequest for the fetch subcommand.
 type mrJSON struct {
-	ID            int            `json:"id"`
-	Title         string         `json:"title"`
-	WebURL        string         `json:"web_url"`
-	Phase         string         `json:"phase"`
-	Author        string         `json:"author"`
+	ID             int            `json:"id"`
+	Title          string         `json:"title"`
+	WebURL         string         `json:"web_url"`
+	Phase          string         `json:"phase"`
+	Author         string         `json:"author"`
 	ReviewerStates []reviewerJSON `json:"reviewer_states"`
-	TimeInPhase   string         `json:"time_in_phase"`
-	TimeOpen      string         `json:"time_open"`
-	RoundTrips    int            `json:"round_trips"`
+	TimeInPhase    string         `json:"time_in_phase"`
+	TimeOpen       string         `json:"time_open"`
+	RoundTrips     int            `json:"round_trips"`
 }
 
 type reviewerJSON struct {

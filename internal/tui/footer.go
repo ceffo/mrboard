@@ -1,8 +1,8 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/help"
+	tea "charm.land/bubbletea/v2"
 )
 
 type footerWidget struct {

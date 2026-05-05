@@ -4,9 +4,10 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 	"github.com/mrboard/mrboard/internal/config"
 	"github.com/mrboard/mrboard/internal/domain"
@@ -32,18 +33,20 @@ type FetchErrMsg struct{ Err error }
 
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state   appState
-	board   boardWidget
-	footer  footerWidget
-	sp      spinnerWidget
-	keys    KeyMap
-	styles  Styles
-	width   int
-	height  int
-	errors  []error
-	errMsg  string
-	cfg     *config.Config
-	client  *gitlab.Client
+	state     appState
+	board     boardWidget
+	footer    footerWidget
+	sp        spinnerWidget
+	keys      KeyMap
+	styles    Styles
+	width     int
+	height    int
+	errors    []error
+	errMsg    string
+	cfg       *config.Config
+	client    *gitlab.Client
+	allMRs    []domain.MergeRequest
+	hideStale bool
 }
 
 // New creates a ready-to-run mrboard model.
@@ -87,8 +90,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case FetchResultMsg:
 		m.state = stateBoard
-		m.board.SetMRs(msg.MRs)
+		m.allMRs = msg.MRs
 		m.errors = msg.Errors
+		m.applyMRFilter()
 		return m, nil
 
 	case FetchErrMsg:
@@ -130,6 +134,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Refresh):
 		m.state = stateLoading
 		return m, tea.Batch(m.sp.Init(), m.fetchCmd())
+	case key.Matches(msg, m.keys.HideStale):
+		if m.cfg.StaleThresholdDays > 0 {
+			m.hideStale = !m.hideStale
+			m.applyMRFilter()
+		}
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.board.FocusedMR(); mr != nil {
 			return m, openBrowser(mr.WebURL)
@@ -166,6 +175,27 @@ func (m Model) renderContent() string {
 		return sb.String()
 	}
 	return ""
+}
+
+// applyMRFilter pushes allMRs (optionally filtered for staleness) into the board.
+func (m *Model) applyMRFilter() {
+	mrs := m.allMRs
+	if m.hideStale && m.cfg.StaleThresholdDays > 0 {
+		threshold := time.Duration(m.cfg.StaleThresholdDays) * 24 * time.Hour
+		now := time.Now()
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			base := mr.NonDraftSince
+			if base.IsZero() {
+				base = mr.CreatedAt
+			}
+			if base.IsZero() || now.Sub(base) <= threshold {
+				filtered = append(filtered, mr)
+			}
+		}
+		mrs = filtered
+	}
+	m.board.SetMRs(mrs)
 }
 
 func openBrowser(url string) tea.Cmd {

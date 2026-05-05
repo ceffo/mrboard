@@ -9,6 +9,8 @@ import (
 const (
 	minutesPerHour = 60
 	hoursPerDay    = 24
+	daysPerMonth   = 30
+	monthsPerYear  = 12
 )
 
 // ReviewerState tracks where a reviewer is in the review lifecycle.
@@ -81,20 +83,40 @@ func ClassifyPhase(draft bool, openThreads, approvalCount, requiredApprovals int
 }
 
 // FormatDuration formats a duration as a human-readable string.
+// Units: < 1m, Xm, Xh Ym, Xd Yh, Xmo Yd, Xy Xmo.
 func FormatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return "< 1m"
 	}
 	totalMinutes := int(d.Minutes())
-	days := totalMinutes / (minutesPerHour * hoursPerDay)
+	totalDays := totalMinutes / (minutesPerHour * hoursPerDay)
+
+	if totalDays >= daysPerMonth*monthsPerYear {
+		years := totalDays / (daysPerMonth * monthsPerYear)
+		months := (totalDays % (daysPerMonth * monthsPerYear)) / daysPerMonth
+		if months > 0 {
+			return fmt.Sprintf("%dy %dmo", years, months)
+		}
+		return fmt.Sprintf("%dy", years)
+	}
+
+	if totalDays >= daysPerMonth {
+		months := totalDays / daysPerMonth
+		days := totalDays % daysPerMonth
+		if days > 0 {
+			return fmt.Sprintf("%dmo %dd", months, days)
+		}
+		return fmt.Sprintf("%dmo", months)
+	}
+
 	hours := (totalMinutes % (minutesPerHour * hoursPerDay)) / minutesPerHour
 	minutes := totalMinutes % minutesPerHour
 
 	switch {
-	case days > 0 && hours > 0:
-		return fmt.Sprintf("%dd %dh", days, hours)
-	case days > 0:
-		return fmt.Sprintf("%dd", days)
+	case totalDays > 0 && hours > 0:
+		return fmt.Sprintf("%dd %dh", totalDays, hours)
+	case totalDays > 0:
+		return fmt.Sprintf("%dd", totalDays)
 	case hours > 0 && minutes > 0:
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	case hours > 0:

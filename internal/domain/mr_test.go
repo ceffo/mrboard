@@ -113,3 +113,31 @@ func TestFormatDuration_DaysOnly(t *testing.T) {
 		t.Fatalf("expected '3d', got %q", got)
 	}
 }
+
+func TestFormatDuration_MonthsAndDays(t *testing.T) {
+	d := 45 * 24 * time.Hour // 1mo 15d
+	if got := FormatDuration(d); got != "1mo 15d" {
+		t.Fatalf("expected '1mo 15d', got %q", got)
+	}
+}
+
+func TestFormatDuration_MonthsOnly(t *testing.T) {
+	d := 90 * 24 * time.Hour // 3mo exactly
+	if got := FormatDuration(d); got != "3mo" {
+		t.Fatalf("expected '3mo', got %q", got)
+	}
+}
+
+func TestFormatDuration_YearsAndMonths(t *testing.T) {
+	d := 400 * 24 * time.Hour // 1y 1mo (360+30 = 390 days threshold; 400/360=1y, rem=40d, 40/30=1mo)
+	if got := FormatDuration(d); got != "1y 1mo" {
+		t.Fatalf("expected '1y 1mo', got %q", got)
+	}
+}
+
+func TestFormatDuration_YearsOnly(t *testing.T) {
+	d := 720 * 24 * time.Hour // 720/360=2y exactly
+	if got := FormatDuration(d); got != "2y" {
+		t.Fatalf("expected '2y', got %q", got)
+	}
+}

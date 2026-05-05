@@ -73,6 +73,7 @@ func (c *Client) ListUserMRs(username string) ([]*gl.BasicMergeRequest, error) {
 	opts := &gl.ListMergeRequestsOptions{
 		AuthorUsername: gl.Ptr(username),
 		State:          gl.Ptr("opened"),
+		Scope:          gl.Ptr("all"),
 		ListOptions:    gl.ListOptions{PerPage: perPage},
 	}
 	for {

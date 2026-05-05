@@ -93,6 +93,8 @@ func DeriveReviewerStates(
 			if waitingSince.IsZero() && mr.CreatedAt != nil {
 				waitingSince = *mr.CreatedAt
 			}
+		case domain.ReviewerCommented:
+			waitingSince = rts.lastComment
 		}
 
 		result = append(result, domain.ReviewerInfo{
@@ -162,7 +164,11 @@ func MapMR(
 		RoundTripCount:    countRoundTrips(discussions),
 	}
 	if mr.Author != nil {
-		domainMR.Author = mr.Author.Username
+		if mr.Author.Name != "" {
+			domainMR.Author = mr.Author.Name
+		} else {
+			domainMR.Author = mr.Author.Username
+		}
 	}
 
 	domainMR.Phase = domain.ClassifyPhase(
@@ -172,6 +178,25 @@ func MapMR(
 		requiredApprovals,
 		reviewers,
 	)
+
+	// MR-level WaitingSince: how long the ball has been in the current court.
+	// NeedsAuthorAction → latest comment time across Commented reviewers.
+	// NeedsReview → MR creation time (or latest re-review request).
+	switch domainMR.Phase {
+	case domain.PhaseNeedsAuthorAction:
+		for _, r := range reviewers {
+			if r.State == domain.ReviewerCommented && r.WaitingSince.After(domainMR.WaitingSince) {
+				domainMR.WaitingSince = r.WaitingSince
+			}
+		}
+	case domain.PhaseNeedsReview:
+		domainMR.WaitingSince = createdAt
+		for _, r := range reviewers {
+			if r.State == domain.ReviewerReReviewRequested && r.WaitingSince.After(domainMR.WaitingSince) {
+				domainMR.WaitingSince = r.WaitingSince
+			}
+		}
+	}
 
 	return domainMR
 }
