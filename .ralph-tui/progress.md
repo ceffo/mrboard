@@ -11,6 +11,16 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.8
+- Implemented `internal/gitlab/fetcher.go`: `FetchAll(client, cfg)` iterates all configured sources (group/user), deduplicates by `(ProjectID, IID)` (first occurrence wins), enriches each unique MR with discussions and approvals fetched in parallel goroutines, maps to `domain.MergeRequest` via `MapMR`, returns `([]domain.MergeRequest, []error)` with partial results on failure
+- Files changed: `internal/gitlab/fetcher.go` (new)
+- **Learnings:**
+  - `enrichMR` uses two goroutines + buffered channels (size 1) for parallel discussions/approvals fetch — avoids `sync.WaitGroup` for the two-goroutine case, channels carry both value and error cleanly
+  - Dedup map keyed on `mrKey{projectID, iid}` struct — Go allows struct keys in maps directly, no hashing needed
+  - Source listing errors and per-MR enrichment errors are collected separately; both are returned even with partial results
+
+---
+
 ## 2026-05-04 - mrr-88x.7
 - Added `countRoundTrips(discussions)` to `internal/gitlab/mapper.go`: counts every "requested review from @X" system note without deduplication
 - Wired `RoundTripCount: countRoundTrips(discussions)` into `MapMR`

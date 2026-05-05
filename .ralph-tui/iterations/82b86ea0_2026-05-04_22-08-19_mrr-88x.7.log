@@ -1,0 +1,60 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.7
+- **Task Title**: US-007: Round-trip counting
+- **Description**: As a user, I want to see how many review cycles an MR has gone through so I can gauge its complexity and history.
+
+## Acceptance Criteria
+- [ ] RoundTripCount = total count of "requested review from @...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-05T02:08:19.877Z
+- **Ended At**: 2026-05-05T02:09:37.642Z
+- **Duration**: 1m 17s
+- **Input Tokens**: 54
+- **Output Tokens**: 4412
+- **Total Tokens**: 4466
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and understanding the codebase structure.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/domain-model.md[0m
+Let me check the current state of the domain and mapper files.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+Now let me check the TUI structure to see how MR cards are displayed.
+[94m[Glob][0m pattern: [96minternal/tui/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper_test.go[0m
+Let me check if there's a TUI or card display anywhere.
+[94m[Glob][0m pattern: [96m**/*.go[0m
+The TUI doesn't exist yet — that will come in a later bead. I'll implement the `RoundTripCount` population in the mapper and add unit tests.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m edit: "// countOpenThreads returns the number of unresolv..." → "// countRoundTrips returns the total number of "re..."
+Now wire it up in `MapMR`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m edit: "	domainMR := domain.MergeRequest{
+		ID:           ..." → "	domainMR := domain.MergeRequest{
+		ID:           ..."
+Now add a unit test for round-trip counting:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper_test.go[0m edit: "// TestExtractReReviewUsername covers the system n..." → "// TestCountRoundTrips verifies that every "reques..."
+Now run the quality gates:
+[94m[Bash][0m $ go build ./... && go vet ./... && go test ./...
+All green. Now close the bead and flush:
+[94m[Bash][0m $ unit tests added"
+[94m[Bash][0m $ br sync --flush-only
+Now append to progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-04 - mrr-88x.6" → "---
+
+## 2026-05-04 - mrr-88x.7
+- Added `countRound..."
+Done. `RoundTripCount` is now populated in `MapMR` via `countRoundTrips`, which counts every "requested review from @X" system note without deduplication. 6 new unit tests cover nil input, no re-reviews, single, multiple same reviewer, mixed multi-reviewer, and the `MapMR` integration path. All quality gates pass.
+
+<promise>COMPLETE</promise>
