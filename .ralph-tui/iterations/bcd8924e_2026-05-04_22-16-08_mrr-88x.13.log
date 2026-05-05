@@ -1,0 +1,184 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.13
+- **Task Title**: TUI — full board implementation
+- **Description**: Implement the entire internal/tui package and wire cmd/mrboard/main.go end-to-end. This bead covers kanban rendering, keyboard navigation, loading/error states, and package boundary verification in a ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-05T02:16:08.919Z
+- **Ended At**: 2026-05-05T02:23:50.435Z
+- **Duration**: 7m 41s
+- **Input Tokens**: 96
+- **Output Tokens**: 33561
+- **Total Tokens**: 33657
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and understanding the current codebase state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96m**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/fetcher.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/cli/main.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/tui-conventions.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/go.mod[0m
+I need to add charmbracelet dependencies first, then build the full TUI package. Let me check what's needed.
+[94m[Bash][0m Add charmbracelet v2 dependencies $ go get charm.land/bubbletea/v2 charm.land/lipgloss/v2 charm.land/bubbles/v2 2>&1 | head -50
+All three charmbracelet packages resolved at `charm.land/*/v2`. Now I'll implement the full TUI package.
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+[94m[TodoWrite][0m
+[94m[Bash][0m Create tui and cmd/mrboard directories $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/tui /Users/moncefnaji/code/github.com/mr...
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m "package tui
+
+import "charm.land/bubbles/v2/key"
+
+// KeyMap contains all keybindings for mrboard.
+type KeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Left    key.Binding
+	Right   key.Bindin... (1217 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go[0m "package tui
+
+import "charm.land/lipgloss/v2"
+
+// Styles holds all lipgloss styles used by mrboard widgets.
+type Styles struct {
+	ColumnHeader        lipgloss.Style
+	ColumnBorder        lipgloss.Style
+... (2279 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m "package tui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/domain"
+)
+
+type cardWidget struct {
+	mr      domain.MergeRequest
+	styles  Styles
+	... (3096 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m "package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/domain"
+)
+
+type columnWidget struct {
+	phase    domain.MRPhase
+	name     string
+	cards    ... (3015 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m "package tui
+
+import (
+	tea "charm.land/bubbletea/v2"
+	lip "charm.land/lipgloss/v2"
+	"github.com/mrboard/mrboard/internal/domain"
+)
+
+type boardWidget struct {
+	columns    [4]columnWidget
+	focusedCol in... (2633 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/footer.go[0m "package tui
+
+import (
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/help"
+)
+
+type footerWidget struct {
+	help help.Model
+	keys KeyMap
+}
+
+func newFooterWidget(keys KeyMap) footerWidget {
+	retu... (491 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/spinner.go[0m "package tui
+
+import (
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/spinner"
+)
+
+type spinnerWidget struct {
+	spinner spinner.Model
+}
+
+func newSpinnerWidget() spinnerWidget {
+	s := spinner.New... (567 chars)"
+Now the root model:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m "package tui
+
+import (
+	"os/exec"
+	"runtime"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/key"
+	lip "charm.land/lipgloss/v2"
+	"github.com/mrboard/mrboard/internal/config"
+	"github... (4026 chars)"
+Now create the main entry point:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m "// Package main is the entry point for mrboard.
+package main
+
+import (
+	"fmt"
+	"os"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/config"
+	"github.com/mrboard/mrboard/internal/... (647 chars)"
+[94m[TodoWrite][0m
+[94m[Bash][0m Run go build to check for compile errors $ go build ./... 2>&1
+Clean build. Running vet and tests:
+[94m[Bash][0m Run go vet and go test $ go vet ./... 2>&1 && go test ./... 2>&1
+All quality gates pass. Let me verify package boundary rules:
+[94m[Bash][0m Verify package boundary rules $ go list -f '{{.ImportPath}}: {{.Imports}}' ./internal/domain/... ./internal/config/... ./internal/gi...
+[94m[Bash][0m Confirm charmbracelet imports only in internal/tui $ go list -f '{{.ImportPath}}: {{.Imports}}' ./internal/tui/... 2>&1 | grep -o 'charm.land[^ ]*' | sor...
+All boundaries are clean. Let me close the bead and update progress.md:
+[94m[TodoWrite][0m
+[94m[Bash][0m Close bead mrr-88x.13 $ br close mrr-88x.13 --reason "Full TUI implemented: kanban board with 4 columns, keyboard navigation...
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+### Char..."
+[94m[TodoWrite][0m
+All done. Here's what was implemented:
+
+**`internal/tui/` (8 new files):**
+- `keys.go` — `KeyMap` struct with all 7 bindings; implements `help.KeyMap` interface
+- `styles.go` — `Styles` struct with all lipgloss styles; `NewStyles()` is the only place calling `lipgloss.NewStyle()`
+- `card.go` — renders one MR: title (truncated), author/age/phase/round-trips, reviewer pills with icons (⏳💬🔄✓)
+- `column.go` — one column per phase; header shows name+count; empty-state message; focus management (Up/Down with wrap)
+- `board.go` — 4 columns joined horizontally; Left/Right navigation preserves row index (clamped); initial focus on first non-empty column
+- `footer.go` — wraps `help.Model` for the keybinding bar
+- `spinner.go` — wraps `bubbles/spinner.Model`; propagated only when loading
+- `model.go` — root model: loading/board/error state machine; AltScreen set only here; `FetchResultMsg`/`FetchErrMsg` custom messages; `open`/`xdg-open` for browser launch
+
+**`cmd/mrboard/main.go`** — wires config → gitlab client → `tui.New()` → `tea.NewProgram(m).Run()`
+
+All quality gates pass (`go build ./...`, `go vet ./...`, `go test ./...`). Package boundaries verified: domain=stdlib only, config/gitlab=no charmbracelet, tui=only charmbracelet importer.
+
+<promise>COMPLETE</promise>

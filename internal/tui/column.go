@@ -1,0 +1,140 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/domain"
+)
+
+type columnWidget struct {
+	phase    domain.MRPhase
+	name     string
+	cards    []cardWidget
+	focused  bool
+	focusIdx int
+	styles   Styles
+	width    int
+	height   int
+}
+
+func newColumnWidget(phase domain.MRPhase, styles Styles, width, height int) columnWidget {
+	return columnWidget{
+		phase:  phase,
+		name:   phaseName(phase),
+		styles: styles,
+		width:  width,
+		height: height,
+	}
+}
+
+func phaseName(p domain.MRPhase) string {
+	switch p {
+	case domain.PhaseDraft:
+		return "Draft"
+	case domain.PhaseNeedsReview:
+		return "Needs Review"
+	case domain.PhaseNeedsAuthorAction:
+		return "Needs Author Action"
+	case domain.PhaseReadyToMerge:
+		return "Ready to Merge"
+	default:
+		return "Unknown"
+	}
+}
+
+func (c *columnWidget) SetFocused(v bool) {
+	c.focused = v
+	c.syncCardFocus()
+}
+
+func (c *columnWidget) SetWidth(w int) {
+	c.width = w
+	for i := range c.cards {
+		c.cards[i].SetWidth(w - 2)
+	}
+}
+
+func (c *columnWidget) SetHeight(h int) { c.height = h }
+
+func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
+	c.cards = make([]cardWidget, len(mrs))
+	for i, mr := range mrs {
+		c.cards[i] = newCardWidget(mr, c.styles, c.width-2)
+	}
+	if len(c.cards) == 0 {
+		c.focusIdx = 0
+	} else if c.focusIdx >= len(c.cards) {
+		c.focusIdx = len(c.cards) - 1
+	}
+	c.syncCardFocus()
+}
+
+func (c *columnWidget) syncCardFocus() {
+	for i := range c.cards {
+		c.cards[i].SetFocused(c.focused && i == c.focusIdx)
+	}
+}
+
+func (c *columnWidget) MoveUp() {
+	if len(c.cards) == 0 {
+		return
+	}
+	c.focusIdx--
+	if c.focusIdx < 0 {
+		c.focusIdx = len(c.cards) - 1
+	}
+	c.syncCardFocus()
+}
+
+func (c *columnWidget) MoveDown() {
+	if len(c.cards) == 0 {
+		return
+	}
+	c.focusIdx++
+	if c.focusIdx >= len(c.cards) {
+		c.focusIdx = 0
+	}
+	c.syncCardFocus()
+}
+
+func (c *columnWidget) ClampFocusTo(idx int) {
+	c.focusIdx = idx
+	if len(c.cards) > 0 && c.focusIdx >= len(c.cards) {
+		c.focusIdx = len(c.cards) - 1
+	}
+	c.syncCardFocus()
+}
+
+func (c *columnWidget) FocusedMR() *domain.MergeRequest {
+	if len(c.cards) == 0 || c.focusIdx >= len(c.cards) {
+		return nil
+	}
+	mr := c.cards[c.focusIdx].mr
+	return &mr
+}
+
+func (c columnWidget) Init() tea.Cmd                           { return nil }
+func (c columnWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
+func (c columnWidget) View() tea.View                          { return tea.NewView(c.render()) }
+
+func (c columnWidget) render() string {
+	header := c.styles.ColumnHeader.Render(fmt.Sprintf("%s (%d)", c.name, len(c.cards)))
+
+	var cardLines []string
+	if len(c.cards) == 0 {
+		cardLines = append(cardLines, c.styles.EmptyColumn.Render("(empty)"))
+	} else {
+		for i := range c.cards {
+			cardLines = append(cardLines, c.cards[i].render())
+		}
+	}
+
+	content := header + "\n" + strings.Join(cardLines, "\n")
+	borderStyle := c.styles.ColumnBorder
+	if c.focused {
+		borderStyle = c.styles.ColumnBorderFocused
+	}
+	return borderStyle.Width(c.width - 2).Render(content)
+}
