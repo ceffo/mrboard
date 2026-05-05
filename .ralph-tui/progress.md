@@ -11,6 +11,20 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.6
+- Implemented `internal/gitlab/mapper.go`: `DeriveReviewerStates` processes discussions chronologically; detects system notes matching `"requested review from @<username>"` for re-review requests; tracks `lastComment` and `lastReReview` timestamps per reviewer; applies four state rules (approved → Approved, never commented → NotStarted, comment > reReview → Commented, reReview > comment → ReReviewRequested)
+- Also implemented `MapMR` (full MR mapper) and `countOpenThreads` helpers
+- Created `internal/gitlab/mapper_test.go`: 8 tests covering all four reviewer state transitions, multi-reviewer isolation, non-reviewer note filtering, empty-reviewer edge case, and `extractReReviewUsername` parsing
+- Files changed: `internal/gitlab/mapper.go`, `internal/gitlab/mapper_test.go`
+- **Learnings:**
+  - GitLab system note body for re-review is exactly `"requested review from @<username>"` — match as a prefix since the body contains only the username after the prefix (no trailing text in practice)
+  - `gl.Note.Author` is an anonymous inline struct, not a `*BasicUser` — access fields directly (`note.Author.Username`)
+  - `gl.MergeRequestApprovals.ApprovalsLeft` + `ApprovalsRequired` gives approval count; `ApprovedBy[i].User` is `*BasicUser`
+  - When constructing `gl.Note` in tests, the `Author` field must use the anonymous struct literal (not `basicUser()`)
+  - `Discussion.Notes[0].Resolvable && !Notes[0].Resolved` is the correct check for open threads — first note carries the resolution flag
+
+---
+
 ## 2026-05-04 - mrr-88x.5
 - Work already complete: `NonDraftSince`, `WaitingSince` fields and `FormatDuration` were implemented as part of mrr-88x.1
 - All acceptance criteria verified: field presence in `domain.MergeRequest`, all `FormatDuration` edge cases (< 1m, Xm, Xh Xm, Xh, Xd Xh, Xd), full unit test coverage

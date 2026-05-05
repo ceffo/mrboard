@@ -3,10 +3,10 @@
   "sessionId": "82b86ea0-bffb-43f2-b3d8-ca6e9d039a80",
   "status": "running",
   "startedAt": "2026-05-04T22:42:28.915Z",
-  "updatedAt": "2026-05-04T22:49:51.528Z",
-  "currentIteration": 5,
+  "updatedAt": "2026-05-05T02:01:40.574Z",
+  "currentIteration": 6,
   "maxIterations": 10,
-  "tasksCompleted": 5,
+  "tasksCompleted": 6,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -47,8 +47,8 @@
       {
         "id": "mrr-88x.6",
         "title": "US-004: Reviewer state derivation",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-88x.7",
@@ -138,6 +138,16 @@
       "durationMs": 63452,
       "startedAt": "2026-05-04T22:48:47.927Z",
       "endedAt": "2026-05-04T22:49:51.379Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "mrr-88x.6",
+      "taskTitle": "US-004: Reviewer state derivation",
+      "taskCompleted": true,
+      "durationMs": 132335,
+      "startedAt": "2026-05-05T01:59:28.058Z",
+      "endedAt": "2026-05-05T02:01:40.393Z"
     }
   ],
   "skippedTaskIds": [],

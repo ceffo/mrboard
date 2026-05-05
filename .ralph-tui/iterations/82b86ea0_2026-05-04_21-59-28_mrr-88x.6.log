@@ -1,0 +1,95 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.6
+- **Task Title**: US-004: Reviewer state derivation
+- **Description**: As a user, I want the tool to correctly determine each reviewer's state from the GitLab discussion timeline so I know who the ball is with.
+
+## Acceptance Criteria
+- [ ] Parser in internal/gitlab/mapp...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-05T01:59:28.058Z
+- **Ended At**: 2026-05-05T02:01:40.393Z
+- **Duration**: 2m 12s
+- **Input Tokens**: 66
+- **Output Tokens**: 8589
+- **Total Tokens**: 8655
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reviewing the progress file and relevant code to understand what needs to be implemented.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.][0m
+`mapper.go` doesn't exist yet. Let me explore the existing code structure.
+[94m[Glob][0m pattern: [96minternal/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m
+Now I have enough context. I need to create `internal/gitlab/mapper.go` that derives reviewer states from GitLab discussions. Let me check the go-gitlab types for Discussion and Note structures.
+[94m[Bash][0m Find Discussion type in go-gitlab $ grep -r "type Discussion" $(go env GOPATH)/pkg/mod/github.com/xanzy/go-gitlab@v0.115.0/ 2>/dev/null ...
+[94m[Bash][0m Get Discussion and Note struct fields $ grep -A 20 "^type Discussion struct" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-gitlab@v0.115....
+[94m[Bash][0m Check Note Resolved field and MergeRequest struct $ grep -A 5 "Resolved bool" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-gitlab@v0.115.0/notes.go ...
+[94m[Bash][0m Get MergeRequest struct fields including Reviewers $ grep -A 80 "^type MergeRequest struct" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-gitlab@v0.11...
+[94m[Bash][0m Get MergeRequestApprovals struct fields $ grep -A 30 "^type MergeRequestApprovals struct" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-git...
+[94m[Bash][0m Get MergeRequestApproverUser struct $ grep -A 10 "type MergeRequestApproverUser struct" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-g...
+Now I have all the information I need. Let me create the mapper:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m "package gitlab
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/mrboard/mrboard/internal/domain"
+	gl "github.com/xanzy/go-gitlab"
+)
+
+// reReviewPrefix is the system note body prefix GitLab emits when... (5712 chars)"
+Now let me write the unit tests:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper_test.go[0m "package gitlab
+
+import (
+	"testing"
+	"time"
+
+	"github.com/mrboard/mrboard/internal/domain"
+	gl "github.com/xanzy/go-gitlab"
+)
+
+func ptr[T any](v T) *T { return &v }
+
+var (
+	t0 = time.Date(2024, 1, 1, ... (6482 chars)"
+[94m[Bash][0m Build all packages $ go build ./... 2>&1
+[94m[Bash][0m Vet all packages $ go vet ./... 2>&1
+[94m[Bash][0m Run all tests $ go test ./... 2>&1
+All tests pass. The `fmt` import in mapper.go is unused — let me clean that up.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m edit: "import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/m..." → "import (
+	"strings"
+	"time"
+
+	"github.com/mrboard/..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+[94m[Bash][0m Full quality gate $ go build ./... && go vet ./... && go test ./... 2>&1
+All quality gates pass. Now let me close the bead, flush state, and update progress.
+[94m[Bash][0m Close bead mrr-88x.6 $ unit tests cover all state transitions" 2>&1
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-04 - mrr-88x.5" → "---
+
+## 2026-05-04 - mrr-88x.6
+- Implemented `inte..."
+<promise>COMPLETE</promise>
