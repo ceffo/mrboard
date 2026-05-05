@@ -196,6 +196,79 @@ func TestDeriveReviewerStates_NoReviewers(t *testing.T) {
 	}
 }
 
+// TestCountRoundTrips verifies that every "requested review from @X" system note
+// is counted, including multiple requests to the same reviewer.
+func TestCountRoundTrips(t *testing.T) {
+	cases := []struct {
+		name        string
+		discussions []*gl.Discussion
+		want        int
+	}{
+		{
+			name:        "no discussions",
+			discussions: nil,
+			want:        0,
+		},
+		{
+			name: "no re-review notes",
+			discussions: []*gl.Discussion{
+				discussion(userNote("alice", t1)),
+				discussion(systemNote("assigned to @alice", t1)),
+			},
+			want: 0,
+		},
+		{
+			name: "single re-review",
+			discussions: []*gl.Discussion{
+				discussion(systemNote("requested review from @alice", t1)),
+			},
+			want: 1,
+		},
+		{
+			name: "multiple re-reviews same reviewer",
+			discussions: []*gl.Discussion{
+				discussion(systemNote("requested review from @alice", t1)),
+				discussion(systemNote("requested review from @alice", t2)),
+				discussion(systemNote("requested review from @alice", t3)),
+			},
+			want: 3,
+		},
+		{
+			name: "multiple reviewers, mixed notes",
+			discussions: []*gl.Discussion{
+				discussion(
+					systemNote("requested review from @alice", t1),
+					systemNote("requested review from @bob", t2),
+				),
+				discussion(userNote("alice", t3)),
+				discussion(systemNote("requested review from @alice", t3)),
+			},
+			want: 3,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := countRoundTrips(tc.discussions); got != tc.want {
+				t.Errorf("countRoundTrips: want %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestMapMR_RoundTripCount verifies MapMR populates RoundTripCount correctly.
+func TestMapMR_RoundTripCount(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	discussions := []*gl.Discussion{
+		discussion(systemNote("requested review from @alice", t1)),
+		discussion(userNote("alice", t2)),
+		discussion(systemNote("requested review from @alice", t3)),
+	}
+	result := MapMR(m, discussions, approvals(), 1)
+	if result.RoundTripCount != 2 {
+		t.Errorf("want RoundTripCount=2, got %d", result.RoundTripCount)
+	}
+}
+
 // TestExtractReReviewUsername covers the system note parsing helper.
 func TestExtractReReviewUsername(t *testing.T) {
 	cases := []struct {

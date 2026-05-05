@@ -159,6 +159,7 @@ func MapMR(
 		ApprovalCount:     approvals.ApprovalsRequired - approvals.ApprovalsLeft,
 		RequiredApprovals: requiredApprovals,
 		OpenThreads:       openThreads,
+		RoundTripCount:    countRoundTrips(discussions),
 	}
 	if mr.Author != nil {
 		domainMR.Author = mr.Author.Username
@@ -173,6 +174,20 @@ func MapMR(
 	)
 
 	return domainMR
+}
+
+// countRoundTrips returns the total number of "requested review from @X" system
+// notes across all discussions. Each re-request counts independently; no dedup.
+func countRoundTrips(discussions []*gl.Discussion) int {
+	count := 0
+	for _, d := range discussions {
+		for _, note := range d.Notes {
+			if note.System && extractReReviewUsername(note.Body) != "" {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // countOpenThreads returns the number of unresolved, resolvable discussion threads.

@@ -11,6 +11,19 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-04 - mrr-88x.7
+- Added `countRoundTrips(discussions)` to `internal/gitlab/mapper.go`: counts every "requested review from @X" system note without deduplication
+- Wired `RoundTripCount: countRoundTrips(discussions)` into `MapMR`
+- Added `TestCountRoundTrips` (5 subtests: nil, no re-reviews, single, multiple same reviewer, multiple reviewers mixed) and `TestMapMR_RoundTripCount` to `internal/gitlab/mapper_test.go`
+- `RoundTripCount` field already existed in `domain.MergeRequest` from mrr-88x.1; only the population and tests were missing
+- No TUI card display yet — TUI layer doesn't exist; "round-trips: N" display deferred to the TUI bead
+- Files changed: `internal/gitlab/mapper.go`, `internal/gitlab/mapper_test.go`
+- **Learnings:**
+  - `countRoundTrips` reuses `extractReReviewUsername` — the same parsing logic already tested in mrr-88x.6 handles both state derivation and round-trip counting
+  - The "not deduplicated per reviewer" requirement means a simple counter works — no per-reviewer tracking needed
+
+---
+
 ## 2026-05-04 - mrr-88x.6
 - Implemented `internal/gitlab/mapper.go`: `DeriveReviewerStates` processes discussions chronologically; detects system notes matching `"requested review from @<username>"` for re-review requests; tracks `lastComment` and `lastReReview` timestamps per reviewer; applies four state rules (approved → Approved, never commented → NotStarted, comment > reReview → Commented, reReview > comment → ReReviewRequested)
 - Also implemented `MapMR` (full MR mapper) and `countOpenThreads` helpers
