@@ -4,6 +4,9 @@ package gitlab
 
 import (
 	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/mrboard/mrboard/internal/config"
 	gl "github.com/xanzy/go-gitlab"
@@ -14,20 +17,29 @@ const perPage = 100
 // Client wraps the xanzy/go-gitlab client and exposes the methods needed by
 // the fetcher to retrieve raw MR data.
 type Client struct {
-	gl *gl.Client //nolint:staticcheck
+	gl     *gl.Client
+	logger *slog.Logger
 }
 
 // NewClient creates an authenticated GitLab client from the app config.
-func NewClient(cfg *config.Config) (*Client, error) {
-	c, err := gl.NewClient(cfg.GitLab.Token, gl.WithBaseURL(cfg.GitLab.URL)) //nolint:staticcheck
+// timeout controls the HTTP request deadline for every API call; pass 0 for no timeout.
+// logger is used to record API call telemetry; pass slog.New(slog.DiscardHandler) for silence.
+func NewClient(cfg *config.Config, timeout time.Duration, logger *slog.Logger) (*Client, error) {
+	httpClient := &http.Client{Timeout: timeout}
+	c, err := gl.NewClient(cfg.GitLab.Token,
+		gl.WithBaseURL(cfg.GitLab.URL),
+		gl.WithHTTPClient(httpClient),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: create client: %w", err)
 	}
-	return &Client{gl: c}, nil
+	return &Client{gl: c, logger: logger}, nil
 }
 
 // ListGroupMRs returns all open merge requests for the given group ID (name or numeric ID).
 func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list group MRs", "group", groupID)
 	var all []*gl.MergeRequest
 	opts := &gl.ListGroupMergeRequestsOptions{
 		State:       gl.Ptr("opened"),
@@ -36,7 +48,8 @@ func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListGroupMergeRequests(groupID, opts)
 		if err != nil {
-			return nil, fmt.Errorf("gitlab: list group MRs for %q: %w", groupID, err)
+			c.logger.Debug("gitlab: list group MRs error", "group", groupID, "duration", time.Since(start), "error", err)
+			return nil, fmt.Errorf("gitlab: timeout fetching group MRs %q: %w", groupID, err)
 		}
 		all = append(all, mrs...)
 		if resp.NextPage == 0 {
@@ -44,11 +57,14 @@ func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
 		}
 		opts.Page = resp.NextPage
 	}
+	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", time.Since(start))
 	return all, nil
 }
 
 // ListUserMRs returns all open merge requests authored by the given username.
 func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list user MRs", "username", username)
 	var all []*gl.MergeRequest
 	opts := &gl.ListMergeRequestsOptions{
 		AuthorUsername: gl.Ptr(username),
@@ -58,6 +74,7 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts)
 		if err != nil {
+			c.logger.Debug("gitlab: list user MRs error", "username", username, "duration", time.Since(start), "error", err)
 			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
 		}
 		all = append(all, mrs...)
@@ -66,16 +83,20 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 		}
 		opts.Page = resp.NextPage
 	}
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", time.Since(start))
 	return all, nil
 }
 
 // GetMRDiscussions returns all discussions (threaded notes) for an MR.
 func (c *Client) GetMRDiscussions(projectID, mrIID int) ([]*gl.Discussion, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get discussions", "project", projectID, "mr", mrIID)
 	var all []*gl.Discussion
 	opts := &gl.ListMergeRequestDiscussionsOptions{PerPage: perPage}
 	for {
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts)
 		if err != nil {
+			c.logger.Debug("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", time.Since(start), "error", err)
 			return nil, fmt.Errorf("gitlab: get discussions project=%d MR=%d: %w", projectID, mrIID, err)
 		}
 		all = append(all, discussions...)
@@ -84,14 +105,19 @@ func (c *Client) GetMRDiscussions(projectID, mrIID int) ([]*gl.Discussion, error
 		}
 		opts.Page = resp.NextPage
 	}
+	c.logger.Debug("gitlab: get discussions done", "project", projectID, "mr", mrIID, "count", len(all), "duration", time.Since(start))
 	return all, nil
 }
 
 // GetMRApprovals returns the approval status (who approved, how many required) for an MR.
 func (c *Client) GetMRApprovals(projectID, mrIID int) (*gl.MergeRequestApprovals, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get approvals", "project", projectID, "mr", mrIID)
 	approvals, _, err := c.gl.MergeRequests.GetMergeRequestApprovals(projectID, mrIID)
 	if err != nil {
+		c.logger.Debug("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", time.Since(start), "error", err)
 		return nil, fmt.Errorf("gitlab: get approvals project=%d MR=%d: %w", projectID, mrIID, err)
 	}
+	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", time.Since(start))
 	return approvals, nil
 }

@@ -32,6 +32,8 @@ func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []erro
 		seen[k] = true
 		unique = append(unique, mr)
 	}
+	dedupDropped := len(raw) - len(unique)
+	client.logger.Debug("gitlab: dedup", "raw", len(raw), "unique", len(unique), "dropped", dedupDropped)
 
 	type result struct {
 		mr  domain.MergeRequest
@@ -62,6 +64,7 @@ func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []erro
 		mrs = append(mrs, r.mr)
 	}
 
+	client.logger.Debug("gitlab: fetch summary", "total_mrs", len(mrs), "dedup_dropped", dedupDropped, "errors", len(errs))
 	return mrs, errs
 }
 

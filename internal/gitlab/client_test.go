@@ -1,10 +1,17 @@
 package gitlab
 
 import (
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/mrboard/mrboard/internal/config"
 )
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestNewClient_ValidConfig(t *testing.T) {
 	cfg := &config.Config{
@@ -13,7 +20,7 @@ func TestNewClient_ValidConfig(t *testing.T) {
 			Token: "glpat-test",
 		},
 	}
-	c, err := NewClient(cfg)
+	c, err := NewClient(cfg, 30*time.Second, discardLogger())
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
@@ -29,7 +36,7 @@ func TestNewClient_InvalidURL(t *testing.T) {
 			Token: "glpat-test",
 		},
 	}
-	_, err := NewClient(cfg)
+	_, err := NewClient(cfg, 30*time.Second, discardLogger())
 	if err == nil {
 		t.Fatal("NewClient() expected error for invalid URL, got nil")
 	}

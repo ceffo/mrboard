@@ -16,6 +16,24 @@ Spinner ticks are unhandled messages caught in `default:` in root model's switch
 
 ---
 
+## 2026-05-04 - mrr-88x.14
+- Added HTTP timeout to `gitlab.Client` via `net/http.Client{Timeout}` passed to `gl.WithHTTPClient`
+- Added `*slog.Logger` to `Client` struct; all API methods log start/end/error/duration at Debug level
+- `gitlab.NewClient` now takes `(cfg, timeout, logger)` — updated call sites including client_test.go
+- `fetcher.go` logs dedup stats and fetch summary via `client.logger`
+- Rewrote `cmd/mrboard/main.go` with subcommand dispatch: `fetch`, `run` (stub), default usage
+- `mrboard fetch [--debug <path>]` calls FetchAll, prints JSON array to stdout; exits 1 only if ALL sources fail
+- `MRBOARD_DEBUG=<path>` or `--debug <path>` enables slog.JSONHandler at Debug level; unset = io.Discard
+- `MRBOARD_TIMEOUT` env var overrides the 30s default HTTP timeout
+- Files changed: `internal/gitlab/client.go`, `internal/gitlab/fetcher.go`, `internal/gitlab/client_test.go`, `cmd/mrboard/main.go`
+- **Learnings:**
+  - `gl.WithHTTPClient(httpClient)` is the correct go-gitlab option for injecting a custom `*http.Client` with timeout
+  - `slog.NewTextHandler(io.Discard, nil)` is the idiomatic no-op logger; `slog.DiscardHandler` is not a stdlib symbol in Go 1.26
+  - Keep logger on `Client` struct rather than threading it through `FetchAll` signature — avoids breaking TUI callers
+  - `go-gitlab` error messages already include timeout context so wrapping with `%w` is sufficient
+
+---
+
 ## 2026-05-04 - mrr-88x.13
 - Implemented entire `internal/tui` package: keys.go, styles.go, card.go, column.go, board.go, footer.go, spinner.go, model.go
 - Created `cmd/mrboard/main.go` wiring config → gitlab client → tui.Model → tea.NewProgram
