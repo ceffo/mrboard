@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/mrboard/mrboard/internal/domain"
-	gl "github.com/xanzy/go-gitlab"
+	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
 // reReviewPrefix is the system note body prefix GitLab emits when an author
@@ -21,7 +21,7 @@ const reReviewPrefix = "requested review from @"
 //   - Non-system notes authored by a reviewer → updates lastComment timestamp.
 //   - System notes matching "requested review from @<username>" → updates lastReReview timestamp.
 func DeriveReviewerStates(
-	mr *gl.MergeRequest,
+	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
 	approvals *gl.MergeRequestApprovals,
 ) []domain.ReviewerInfo {
@@ -134,7 +134,7 @@ func deriveState(approved bool, lastComment, lastReReview time.Time) domain.Revi
 // MapMR converts raw GitLab API responses into a domain.MergeRequest.
 // requiredApprovals comes from project config, not the API, so it is passed in.
 func MapMR(
-	mr *gl.MergeRequest,
+	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
 	approvals *gl.MergeRequestApprovals,
 	requiredApprovals int,
@@ -149,14 +149,14 @@ func MapMR(
 	}
 
 	domainMR := domain.MergeRequest{
-		ID:                mr.ID,
-		IID:               mr.IID,
-		ProjectID:         mr.ProjectID,
+		ID:                int(mr.ID),
+		IID:               int(mr.IID),
+		ProjectID:         int(mr.ProjectID),
 		Title:             mr.Title,
 		WebURL:            mr.WebURL,
 		Reviewers:         reviewers,
 		CreatedAt:         createdAt,
-		ApprovalCount:     approvals.ApprovalsRequired - approvals.ApprovalsLeft,
+		ApprovalCount:     int(approvals.ApprovalsRequired - approvals.ApprovalsLeft),
 		RequiredApprovals: requiredApprovals,
 		OpenThreads:       openThreads,
 		RoundTripCount:    countRoundTrips(discussions),
@@ -166,7 +166,7 @@ func MapMR(
 	}
 
 	domainMR.Phase = domain.ClassifyPhase(
-		mr.Draft || mr.WorkInProgress,
+		mr.Draft,
 		openThreads,
 		domainMR.ApprovalCount,
 		requiredApprovals,
@@ -212,5 +212,5 @@ func MapMRApprovalCount(approvals *gl.MergeRequestApprovals) int {
 	if count < 0 {
 		return 0
 	}
-	return count
+	return int(count)
 }

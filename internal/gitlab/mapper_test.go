@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/mrboard/mrboard/internal/domain"
-	gl "github.com/xanzy/go-gitlab"
+	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -26,15 +26,7 @@ func systemNote(body string, at time.Time) *gl.Note {
 		System:    true,
 		Body:      body,
 		CreatedAt: ptr(at),
-		Author: struct {
-			ID        int    `json:"id"`
-			Username  string `json:"username"`
-			Email     string `json:"email"`
-			Name      string `json:"name"`
-			State     string `json:"state"`
-			AvatarURL string `json:"avatar_url"`
-			WebURL    string `json:"web_url"`
-		}{},
+		Author:    gl.NoteAuthor{},
 	}
 }
 
@@ -61,13 +53,13 @@ func approvals(usernames ...string) *gl.MergeRequestApprovals {
 	}
 	return &gl.MergeRequestApprovals{
 		ApprovedBy:        approved,
-		ApprovalsRequired: len(usernames),
+		ApprovalsRequired: int64(len(usernames)),
 		ApprovalsLeft:     0,
 	}
 }
 
-func mr(reviewers ...*gl.BasicUser) *gl.MergeRequest {
-	return &gl.MergeRequest{
+func mr(reviewers ...*gl.BasicUser) *gl.BasicMergeRequest {
+	return &gl.BasicMergeRequest{
 		ID:        1,
 		IID:       1,
 		ProjectID: 10,

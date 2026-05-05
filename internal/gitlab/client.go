@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/mrboard/mrboard/internal/config"
-	gl "github.com/xanzy/go-gitlab"
+	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
 const perPage = 100
@@ -37,19 +37,23 @@ func NewClient(cfg *config.Config, timeout time.Duration, logger *slog.Logger) (
 }
 
 // ListGroupMRs returns all open merge requests for the given group ID (name or numeric ID).
-func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
+// excludedAuthor, if non-empty, is applied server-side as not[author_username] to reduce payload size.
+func (c *Client) ListGroupMRs(groupID, excludedAuthor string) ([]*gl.BasicMergeRequest, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: list group MRs", "group", groupID)
-	var all []*gl.MergeRequest
+	var all []*gl.BasicMergeRequest
 	opts := &gl.ListGroupMergeRequestsOptions{
 		State:       gl.Ptr("opened"),
 		ListOptions: gl.ListOptions{PerPage: perPage},
 	}
+	if excludedAuthor != "" {
+		opts.NotAuthorUsername = gl.Ptr(excludedAuthor)
+	}
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListGroupMergeRequests(groupID, opts)
 		if err != nil {
-			c.logger.Debug("gitlab: list group MRs error", "group", groupID, "duration", time.Since(start), "error", err)
-			return nil, fmt.Errorf("gitlab: timeout fetching group MRs %q: %w", groupID, err)
+			c.logger.Debug("gitlab: list group MRs error", "group", groupID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
+			return nil, fmt.Errorf("gitlab: list group MRs %q: %w", groupID, err)
 		}
 		all = append(all, mrs...)
 		if resp.NextPage == 0 {
@@ -57,15 +61,15 @@ func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", time.Since(start))
+	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
 	return all, nil
 }
 
 // ListUserMRs returns all open merge requests authored by the given username.
-func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
+func (c *Client) ListUserMRs(username string) ([]*gl.BasicMergeRequest, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: list user MRs", "username", username)
-	var all []*gl.MergeRequest
+	var all []*gl.BasicMergeRequest
 	opts := &gl.ListMergeRequestsOptions{
 		AuthorUsername: gl.Ptr(username),
 		State:          gl.Ptr("opened"),
@@ -74,7 +78,7 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts)
 		if err != nil {
-			c.logger.Debug("gitlab: list user MRs error", "username", username, "duration", time.Since(start), "error", err)
+			c.logger.Debug("gitlab: list user MRs error", "username", username, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
 			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
 		}
 		all = append(all, mrs...)
@@ -83,20 +87,20 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", time.Since(start))
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
 	return all, nil
 }
 
 // GetMRDiscussions returns all discussions (threaded notes) for an MR.
-func (c *Client) GetMRDiscussions(projectID, mrIID int) ([]*gl.Discussion, error) {
+func (c *Client) GetMRDiscussions(projectID, mrIID int64) ([]*gl.Discussion, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: get discussions", "project", projectID, "mr", mrIID)
 	var all []*gl.Discussion
-	opts := &gl.ListMergeRequestDiscussionsOptions{PerPage: perPage}
+	opts := &gl.ListMergeRequestDiscussionsOptions{ListOptions: gl.ListOptions{PerPage: perPage}}
 	for {
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts)
 		if err != nil {
-			c.logger.Debug("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", time.Since(start), "error", err)
+			c.logger.Debug("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
 			return nil, fmt.Errorf("gitlab: get discussions project=%d MR=%d: %w", projectID, mrIID, err)
 		}
 		all = append(all, discussions...)
@@ -105,19 +109,19 @@ func (c *Client) GetMRDiscussions(projectID, mrIID int) ([]*gl.Discussion, error
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: get discussions done", "project", projectID, "mr", mrIID, "count", len(all), "duration", time.Since(start))
+	c.logger.Debug("gitlab: get discussions done", "project", projectID, "mr", mrIID, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
 	return all, nil
 }
 
 // GetMRApprovals returns the approval status (who approved, how many required) for an MR.
-func (c *Client) GetMRApprovals(projectID, mrIID int) (*gl.MergeRequestApprovals, error) {
+func (c *Client) GetMRApprovals(projectID, mrIID int64) (*gl.MergeRequestApprovals, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: get approvals", "project", projectID, "mr", mrIID)
 	approvals, _, err := c.gl.MergeRequests.GetMergeRequestApprovals(projectID, mrIID)
 	if err != nil {
-		c.logger.Debug("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", time.Since(start), "error", err)
+		c.logger.Debug("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
 		return nil, fmt.Errorf("gitlab: get approvals project=%d MR=%d: %w", projectID, mrIID, err)
 	}
-	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", time.Since(start))
+	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String())
 	return approvals, nil
 }

@@ -28,8 +28,7 @@ func main() {
 	case "fetch":
 		os.Exit(runFetch(os.Args[2:]))
 	case "run":
-		fmt.Fprintln(os.Stderr, "mrboard run: not implemented")
-		os.Exit(1)
+		os.Exit(runBoard())
 	default:
 		fmt.Fprintf(os.Stderr, "mrboard: unknown subcommand %q\n\n", os.Args[1])
 		printUsage()
@@ -67,7 +66,7 @@ func runFetch(args []string) int {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1
 	}
-	logger.Debug("config loaded", "path", cfgPath, "sources", len(cfg.Sources))
+	logger.Debug("config loaded", "path", cfgPath, "sources", len(cfg.Sources), "excluded_authors", cfg.ExcludedAuthors)
 
 	timeout := loadTimeout()
 	client, err := gitlab.NewClient(cfg, timeout, logger)

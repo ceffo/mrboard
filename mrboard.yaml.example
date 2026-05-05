@@ -1,0 +1,15 @@
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-xxx        # or set $GITLAB_TOKEN env var
+  required_approvals: 2   # default: 2
+
+excluded_authors:
+  - renovate-bot
+  - dependabot
+
+sources:
+  - type: group
+    id: my-team
+
+  - type: user
+    username: alice

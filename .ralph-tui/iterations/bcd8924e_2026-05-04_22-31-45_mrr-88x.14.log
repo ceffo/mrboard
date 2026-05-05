@@ -1,0 +1,139 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-88x.14
+- **Task Title**: Observability: HTTP timeout, fetch subcommand, file logging
+- **Description**: Wire main.go and add debugging facilities so the data pipeline can be verified independently of the TUI. The loading hang is caused by missing HTTP timeouts on GitLab API calls.
+
+## Context
+main.go is...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-05T02:31:45.529Z
+- **Ended At**: 2026-05-05T02:35:11.459Z
+- **Duration**: 3m 25s
+- **Input Tokens**: 67
+- **Output Tokens**: 13363
+- **Total Tokens**: 13430
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-88x
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and examining the current codebase state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/gitlab'][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/fetcher.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Let me check the TUI model to understand how the client is used:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I have enough context. Let me implement all the changes:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/go.mod[0m
+Good, `log/slog` is available (Go 1.21+). Now I'll implement all the changes:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m edit: "// Package gitlab provides a thin wrapper around t..." → "// Package gitlab provides a thin wrapper around t..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: // Package gitlab provides a thin wrapper around the xanzy/gitlab client
+// for fetching MR data needed by mrboard.
+package gitlab
+
+import (
+	"fmt"
+
+	"github.com/mrboard/mrboard/internal/config"
+	gl "github.com/xanzy/go-gitlab"
+)
+
+const perPage = 100
+
+// Client wraps the xanzy/go-gitlab client and exposes the methods needed by
+// the fetcher to retrieve raw MR data.
+type Client struct {
+	gl *gl.Client //nolint:staticcheck
+}
+
+// NewClient creates an authenticated GitLab client from the app config.
+func NewClient(cfg *config.Config) (*Client, error) {
+	c, err := gl.NewClient(cfg.GitLab.Token, gl.WithBaseURL(cfg.GitLab.URL)) //nolint:staticcheck
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: create client: %w", err)
+	}
+	return &Client{gl: c}, nil
+}</tool_use_error>][0m
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m "// Package gitlab provides a thin wrapper around the xanzy/go-gitlab client
+// for fetching MR data needed by mrboard.
+package gitlab
+
+import (
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/mrb... (4708 chars)"
+Now update `fetcher.go` to log the fetch summary:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/fetcher.go[0m edit: "	raw, errs := listAllMRs(client, cfg)
+
+	// Dedupli..." → "	raw, errs := listAllMRs(client, cfg)
+
+	// Dedupli..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/fetcher.go[0m edit: "	var mrs []domain.MergeRequest
+	for _, r := range ..." → "	var mrs []domain.MergeRequest
+	for _, r := range ..."
+Now also add the source-level logging in `listAllMRs` and update the `listAllMRs` function to log config loading context. Actually the config-loaded log should be in main.go. Let me now rewrite `main.go`:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m "// Package main is the entry point for mrboard.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/con... (6338 chars)"
+Now let me check if the client_test.go needs updating since `NewClient` signature changed:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m edit: "package gitlab
+
+import (
+	"testing"
+
+	"github.com/..." → "package gitlab
+
+import (
+	"io"
+	"log/slog"
+	"testi..."
+Now run the quality gates:
+[94m[Bash][0m Build all packages $ go build ./... 2>&1
+[94m[Bash][0m Vet and test all packages $ go vet ./... && go test ./... 2>&1
+All gates pass. Let me close the bead and update progress:
+[94m[Bash][0m Close bead mrr-88x.14 $ br close mrr-88x.14 --reason "Added HTTP timeout to gitlab.Client, slog file logging, fetch subcomma...
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-04 - mrr-88x.13" → "---
+
+## 2026-05-04 - mrr-88x.14
+- Added HTTP timeo..."
+<promise>COMPLETE</promise>
+
+All quality gates pass (`go build`, `go vet`, `go test`). Here's a summary of what was implemented:
+
+- **HTTP timeout**: `gitlab.NewClient` now takes `timeout time.Duration` and wires it via `net/http.Client{Timeout}` + `gl.WithHTTPClient`. Default is 30s, overridable with `MRBOARD_TIMEOUT`.
+- **slog file logging**: `Client` holds a `*slog.Logger`; all four API methods log start/end/duration/error at Debug level. `fetcher.go` logs dedup stats and fetch summary.
+- **`mrboard fetch`**: Prints a JSON array of MRs to stdout with id, title, web_url, phase, author, reviewer_states, time_in_phase, time_open, round_trips. Exits 1 only if all sources fail.
+- **`--debug <path>` / `MRBOARD_DEBUG`**: Opens the file and attaches a `slog.JSONHandler` at Debug level; unset = `io.Discard` (zero overhead).
+- **Subcommand dispatch**: `mrboard` alone prints usage; `mrboard fetch` works; `mrboard run` prints "not implemented" and exits 1.

@@ -6,7 +6,7 @@ _default:
 
 # builds the cli binary and puts it in the bin directory
 build:
-  go build  -o ./bin/mrboard ./cmd/cli/...
+  go build  -o ./bin/mrboard ./cmd/mrboard/...
 
 # runs unit tests for the project
 test:
