@@ -159,7 +159,7 @@ id   = "x"
 	}
 
 	orig, _ := os.Getwd()
-	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	t.Cleanup(func() { os.Chdir(orig) })
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}

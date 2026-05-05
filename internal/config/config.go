@@ -1,3 +1,4 @@
+// Package config provides TOML-based configuration loading for mrboard.
 package config
 
 import (
@@ -9,23 +10,27 @@ import (
 
 const defaultPath = "mrboard.toml"
 
+// GitLab holds credentials and settings for the GitLab API.
 type GitLab struct {
 	URL               string `toml:"url"`
 	Token             string `toml:"token"`
 	RequiredApprovals int    `toml:"required_approvals"`
 }
 
+// Source describes a single source of MRs — either a group or a user.
 type Source struct {
 	Type     string `toml:"type"`     // "group" or "user"
 	ID       string `toml:"id"`       // used when type == "group"
 	Username string `toml:"username"` // used when type == "user"
 }
 
+// Config is the top-level application configuration loaded from mrboard.toml.
 type Config struct {
 	GitLab  GitLab   `toml:"gitlab"`
 	Sources []Source `toml:"sources"`
 }
 
+// Load reads and validates the configuration from mrboard.toml or $MRBOARD_CONFIG.
 func Load() (*Config, error) {
 	path := defaultPath
 	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {

@@ -1,3 +1,5 @@
+// Package gitlab provides a thin wrapper around the xanzy/go-gitlab client
+// for fetching MR data needed by mrboard.
 package gitlab
 
 import (
@@ -7,15 +9,17 @@ import (
 	gl "github.com/xanzy/go-gitlab"
 )
 
+const perPage = 100
+
 // Client wraps the xanzy/go-gitlab client and exposes the methods needed by
 // the fetcher to retrieve raw MR data.
 type Client struct {
-	gl *gl.Client
+	gl *gl.Client //nolint:staticcheck
 }
 
 // NewClient creates an authenticated GitLab client from the app config.
 func NewClient(cfg *config.Config) (*Client, error) {
-	c, err := gl.NewClient(cfg.GitLab.Token, gl.WithBaseURL(cfg.GitLab.URL))
+	c, err := gl.NewClient(cfg.GitLab.Token, gl.WithBaseURL(cfg.GitLab.URL)) //nolint:staticcheck
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: create client: %w", err)
 	}
@@ -27,7 +31,7 @@ func (c *Client) ListGroupMRs(groupID string) ([]*gl.MergeRequest, error) {
 	var all []*gl.MergeRequest
 	opts := &gl.ListGroupMergeRequestsOptions{
 		State:       gl.Ptr("opened"),
-		ListOptions: gl.ListOptions{PerPage: 100},
+		ListOptions: gl.ListOptions{PerPage: perPage},
 	}
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListGroupMergeRequests(groupID, opts)
@@ -49,7 +53,7 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 	opts := &gl.ListMergeRequestsOptions{
 		AuthorUsername: gl.Ptr(username),
 		State:          gl.Ptr("opened"),
-		ListOptions:    gl.ListOptions{PerPage: 100},
+		ListOptions:    gl.ListOptions{PerPage: perPage},
 	}
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts)
@@ -68,7 +72,7 @@ func (c *Client) ListUserMRs(username string) ([]*gl.MergeRequest, error) {
 // GetMRDiscussions returns all discussions (threaded notes) for an MR.
 func (c *Client) GetMRDiscussions(projectID, mrIID int) ([]*gl.Discussion, error) {
 	var all []*gl.Discussion
-	opts := &gl.ListMergeRequestDiscussionsOptions{PerPage: 100}
+	opts := &gl.ListMergeRequestDiscussionsOptions{PerPage: perPage}
 	for {
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts)
 		if err != nil {

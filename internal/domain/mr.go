@@ -1,3 +1,4 @@
+// Package domain defines the core types and business logic for mrboard.
 package domain
 
 import (
@@ -5,8 +6,15 @@ import (
 	"time"
 )
 
+const (
+	minutesPerHour = 60
+	hoursPerDay    = 24
+)
+
+// ReviewerState tracks where a reviewer is in the review lifecycle.
 type ReviewerState int
 
+// Reviewer lifecycle states, in rough progression.
 const (
 	ReviewerNotStarted        ReviewerState = iota // assigned, no activity
 	ReviewerCommented                              // left comments; ball is in author's court
@@ -14,8 +22,10 @@ const (
 	ReviewerApproved                               // approved (terminal unless revoked)
 )
 
+// MRPhase classifies the overall state of a merge request.
 type MRPhase int
 
+// MR phase values, in priority order per domain-model.md.
 const (
 	PhaseDraft             MRPhase = iota // MR is still a draft
 	PhaseNeedsReview                      // ball is in reviewer(s)' court
@@ -23,6 +33,7 @@ const (
 	PhaseReadyToMerge                     // all threads resolved + enough approvals
 )
 
+// ReviewerInfo holds the current state for a single reviewer on an MR.
 type ReviewerInfo struct {
 	Username     string
 	Name         string
@@ -30,6 +41,7 @@ type ReviewerInfo struct {
 	WaitingSince time.Time
 }
 
+// MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
 	ID        int
 	IID       int
@@ -74,9 +86,9 @@ func FormatDuration(d time.Duration) string {
 		return "< 1m"
 	}
 	totalMinutes := int(d.Minutes())
-	days := totalMinutes / (60 * 24)
-	hours := (totalMinutes % (60 * 24)) / 60
-	minutes := totalMinutes % 60
+	days := totalMinutes / (minutesPerHour * hoursPerDay)
+	hours := (totalMinutes % (minutesPerHour * hoursPerDay)) / minutesPerHour
+	minutes := totalMinutes % minutesPerHour
 
 	switch {
 	case days > 0 && hours > 0:
