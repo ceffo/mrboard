@@ -4,6 +4,8 @@ import "charm.land/lipgloss/v2"
 
 // Styles holds all lipgloss styles used by mrboard widgets.
 type Styles struct {
+	Header              lipgloss.Style
+	Footer              lipgloss.Style
 	ColumnHeader        lipgloss.Style
 	ColumnBorder        lipgloss.Style
 	ColumnBorderFocused lipgloss.Style
@@ -21,11 +23,18 @@ type Styles struct {
 	DurationOk          lipgloss.Style
 	EmptyColumn         lipgloss.Style
 	ErrorMsg            lipgloss.Style
+	ScrollIndicator     lipgloss.Style
 }
 
 // NewStyles creates and returns the default mrboard styles.
 func NewStyles() Styles {
 	return Styles{
+		Header: lipgloss.NewStyle().
+			Background(lipgloss.Color("236")).
+			Foreground(lipgloss.Color("252")).
+			Bold(true),
+		Footer: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")),
 		ColumnHeader:        lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		ColumnBorder:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")),
 		ColumnBorderFocused: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99")),
@@ -50,5 +59,6 @@ func NewStyles() Styles {
 		DurationOk:      lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
 		EmptyColumn:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true),
 		ErrorMsg:        lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
+		ScrollIndicator: lipgloss.NewStyle().Foreground(lipgloss.Color("99")),
 	}
 }

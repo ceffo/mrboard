@@ -25,7 +25,9 @@ const (
 const (
 	defaultBoardWidth  = 80
 	defaultBoardHeight = 24
-	footerHeight       = 2
+	headerHeight       = 1
+	footerHeight       = 1
+	chromeHeight       = headerHeight + footerHeight
 	hoursPerDay        = 24
 )
 
@@ -41,6 +43,7 @@ type FetchErrMsg struct{ Err error }
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
 	state     appState
+	header    headerWidget
 	board     boardWidget
 	footer    footerWidget
 	sp        spinnerWidget
@@ -62,8 +65,9 @@ func New(cfg *config.Config, client *gitlab.Client) Model {
 	keys := DefaultKeyMap
 	return Model{
 		state:  stateLoading,
-		board:  newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight),
-		footer: newFooterWidget(keys),
+		header: newHeaderWidget(styles),
+		board:  newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		footer: newFooterWidget(keys, styles),
 		sp:     newSpinnerWidget(),
 		keys:   keys,
 		styles: styles,
@@ -92,7 +96,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.board.SetSize(msg.Width, msg.Height-footerHeight)
+		m.header.SetWidth(msg.Width)
+		m.board.SetSize(msg.Width, msg.Height-chromeHeight)
 		return m, nil
 
 	case FetchResultMsg:
@@ -173,13 +178,28 @@ func (m Model) renderContent() string {
 		return lip.Place(m.width, m.height, lip.Center, lip.Center, body)
 
 	case stateBoard:
-		var sb strings.Builder
-		sb.WriteString(m.board.render())
-		for _, e := range m.errors {
-			sb.WriteString("\n" + m.styles.ErrorMsg.Render("⚠ "+e.Error()))
+		headerStr := m.header.render()
+		boardStr := m.board.render()
+		footerStr := m.footer.render()
+
+		// Clamp board to available height, then pad to fill it exactly,
+		// so the footer is always docked at the bottom line.
+		boardH := m.height - chromeHeight
+		if boardH > 0 {
+			lines := strings.SplitN(boardStr, "\n", boardH+2) //nolint:mnd
+			if len(lines) > boardH {
+				lines = lines[:boardH]
+			}
+			boardStr = strings.Join(lines, "\n")
+			boardStr = lip.NewStyle().Height(boardH).Render(boardStr)
 		}
-		sb.WriteString("\n" + m.footer.help.View(m.keys))
-		return sb.String()
+
+		var errLines string
+		for _, e := range m.errors {
+			errLines += "\n" + m.styles.ErrorMsg.Render("⚠ "+e.Error())
+		}
+
+		return headerStr + "\n" + boardStr + errLines + "\n" + footerStr
 	}
 	return ""
 }
@@ -203,6 +223,7 @@ func (m *Model) applyMRFilter() {
 		mrs = filtered
 	}
 	m.board.SetMRs(mrs)
+	m.header.SetMRs(mrs)
 }
 
 func openBrowser(url string) tea.Cmd {
