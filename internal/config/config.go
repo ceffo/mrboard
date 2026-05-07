@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -40,7 +41,7 @@ func Load() (*Config, error) {
 		path = v
 	}
 
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("config: open %q: %w", path, err)
 	}

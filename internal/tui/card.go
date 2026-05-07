@@ -13,6 +13,13 @@ import (
 // free of non-ASCII bytes so no editor or tool can normalize it.
 const nbsp rune = 0x00A0
 
+const (
+	cardBorderAndPad = 4 // 1 border + 1 padding on each side
+	minInnerWidth    = 8
+	minLeftW         = 2
+	minEllipsisWidth = 3
+)
+
 type cardWidget struct {
 	mr      domain.MergeRequest
 	styles  Styles
@@ -27,14 +34,14 @@ func newCardWidget(mr domain.MergeRequest, styles Styles, width int) cardWidget 
 func (c *cardWidget) SetFocused(v bool) { c.focused = v }
 func (c *cardWidget) SetWidth(w int)    { c.width = w }
 
-func (c cardWidget) Init() tea.Cmd                           { return nil }
-func (c cardWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
-func (c cardWidget) View() tea.View                          { return tea.NewView(c.render()) }
+func (c cardWidget) Init() tea.Cmd                         { return nil }
+func (c cardWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
+func (c cardWidget) View() tea.View                        { return tea.NewView(c.render()) }
 
 func (c cardWidget) render() string {
-	innerWidth := c.width - 4
-	if innerWidth < 8 {
-		innerWidth = 8
+	innerWidth := c.width - cardBorderAndPad
+	if innerWidth < minInnerWidth {
+		innerWidth = minInnerWidth
 	}
 
 	now := time.Now()
@@ -100,8 +107,8 @@ func (c cardWidget) renderHeaderLine(left, right string, width int) string {
 	rightRendered := c.styles.CardMeta.Render(right)
 	rightW := lip.Width(rightRendered)
 	leftW := width - rightW
-	if leftW < 2 {
-		leftW = 2
+	if leftW < minLeftW {
+		leftW = minLeftW
 	}
 	truncated := truncateWidth(left, leftW)
 	if pad := leftW - lip.Width(truncated); pad > 0 {
@@ -206,7 +213,7 @@ func truncateWidth(s string, maxWidth int) string {
 	if lip.Width(s) <= maxWidth {
 		return s
 	}
-	if maxWidth <= 3 {
+	if maxWidth <= minEllipsisWidth {
 		result := ""
 		w := 0
 		for _, r := range s {

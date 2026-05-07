@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -16,10 +17,14 @@ import (
 	"github.com/mrboard/mrboard/internal/tui"
 )
 
-const defaultTimeout = 30 * time.Second
+const (
+	defaultTimeout = 30 * time.Second
+	minArgs        = 2
+	logFileMode    = 0o600
+)
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < minArgs {
 		printUsage()
 		os.Exit(0)
 	}
@@ -115,7 +120,7 @@ func setupLogger(path string) *slog.Logger {
 	if path == "" {
 		return slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: open debug log %q: %v\n", path, err)
 		return slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -1,9 +1,15 @@
+// Package tui provides the Bubble Tea TUI for mrboard.
 package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 	"github.com/mrboard/mrboard/internal/domain"
+)
+
+const (
+	numColumns  = 4
+	minColWidth = 10
 )
 
 type boardWidget struct {
@@ -23,7 +29,7 @@ var phaseOrder = [4]domain.MRPhase{
 
 func newBoardWidget(styles Styles, width, height int) boardWidget {
 	b := boardWidget{styles: styles, width: width, height: height}
-	colWidth := max(width/4, 10)
+	colWidth := max(width/numColumns, minColWidth)
 	for i, phase := range phaseOrder {
 		b.columns[i] = newColumnWidget(phase, styles, colWidth, height)
 	}
@@ -34,7 +40,7 @@ func newBoardWidget(styles Styles, width, height int) boardWidget {
 func (b *boardWidget) SetSize(width, height int) {
 	b.width = width
 	b.height = height
-	colWidth := max(width/4, 10)
+	colWidth := max(width/numColumns, minColWidth)
 	for i := range b.columns {
 		b.columns[i].SetWidth(colWidth)
 		b.columns[i].SetHeight(height)
@@ -42,10 +48,10 @@ func (b *boardWidget) SetSize(width, height int) {
 }
 
 func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
-	var byPhase [4][]domain.MergeRequest
+	var byPhase [numColumns][]domain.MergeRequest
 	for _, mr := range mrs {
 		idx := int(mr.Phase)
-		if idx >= 0 && idx < 4 {
+		if idx >= 0 && idx < numColumns {
 			byPhase[idx] = append(byPhase[idx], mr)
 		}
 	}
@@ -80,7 +86,7 @@ func (b *boardWidget) MoveLeft() {
 }
 
 func (b *boardWidget) MoveRight() {
-	if b.focusedCol < 3 {
+	if b.focusedCol < numColumns-1 {
 		prevIdx := b.columns[b.focusedCol].focusIdx
 		b.setFocusedCol(b.focusedCol + 1)
 		b.columns[b.focusedCol].ClampFocusTo(prevIdx)
@@ -94,12 +100,12 @@ func (b *boardWidget) FocusedMR() *domain.MergeRequest {
 	return b.columns[b.focusedCol].FocusedMR()
 }
 
-func (b boardWidget) Init() tea.Cmd                           { return nil }
-func (b boardWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return b, nil }
-func (b boardWidget) View() tea.View                          { return tea.NewView(b.render()) }
+func (b boardWidget) Init() tea.Cmd                         { return nil }
+func (b boardWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return b, nil }
+func (b boardWidget) View() tea.View                        { return tea.NewView(b.render()) }
 
 func (b boardWidget) render() string {
-	cols := make([]string, 4)
+	cols := make([]string, numColumns)
 	for i := range b.columns {
 		cols[i] = b.columns[i].render()
 	}

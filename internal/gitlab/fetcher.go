@@ -111,19 +111,41 @@ func listAllMRs(client *Client, cfg *config.Config, primaryExclusion string) ([]
 	for _, src := range cfg.Sources {
 		switch src.Type {
 		case "group":
+			allowedProjects, err := client.ListNonArchivedProjectIDs(src.ID)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
+				continue
+			}
 			mrs, err := client.ListGroupMRs(src.ID, primaryExclusion)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
 				continue
 			}
-			all = append(all, mrs...)
+			for _, mr := range mrs {
+				if allowedProjects[mr.ProjectID] {
+					all = append(all, mr)
+				} else {
+					client.logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
+				}
+			}
 		case "user":
 			mrs, err := client.ListUserMRs(src.Username)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("source user=%q: %w", src.Username, err))
 				continue
 			}
-			all = append(all, mrs...)
+			for _, mr := range mrs {
+				archived, err := client.IsProjectArchived(mr.ProjectID)
+				if err != nil {
+					errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", src.Username, mr.IID, err))
+					continue
+				}
+				if !archived {
+					all = append(all, mr)
+				} else {
+					client.logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
+				}
+			}
 		default:
 			errs = append(errs, fmt.Errorf("source: unknown type %q", src.Type))
 		}

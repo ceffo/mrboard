@@ -19,6 +19,10 @@ const perPage = 100
 type Client struct {
 	gl     *gl.Client
 	logger *slog.Logger
+
+	// projectArchived caches archival status keyed by project ID to avoid
+	// redundant API calls when filtering MRs from user sources.
+	projectArchivedCache map[int64]bool
 }
 
 // NewClient creates an authenticated GitLab client from the app config.
@@ -33,7 +37,7 @@ func NewClient(cfg *config.Config, timeout time.Duration, logger *slog.Logger) (
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: create client: %w", err)
 	}
-	return &Client{gl: c, logger: logger}, nil
+	return &Client{gl: c, logger: logger, projectArchivedCache: make(map[int64]bool)}, nil
 }
 
 // ListGroupMRs returns all open merge requests for the given group ID (name or numeric ID).
@@ -52,7 +56,8 @@ func (c *Client) ListGroupMRs(groupID, excludedAuthor string) ([]*gl.BasicMergeR
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListGroupMergeRequests(groupID, opts)
 		if err != nil {
-			c.logger.Debug("gitlab: list group MRs error", "group", groupID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
+			elapsed := time.Since(start).Round(time.Millisecond)
+			c.logger.Debug("gitlab: list group MRs error", "group", groupID, "duration", elapsed, "error", err)
 			return nil, fmt.Errorf("gitlab: list group MRs %q: %w", groupID, err)
 		}
 		all = append(all, mrs...)
@@ -61,7 +66,8 @@ func (c *Client) ListGroupMRs(groupID, excludedAuthor string) ([]*gl.BasicMergeR
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
+	elapsed := time.Since(start).Round(time.Millisecond)
+	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", elapsed)
 	return all, nil
 }
 
@@ -79,7 +85,8 @@ func (c *Client) ListUserMRs(username string) ([]*gl.BasicMergeRequest, error) {
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts)
 		if err != nil {
-			c.logger.Debug("gitlab: list user MRs error", "username", username, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
+			elapsed := time.Since(start).Round(time.Millisecond)
+			c.logger.Debug("gitlab: list user MRs error", "username", username, "duration", elapsed, "error", err)
 			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
 		}
 		all = append(all, mrs...)
@@ -88,7 +95,8 @@ func (c *Client) ListUserMRs(username string) ([]*gl.BasicMergeRequest, error) {
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
+	elapsed := time.Since(start).Round(time.Millisecond)
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", elapsed)
 	return all, nil
 }
 
@@ -101,7 +109,8 @@ func (c *Client) GetMRDiscussions(projectID, mrIID int64) ([]*gl.Discussion, err
 	for {
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts)
 		if err != nil {
-			c.logger.Debug("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
+			elapsed := time.Since(start).Round(time.Millisecond)
+			c.logger.Debug("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
 			return nil, fmt.Errorf("gitlab: get discussions project=%d MR=%d: %w", projectID, mrIID, err)
 		}
 		all = append(all, discussions...)
@@ -110,7 +119,9 @@ func (c *Client) GetMRDiscussions(projectID, mrIID int64) ([]*gl.Discussion, err
 		}
 		opts.Page = resp.NextPage
 	}
-	c.logger.Debug("gitlab: get discussions done", "project", projectID, "mr", mrIID, "count", len(all), "duration", time.Since(start).Round(time.Millisecond).String())
+	elapsed := time.Since(start).Round(time.Millisecond)
+	c.logger.Debug("gitlab: get discussions done",
+		"project", projectID, "mr", mrIID, "count", len(all), "duration", elapsed)
 	return all, nil
 }
 
@@ -120,9 +131,54 @@ func (c *Client) GetMRApprovals(projectID, mrIID int64) (*gl.MergeRequestApprova
 	c.logger.Debug("gitlab: get approvals", "project", projectID, "mr", mrIID)
 	approvals, _, err := c.gl.MergeRequests.GetMergeRequestApprovals(projectID, mrIID)
 	if err != nil {
-		c.logger.Debug("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String(), "error", err)
+		elapsed := time.Since(start).Round(time.Millisecond)
+		c.logger.Debug("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
 		return nil, fmt.Errorf("gitlab: get approvals project=%d MR=%d: %w", projectID, mrIID, err)
 	}
-	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", time.Since(start).Round(time.Millisecond).String())
+	elapsed := time.Since(start).Round(time.Millisecond)
+	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", elapsed)
 	return approvals, nil
+}
+
+// ListNonArchivedProjectIDs returns the set of non-archived project IDs for a
+// group. IncludeSubGroups is set so that nested group projects are included.
+func (c *Client) ListNonArchivedProjectIDs(groupID string) (map[int64]bool, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list non-archived projects", "group", groupID)
+	ids := make(map[int64]bool)
+	opts := &gl.ListGroupProjectsOptions{
+		Archived:         gl.Ptr(false),
+		IncludeSubGroups: gl.Ptr(true),
+		ListOptions:      gl.ListOptions{PerPage: perPage},
+	}
+	for {
+		projects, resp, err := c.gl.Groups.ListGroupProjects(groupID, opts)
+		if err != nil {
+			return nil, fmt.Errorf("gitlab: list group projects %q: %w", groupID, err)
+		}
+		for _, p := range projects {
+			ids[p.ID] = true
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	elapsed := time.Since(start).Round(time.Millisecond).String()
+	c.logger.Debug("gitlab: list non-archived projects done", "group", groupID, "count", len(ids), "duration", elapsed)
+	return ids, nil
+}
+
+// IsProjectArchived reports whether the given project is archived. Results are
+// cached in the client so repeated calls for the same project ID are free.
+func (c *Client) IsProjectArchived(projectID int64) (bool, error) {
+	if archived, ok := c.projectArchivedCache[projectID]; ok {
+		return archived, nil
+	}
+	project, _, err := c.gl.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return false, fmt.Errorf("gitlab: get project %d: %w", projectID, err)
+	}
+	c.projectArchivedCache[projectID] = project.Archived
+	return project.Archived, nil
 }

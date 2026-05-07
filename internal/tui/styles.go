@@ -29,19 +29,26 @@ func NewStyles() Styles {
 		ColumnHeader:        lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		ColumnBorder:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")),
 		ColumnBorderFocused: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99")),
-		Card:                lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1),
-		CardFocused:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99")).Background(lipgloss.Color("236")).Padding(0, 1),
-		CardTitle:           lipgloss.NewStyle().Bold(true),
-		CardAuthor:          lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true),
-		CardMeta:            lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
-		PillNotStarted:      lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		PillCommented:       lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
-		PillReReview:        lipgloss.NewStyle().Foreground(lipgloss.Color("99")),
-		PillApproved:        lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-		DurationUrgent:      lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
-		DurationWarning:     lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		DurationOk:          lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
-		EmptyColumn:         lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true),
-		ErrorMsg:            lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
+		Card: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(0, 1),
+		CardFocused: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("99")).
+			Background(lipgloss.Color("236")).
+			Padding(0, 1),
+		CardTitle:       lipgloss.NewStyle().Bold(true),
+		CardAuthor:      lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true),
+		CardMeta:        lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
+		PillNotStarted:  lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
+		PillCommented:   lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
+		PillReReview:    lipgloss.NewStyle().Foreground(lipgloss.Color("99")),
+		PillApproved:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
+		DurationUrgent:  lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
+		DurationWarning: lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
+		DurationOk:      lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
+		EmptyColumn:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true),
+		ErrorMsg:        lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
 	}
 }

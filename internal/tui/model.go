@@ -22,6 +22,13 @@ const (
 	stateError
 )
 
+const (
+	defaultBoardWidth  = 80
+	defaultBoardHeight = 24
+	footerHeight       = 2
+	hoursPerDay        = 24
+)
+
 // FetchResultMsg carries the result of a successful (or partial) fetch.
 type FetchResultMsg struct {
 	MRs    []domain.MergeRequest
@@ -55,7 +62,7 @@ func New(cfg *config.Config, client *gitlab.Client) Model {
 	keys := DefaultKeyMap
 	return Model{
 		state:  stateLoading,
-		board:  newBoardWidget(styles, 80, 24),
+		board:  newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight),
 		footer: newFooterWidget(keys),
 		sp:     newSpinnerWidget(),
 		keys:   keys,
@@ -85,7 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.board.SetSize(msg.Width, msg.Height-2)
+		m.board.SetSize(msg.Width, msg.Height-footerHeight)
 		return m, nil
 
 	case FetchResultMsg:
@@ -181,7 +188,7 @@ func (m Model) renderContent() string {
 func (m *Model) applyMRFilter() {
 	mrs := m.allMRs
 	if m.hideStale && m.cfg.StaleThresholdDays > 0 {
-		threshold := time.Duration(m.cfg.StaleThresholdDays) * 24 * time.Hour
+		threshold := time.Duration(m.cfg.StaleThresholdDays) * hoursPerDay * time.Hour
 		now := time.Now()
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
@@ -206,7 +213,9 @@ func openBrowser(url string) tea.Cmd {
 		} else {
 			cmd = exec.Command("xdg-open", url)
 		}
-		_ = cmd.Start()
+		if err := cmd.Start(); err != nil {
+			return nil
+		}
 		return nil
 	}
 }

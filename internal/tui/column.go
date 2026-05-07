@@ -9,6 +9,8 @@ import (
 	"github.com/mrboard/mrboard/internal/domain"
 )
 
+const colBorderWidth = 2
+
 type columnWidget struct {
 	phase    domain.MRPhase
 	name     string
@@ -53,7 +55,7 @@ func (c *columnWidget) SetFocused(v bool) {
 func (c *columnWidget) SetWidth(w int) {
 	c.width = w
 	for i := range c.cards {
-		c.cards[i].SetWidth(w - 2)
+		c.cards[i].SetWidth(w - colBorderWidth)
 	}
 }
 
@@ -62,7 +64,7 @@ func (c *columnWidget) SetHeight(h int) { c.height = h }
 func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
 	c.cards = make([]cardWidget, len(mrs))
 	for i, mr := range mrs {
-		c.cards[i] = newCardWidget(mr, c.styles, c.width-2)
+		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth)
 	}
 	if len(c.cards) == 0 {
 		c.focusIdx = 0
@@ -116,13 +118,13 @@ func (c *columnWidget) FocusedMR() *domain.MergeRequest {
 	return &mr
 }
 
-func (c columnWidget) Init() tea.Cmd                           { return nil }
-func (c columnWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
-func (c columnWidget) View() tea.View                          { return tea.NewView(c.render()) }
+func (c columnWidget) Init() tea.Cmd                         { return nil }
+func (c columnWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
+func (c columnWidget) View() tea.View                        { return tea.NewView(c.render()) }
 
 func (c columnWidget) render() string {
 	// contentW is the column's inner content width (excluding border).
-	contentW := c.width - 2
+	contentW := c.width - colBorderWidth
 
 	header := c.styles.ColumnHeader.Render(fmt.Sprintf("%s (%d)", c.name, len(c.cards)))
 	// Pad header to contentW so the column border is always the right width.
