@@ -14,6 +14,11 @@ import (
 	"github.com/mrboard/mrboard/internal/gitlab"
 )
 
+const (
+	detailWidthRatio   = 40  // percent of total width for the detail panel
+	detailWidthDivisor = 100 // divisor for percentage calculation
+)
+
 type appState int
 
 const (
@@ -40,23 +45,35 @@ type FetchResultMsg struct {
 // FetchErrMsg carries a fatal fetch error (e.g. network down, bad token).
 type FetchErrMsg struct{ Err error }
 
+// DetailFetchResultMsg carries the description and threads for a single MR.
+type DetailFetchResultMsg struct {
+	ProjectID   int
+	MRIID       int
+	Description string
+	Threads     []domain.Thread
+	Err         error
+}
+
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state     appState
-	header    headerWidget
-	board     boardWidget
-	footer    footerWidget
-	sp        spinnerWidget
-	keys      KeyMap
-	styles    Styles
-	width     int
-	height    int
-	errors    []error
-	errMsg    string
-	cfg       *config.Config
-	client    *gitlab.Client
-	allMRs    []domain.MergeRequest
-	hideStale bool
+	state      appState
+	header     headerWidget
+	board      boardWidget
+	footer     footerWidget
+	sp         spinnerWidget
+	detail     detailWidget
+	showDetail bool
+	keys       KeyMap
+	detailKeys DetailKeyMap
+	styles     Styles
+	width      int
+	height     int
+	errors     []error
+	errMsg     string
+	cfg        *config.Config
+	client     *gitlab.Client
+	allMRs     []domain.MergeRequest
+	hideStale  bool
 }
 
 // New creates a ready-to-run mrboard model.
@@ -64,15 +81,17 @@ func New(cfg *config.Config, client *gitlab.Client) Model {
 	styles := NewStyles()
 	keys := DefaultKeyMap
 	return Model{
-		state:  stateLoading,
-		header: newHeaderWidget(styles),
-		board:  newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
-		footer: newFooterWidget(keys, styles),
-		sp:     newSpinnerWidget(),
-		keys:   keys,
-		styles: styles,
-		cfg:    cfg,
-		client: client,
+		state:      stateLoading,
+		header:     newHeaderWidget(styles),
+		board:      newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		footer:     newFooterWidget(keys, styles),
+		sp:         newSpinnerWidget(),
+		detail:     newDetailWidget(styles),
+		keys:       keys,
+		detailKeys: DefaultDetailKeyMap,
+		styles:     styles,
+		cfg:        cfg,
+		client:     client,
 	}
 }
 
@@ -97,7 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.header.SetWidth(msg.Width)
-		m.board.SetSize(msg.Width, msg.Height-chromeHeight)
+		m.resizeBoard()
 		return m, nil
 
 	case FetchResultMsg:
@@ -110,6 +129,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FetchErrMsg:
 		m.state = stateError
 		m.errMsg = msg.Err.Error()
+		return m, nil
+
+	case DetailFetchResultMsg:
+		if m.showDetail && m.detail.mr != nil &&
+			m.detail.mr.ProjectID == msg.ProjectID && m.detail.mr.IID == msg.MRIID {
+			if msg.Err == nil {
+				m.detail.mr.Description = msg.Description
+				m.detail.SetThreads(msg.Threads)
+			} else {
+				m.detail.loading = false
+			}
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -134,6 +165,32 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showDetail {
+		return m.handleKeyDetail(msg)
+	}
+	return m.handleKeyBoard(msg)
+}
+
+// handleKeyDetail handles keys while the detail panel owns focus.
+func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.CloseDetail):
+		m.closeDetail()
+		return m, nil
+	case key.Matches(msg, m.detailKeys.ScrollUp):
+		m.detail.ScrollUp()
+	case key.Matches(msg, m.detailKeys.ScrollDown):
+		m.detail.ScrollDown()
+	case key.Matches(msg, m.keys.Open):
+		if mr := m.board.FocusedMR(); mr != nil {
+			return m, openBrowser(mr.WebURL)
+		}
+	}
+	return m, nil
+}
+
+// handleKeyBoard handles keys while the kanban board owns focus.
+func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Up):
 		m.board.MoveUp()
@@ -144,6 +201,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Right):
 		m.board.MoveRight()
 	case key.Matches(msg, m.keys.Refresh):
+		if m.showDetail {
+			m.closeDetail()
+		}
 		m.state = stateLoading
 		return m, tea.Batch(m.sp.Init(), m.fetchCmd())
 	case key.Matches(msg, m.keys.HideStale):
@@ -155,8 +215,62 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if mr := m.board.FocusedMR(); mr != nil {
 			return m, openBrowser(mr.WebURL)
 		}
+	case key.Matches(msg, m.keys.Detail):
+		if mr := m.board.FocusedMR(); mr != nil {
+			m.openDetail(mr)
+			return m, m.fetchDetailCmd(mr)
+		}
 	}
 	return m, nil
+}
+
+func (m *Model) openDetail(mr *domain.MergeRequest) {
+	m.showDetail = true
+	m.board.SetActive(false)
+	m.footer.SetKeyMap(m.detailKeys)
+	m.detail.SetMR(mr)
+	m.resizeBoard()
+}
+
+func (m *Model) closeDetail() {
+	m.showDetail = false
+	m.board.SetActive(true)
+	m.footer.SetKeyMap(m.keys)
+	m.resizeBoard()
+}
+
+func (m *Model) resizeBoard() {
+	if m.showDetail {
+		detailW := m.width * detailWidthRatio / detailWidthDivisor
+		boardW := m.width - detailW
+		m.board.SetSize(boardW, m.height-chromeHeight)
+		m.detail.SetSize(detailW, m.height-chromeHeight)
+	} else {
+		m.board.SetSize(m.width, m.height-chromeHeight)
+	}
+}
+
+func (m Model) fetchDetailCmd(mr *domain.MergeRequest) tea.Cmd {
+	client := m.client
+	projectID := int64(mr.ProjectID)
+	mrIID := int64(mr.IID)
+	return func() tea.Msg {
+		desc, err := client.GetMRDescription(projectID, mrIID)
+		if err != nil {
+			return DetailFetchResultMsg{ProjectID: int(projectID), MRIID: int(mrIID), Err: err}
+		}
+		discussions, err := client.GetMRDiscussions(projectID, mrIID)
+		if err != nil {
+			return DetailFetchResultMsg{ProjectID: int(projectID), MRIID: int(mrIID), Description: desc, Err: err}
+		}
+		threads := gitlab.MapDiscussionsToThreads(discussions)
+		return DetailFetchResultMsg{
+			ProjectID:   int(projectID),
+			MRIID:       int(mrIID),
+			Description: desc,
+			Threads:     threads,
+		}
+	}
 }
 
 // View renders the full screen. Only the root model sets AltScreen.
@@ -179,12 +293,10 @@ func (m Model) renderContent() string {
 
 	case stateBoard:
 		headerStr := m.header.render()
-		boardStr := m.board.render()
 		footerStr := m.footer.render()
-
-		// Clamp board to available height, then pad to fill it exactly,
-		// so the footer is always docked at the bottom line.
 		boardH := m.height - chromeHeight
+
+		boardStr := m.board.render()
 		if boardH > 0 {
 			lines := strings.SplitN(boardStr, "\n", boardH+2) //nolint:mnd
 			if len(lines) > boardH {
@@ -194,12 +306,28 @@ func (m Model) renderContent() string {
 			boardStr = lip.NewStyle().Height(boardH).Render(boardStr)
 		}
 
+		var contentStr string
+		if m.showDetail {
+			detailStr := m.detail.render()
+			if boardH > 0 {
+				dLines := strings.SplitN(detailStr, "\n", boardH+2) //nolint:mnd
+				if len(dLines) > boardH {
+					dLines = dLines[:boardH]
+				}
+				detailStr = strings.Join(dLines, "\n")
+				detailStr = lip.NewStyle().Height(boardH).Render(detailStr)
+			}
+			contentStr = joinHorizontalTop(boardStr, detailStr)
+		} else {
+			contentStr = boardStr
+		}
+
 		var errLines string
 		for _, e := range m.errors {
 			errLines += "\n" + m.styles.ErrorMsg.Render("⚠ "+e.Error())
 		}
 
-		return headerStr + "\n" + boardStr + errLines + "\n" + footerStr
+		return headerStr + "\n" + contentStr + errLines + "\n" + footerStr
 	}
 	return ""
 }

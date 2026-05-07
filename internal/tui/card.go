@@ -21,18 +21,20 @@ const (
 )
 
 type cardWidget struct {
-	mr      domain.MergeRequest
-	styles  Styles
-	focused bool
-	width   int
+	mr            domain.MergeRequest
+	styles        Styles
+	focused       bool
+	focusInactive bool // focused but board does not own the keyboard (detail panel open)
+	width         int
 }
 
 func newCardWidget(mr domain.MergeRequest, styles Styles, width int) cardWidget {
 	return cardWidget{mr: mr, styles: styles, width: width}
 }
 
-func (c *cardWidget) SetFocused(v bool) { c.focused = v }
-func (c *cardWidget) SetWidth(w int)    { c.width = w }
+func (c *cardWidget) SetFocused(v bool)       { c.focused = v }
+func (c *cardWidget) SetFocusInactive(v bool) { c.focusInactive = v }
+func (c *cardWidget) SetWidth(w int)          { c.width = w }
 
 func (c cardWidget) Init() tea.Cmd                         { return nil }
 func (c cardWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
@@ -89,7 +91,10 @@ func (c cardWidget) render() string {
 	}
 
 	style := c.styles.Card
-	if c.focused {
+	switch {
+	case c.focused && c.focusInactive:
+		style = c.styles.CardFocusedInactive
+	case c.focused:
 		style = c.styles.CardFocused
 	}
 	// No Width() — manual per-line padding above keeps the card at a consistent

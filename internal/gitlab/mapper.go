@@ -239,3 +239,38 @@ func MapMRApprovalCount(approvals *gl.MergeRequestApprovals) int {
 	}
 	return int(count)
 }
+
+// MapDiscussionsToThreads converts raw GitLab discussions into domain threads,
+// filtering out system-only threads (e.g. pipeline events) so only human
+// comment threads are surfaced in the detail panel.
+func MapDiscussionsToThreads(discussions []*gl.Discussion) []domain.Thread {
+	threads := make([]domain.Thread, 0, len(discussions))
+	for _, d := range discussions {
+		var notes []domain.DiscussionNote
+		allSystem := true
+		for _, n := range d.Notes {
+			if !n.System {
+				allSystem = false
+			}
+			var t time.Time
+			if n.CreatedAt != nil {
+				t = *n.CreatedAt
+			}
+			notes = append(notes, domain.DiscussionNote{
+				Author:    n.Author.Name,
+				Body:      n.Body,
+				CreatedAt: t,
+				System:    n.System,
+			})
+		}
+		if allSystem || len(notes) == 0 {
+			continue
+		}
+		resolved := false
+		if len(d.Notes) > 0 {
+			resolved = d.Notes[0].Resolved
+		}
+		threads = append(threads, domain.Thread{Notes: notes, Resolved: resolved})
+	}
+	return threads
+}

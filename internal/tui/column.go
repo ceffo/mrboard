@@ -20,6 +20,7 @@ type columnWidget struct {
 	cards        []cardWidget
 	cardHeights  []int // rendered line-count per card; kept in sync with cards
 	focused      bool
+	active       bool // true when the board (not a panel) owns keyboard focus
 	focusIdx     int
 	scrollOffset int
 	styles       Styles
@@ -57,6 +58,11 @@ func (c *columnWidget) SetFocused(v bool) {
 	c.syncCardFocus()
 }
 
+func (c *columnWidget) SetActive(v bool) {
+	c.active = v
+	c.syncCardFocus()
+}
+
 func (c *columnWidget) SetWidth(w int) {
 	c.width = w
 	for i := range c.cards {
@@ -89,7 +95,9 @@ func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
 
 func (c *columnWidget) syncCardFocus() {
 	for i := range c.cards {
-		c.cards[i].SetFocused(c.focused && i == c.focusIdx)
+		isFocused := c.focused && i == c.focusIdx
+		c.cards[i].SetFocused(isFocused)
+		c.cards[i].SetFocusInactive(isFocused && !c.active)
 	}
 }
 
@@ -210,9 +218,14 @@ func (c columnWidget) render() string {
 	}
 
 	content := header + "\n" + strings.Join(cardLines, "\n")
-	borderStyle := c.styles.ColumnBorder
-	if c.focused {
+	var borderStyle lip.Style
+	switch {
+	case c.focused && !c.active:
+		borderStyle = c.styles.ColumnBorderFocusedInactive
+	case c.focused:
 		borderStyle = c.styles.ColumnBorderFocused
+	default:
+		borderStyle = c.styles.ColumnBorder
 	}
 	return borderStyle.Render(content)
 }

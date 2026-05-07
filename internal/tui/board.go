@@ -32,9 +32,18 @@ func newBoardWidget(styles Styles, width, height int) boardWidget {
 	colWidth := max(width/numColumns, minColWidth)
 	for i, phase := range phaseOrder {
 		b.columns[i] = newColumnWidget(phase, styles, colWidth, height)
+		b.columns[i].SetActive(true)
 	}
 	b.columns[0].SetFocused(true)
 	return b
+}
+
+// SetActive marks the board as owning keyboard focus (true) or yielding it to
+// a panel (false). The focused column's card renders a dimmed highlight when inactive.
+func (b *boardWidget) SetActive(v bool) {
+	for i := range b.columns {
+		b.columns[i].SetActive(v)
+	}
 }
 
 func (b *boardWidget) SetSize(width, height int) {

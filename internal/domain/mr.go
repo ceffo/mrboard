@@ -13,6 +13,20 @@ const (
 	monthsPerYear  = 12
 )
 
+// DiscussionNote is a single note within a discussion thread.
+type DiscussionNote struct {
+	Author    string
+	Body      string
+	CreatedAt time.Time
+	System    bool
+}
+
+// Thread is a collapsible discussion thread on an MR.
+type Thread struct {
+	Notes    []DiscussionNote
+	Resolved bool
+}
+
 // ReviewerState tracks where a reviewer is in the review lifecycle.
 type ReviewerState int
 
@@ -45,12 +59,13 @@ type ReviewerInfo struct {
 
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
-	ID        int
-	IID       int
-	ProjectID int
-	Title     string
-	Author    string
-	WebURL    string
+	ID          int
+	IID         int
+	ProjectID   int
+	Title       string
+	Author      string
+	WebURL      string
+	Description string
 
 	Phase     MRPhase
 	Reviewers []ReviewerInfo

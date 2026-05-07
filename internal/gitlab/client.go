@@ -140,6 +140,21 @@ func (c *Client) GetMRApprovals(projectID, mrIID int64) (*gl.MergeRequestApprova
 	return approvals, nil
 }
 
+// GetMRDescription fetches the description (body text) of a single MR.
+func (c *Client) GetMRDescription(projectID, mrIID int64) (string, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get MR description", "project", projectID, "mr", mrIID)
+	mr, _, err := c.gl.MergeRequests.GetMergeRequest(projectID, mrIID, nil)
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		c.logger.Debug("gitlab: get MR description error",
+			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+		return "", fmt.Errorf("gitlab: get MR description project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Debug("gitlab: get MR description done", "project", projectID, "mr", mrIID, "duration", elapsed)
+	return mr.Description, nil
+}
+
 // ListNonArchivedProjectIDs returns the set of non-archived project IDs for a
 // group. IncludeSubGroups is set so that nested group projects are included.
 func (c *Client) ListNonArchivedProjectIDs(groupID string) (map[int64]bool, error) {
