@@ -5,6 +5,8 @@ import "charm.land/lipgloss/v2"
 // Styles holds all lipgloss styles used by mrboard widgets.
 type Styles struct {
 	Header              lipgloss.Style
+	HeaderTitle         lipgloss.Style
+	HeaderStats         lipgloss.Style
 	Footer              lipgloss.Style
 	ColumnHeader        lipgloss.Style
 	ColumnBorder        lipgloss.Style
@@ -30,9 +32,12 @@ type Styles struct {
 func NewStyles() Styles {
 	return Styles{
 		Header: lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("252")).
+			Background(lipgloss.Color("235")),
+		HeaderTitle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("99")).
 			Bold(true),
+		HeaderStats: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("245")),
 		Footer: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")),
 		ColumnHeader:        lipgloss.NewStyle().Bold(true).Padding(0, 1),

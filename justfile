@@ -23,6 +23,15 @@ fmt:
 # runs all checks for the project required before any commit or pull request
 check: fmt lint build test
 
+# run the tui
+run:
+  go run ./cmd/mrboard/... run 
+
+# fetch calls the fetch command 
+fetch:
+  go run ./cmd/mrboard/... fetch
+
+
 # installs the mrboard cli tool to the system
 install:
   go install ./cmd/mrboard/... 
