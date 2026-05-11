@@ -14,6 +14,7 @@ import (
 	"github.com/mrboard/mrboard/internal/config"
 	"github.com/mrboard/mrboard/internal/domain"
 	"github.com/mrboard/mrboard/internal/gitlab"
+	"github.com/mrboard/mrboard/internal/service"
 	"github.com/mrboard/mrboard/internal/tui"
 )
 
@@ -84,7 +85,8 @@ func runFetch(args []string) int {
 		return 1
 	}
 
-	mrs, errs := gitlab.FetchAll(client, cfg)
+	src := service.NewGitLabSource(client, cfg)
+	mrs, errs := src.FetchAll()
 
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
@@ -243,8 +245,9 @@ func runBoard() int {
 		return 1
 	}
 
+	src := service.NewGitLabSource(client, cfg)
 	st := config.LoadState()
-	m := tui.New(cfg, client, st)
+	m := tui.New(cfg, src, st)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)

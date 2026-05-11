@@ -32,6 +32,10 @@ fetch:
   go run ./cmd/mrboard/... fetch
 
 
+# regenerates all mocks from .mockery.yml (requires mockery v3 and goimports)
+generate:
+  mockery
+
 # installs the mrboard cli tool to the system
 install:
   go install ./cmd/mrboard/... 

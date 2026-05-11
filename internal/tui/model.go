@@ -11,7 +11,7 @@ import (
 	lip "charm.land/lipgloss/v2"
 	"github.com/mrboard/mrboard/internal/config"
 	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/gitlab"
+	"github.com/mrboard/mrboard/internal/service"
 )
 
 // sortField identifies which MR attribute to sort by.
@@ -141,7 +141,7 @@ type Model struct {
 	errors      []error
 	errMsg      string
 	cfg         *config.Config
-	client      *gitlab.Client
+	src         service.MergeRequestSource
 	allMRs      []domain.MergeRequest
 	currentUser string
 	myView      bool
@@ -150,7 +150,7 @@ type Model struct {
 }
 
 // New creates a ready-to-run mrboard model, restoring sort/view state from st.
-func New(cfg *config.Config, client *gitlab.Client, st config.State) Model {
+func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Model {
 	styles := NewStyles()
 	keys := DefaultKeyMap
 
@@ -176,7 +176,7 @@ func New(cfg *config.Config, client *gitlab.Client, st config.State) Model {
 		detailKeys:  DefaultDetailKeyMap,
 		styles:      styles,
 		cfg:         cfg,
-		client:      client,
+		src:         src,
 		currentUser: cfg.CurrentUser,
 		myView:      myView,
 		sortField:   sf,
@@ -194,10 +194,9 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) fetchCmd() tea.Cmd {
-	cfg := m.cfg
-	client := m.client
+	src := m.src
 	return func() tea.Msg {
-		mrs, errs := gitlab.FetchAll(client, cfg)
+		mrs, errs := src.FetchAll()
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }
@@ -357,24 +356,17 @@ func (m *Model) resizeBoard() {
 }
 
 func (m Model) fetchDetailCmd(mr *domain.MergeRequest) tea.Cmd {
-	client := m.client
+	src := m.src
 	projectID := int64(mr.ProjectID)
 	mrIID := int64(mr.IID)
 	return func() tea.Msg {
-		desc, err := client.GetMRDescription(projectID, mrIID)
-		if err != nil {
-			return DetailFetchResultMsg{ProjectID: int(projectID), MRIID: int(mrIID), Err: err}
-		}
-		discussions, err := client.GetMRDiscussions(projectID, mrIID)
-		if err != nil {
-			return DetailFetchResultMsg{ProjectID: int(projectID), MRIID: int(mrIID), Description: desc, Err: err}
-		}
-		threads := gitlab.MapDiscussionsToThreads(discussions)
+		desc, threads, err := src.GetDetail(projectID, mrIID)
 		return DetailFetchResultMsg{
 			ProjectID:   int(projectID),
 			MRIID:       int(mrIID),
 			Description: desc,
 			Threads:     threads,
+			Err:         err,
 		}
 	}
 }
