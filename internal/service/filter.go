@@ -3,7 +3,7 @@ package service
 import (
 	"sort"
 
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // FilterOptions controls which MRs are shown and in what order.

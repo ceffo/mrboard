@@ -1,4 +1,4 @@
-module github.com/mrboard/mrboard
+module github.com/ceffo/mrboard
 
 go 1.26.2
 

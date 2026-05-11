@@ -4,8 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/domain"
 	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // reReviewPrefix is the system note body prefix GitLab emits when an author

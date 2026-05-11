@@ -49,8 +49,22 @@ linters:
       - examples$
 formatters:
   enable:
+    - gofumpt
     - goimports
-    - gofumpt 
+    - gci
+  settings:
+    goimports:
+      local-prefixes: github.com/ceffo
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/ceffo)
+        - localmodule
+        - dot
+      no-inline-comments: true
+      no-prefix-comments: true
+      custom-order: true
   exclusions:
     generated: lax
     paths:

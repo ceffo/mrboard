@@ -7,7 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
-	"github.com/mrboard/mrboard/internal/domain"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // nbsp is U+00A0 NO-BREAK SPACE. Using an integer constant keeps the source

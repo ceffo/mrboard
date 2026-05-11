@@ -8,7 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	lip "charm.land/lipgloss/v2"
-	"github.com/mrboard/mrboard/internal/domain"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 const (

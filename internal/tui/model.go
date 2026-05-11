@@ -8,9 +8,10 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/service"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/service"
 )
 
 // sortField identifies which MR attribute to sort by.

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
 	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // enrichConcurrency caps the number of MRs being enriched simultaneously.

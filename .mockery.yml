@@ -12,7 +12,7 @@ require-template-schema-exists: true
 log-level: warn
 
 packages:
-  github.com/mrboard/mrboard/internal/service:
+  github.com/ceffo/mrboard/internal/service:
     config:
       dir: "{{.InterfaceDir}}/mocks"
       pkgname: "mocks"

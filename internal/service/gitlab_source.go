@@ -3,9 +3,9 @@ package service
 import (
 	"fmt"
 
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/gitlab"
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/gitlab"
 )
 
 // GitLabSource is the concrete adapter that satisfies MergeRequestSource using

@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/service/mocks"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/service/mocks"
 )
 
 // makeModel creates a Model wired to a mock source and transitions it to

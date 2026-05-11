@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/service"
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/service"
 )
 
 // helpers

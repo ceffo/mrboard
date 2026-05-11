@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/config"
 	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/config"
 )
 
 const perPage = 100

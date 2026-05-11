@@ -44,7 +44,7 @@ just generate   # regenerate all mocks (run after changing any interface in inte
 ### Using a mock in tests
 
 ```go
-import "github.com/mrboard/mrboard/internal/service/mocks"
+import "github.com/ceffo/mrboard/internal/service/mocks"
 
 func TestFoo(t *testing.T) {
     src := mocks.NewMockMergeRequestSource(t)
@@ -59,7 +59,7 @@ func TestFoo(t *testing.T) {
 
 ```yaml
 packages:
-  github.com/mrboard/mrboard/internal/service:
+  github.com/ceffo/mrboard/internal/service:
     config:
       dir: "{{.InterfaceDir}}/mocks"
       pkgname: "mocks"

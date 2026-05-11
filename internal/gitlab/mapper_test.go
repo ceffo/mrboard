@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/domain"
 	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 func ptr[T any](v T) *T { return &v }

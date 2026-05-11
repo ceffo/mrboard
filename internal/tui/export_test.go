@@ -2,7 +2,7 @@
 // This file is only compiled when running `go test`.
 package tui
 
-import "github.com/mrboard/mrboard/internal/domain"
+import "github.com/ceffo/mrboard/internal/domain"
 
 func (m Model) AllMRs() []domain.MergeRequest { return m.allMRs }
 func (m Model) MyView() bool                  { return m.myView }

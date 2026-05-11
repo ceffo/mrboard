@@ -11,10 +11,11 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/app"
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/tui"
+
+	"github.com/ceffo/mrboard/internal/app"
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/tui"
 )
 
 const (

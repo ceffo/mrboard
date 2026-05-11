@@ -5,7 +5,7 @@
 package mocks
 
 import (
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 

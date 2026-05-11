@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/config"
 )
 
 func discardLogger() *slog.Logger {

@@ -3,7 +3,7 @@
 // future HTTP handlers depend only on these types — never on concrete infra.
 package service
 
-import "github.com/mrboard/mrboard/internal/domain"
+import "github.com/ceffo/mrboard/internal/domain"
 
 // MergeRequestSource is the driven port for fetching MR data.
 // The TUI and any future frontend depend on this interface, not on the

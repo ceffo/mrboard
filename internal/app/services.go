@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/gitlab"
-	"github.com/mrboard/mrboard/internal/service"
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/gitlab"
+	"github.com/ceffo/mrboard/internal/service"
 )
 
 // Services holds every dependency a binary needs, fully wired.
