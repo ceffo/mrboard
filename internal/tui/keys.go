@@ -12,14 +12,14 @@ type KeyMap struct {
 	Open        key.Binding
 	Detail      key.Binding
 	CloseDetail key.Binding
-	HideStale   key.Binding
+	Sort        key.Binding
 	ToggleView  key.Binding
 	Quit        key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Refresh, k.Open, k.Detail, k.HideStale, k.ToggleView, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Quit}
 }
 
 // FullHelp implements help.KeyMap.
@@ -53,7 +53,7 @@ var DefaultKeyMap = KeyMap{
 	Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
 	Detail:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "details")),
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
-	HideStale:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "toggle stale")),
+	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }

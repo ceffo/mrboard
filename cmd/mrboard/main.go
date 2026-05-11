@@ -243,7 +243,8 @@ func runBoard() int {
 		return 1
 	}
 
-	m := tui.New(cfg, client)
+	st := config.LoadState()
+	m := tui.New(cfg, client, st)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)

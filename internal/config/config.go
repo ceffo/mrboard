@@ -27,11 +27,10 @@ type Source struct {
 
 // Config is the top-level application configuration loaded from mrboard.yaml.
 type Config struct {
-	GitLab             GitLab   `yaml:"gitlab"`
-	Sources            []Source `yaml:"sources"`
-	ExcludedAuthors    []string `yaml:"excluded_authors"`
-	StaleThresholdDays int      `yaml:"stale_threshold_days"` // 0 = no stale filtering
-	CurrentUser        string   `yaml:"current_user"`         // enables "my view" toggle (tab)
+	GitLab          GitLab   `yaml:"gitlab"`
+	Sources         []Source `yaml:"sources"`
+	ExcludedAuthors []string `yaml:"excluded_authors"`
+	CurrentUser     string   `yaml:"current_user"` // enables "my view" toggle (tab)
 }
 
 // Load reads and validates the configuration from the first file found in the
@@ -86,21 +85,26 @@ func searchPaths() []string {
 	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {
 		return []string{v}
 	}
-
 	var paths []string
-
-	xdgHome := os.Getenv("XDG_CONFIG_HOME")
-	if xdgHome == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			xdgHome = filepath.Join(home, ".config")
-		}
+	if dir := XDGConfigDir(); dir != "" {
+		paths = append(paths, filepath.Join(dir, "mrboard.yaml"))
 	}
-	if xdgHome != "" {
-		paths = append(paths, filepath.Join(xdgHome, "mrboard", "mrboard.yaml"))
-	}
-
 	paths = append(paths, "mrboard.yaml")
 	return paths
+}
+
+// XDGConfigDir returns the mrboard-specific XDG config directory
+// ($XDG_CONFIG_HOME/mrboard or ~/.config/mrboard). Returns "" on error.
+func XDGConfigDir() string {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".config")
+	}
+	return filepath.Join(base, "mrboard")
 }
 
 func validate(cfg *Config) error {
