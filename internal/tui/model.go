@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -88,6 +90,7 @@ func advanceSort(field sortField, desc bool) (sortField, bool) {
 const (
 	detailWidthRatio   = 40  // percent of total width for the detail panel
 	detailWidthDivisor = 100 // divisor for percentage calculation
+	fetchTimeout       = 60 * time.Second
 )
 
 type appState int
@@ -147,6 +150,7 @@ type Model struct {
 	myView      bool
 	sortField   sortField
 	sortDesc    bool
+	fetchCancel context.CancelFunc
 }
 
 // New creates a ready-to-run mrboard model, restoring sort/view state from st.
@@ -190,13 +194,32 @@ func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Mo
 
 // Init starts the spinner and fires the first data fetch.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Init(), m.fetchCmd())
+	return tea.Batch(m.sp.Init(), makeFetchCmd(m.src))
 }
 
-func (m Model) fetchCmd() tea.Cmd {
+// makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
+// The cancel is also called via defer inside the goroutine once the fetch finishes.
+func makeFetchCmd(src service.MergeRequestSource) tea.Cmd {
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	return func() tea.Msg {
+		defer cancel()
+		mrs, errs := src.FetchAll(ctx)
+		return FetchResultMsg{MRs: mrs, Errors: errs}
+	}
+}
+
+// startFetch builds a fetch Cmd and stores its cancel func in the model so
+// that a subsequent 'q' press can abort an in-flight request.
+func (m *Model) startFetch() tea.Cmd {
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	if m.fetchCancel != nil {
+		m.fetchCancel()
+	}
+	m.fetchCancel = cancel
 	src := m.src
 	return func() tea.Msg {
-		mrs, errs := src.FetchAll()
+		defer cancel()
+		mrs, errs := src.FetchAll(ctx)
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }
@@ -250,6 +273,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, m.keys.Quit) {
+		if m.fetchCancel != nil {
+			m.fetchCancel()
+		}
 		return m, tea.Quit
 	}
 
@@ -297,7 +323,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.closeDetail()
 		}
 		m.state = stateLoading
-		return m, tea.Batch(m.sp.Init(), m.fetchCmd())
+		return m, tea.Batch(m.sp.Init(), m.startFetch())
 	case key.Matches(msg, m.keys.Sort):
 		m.sortField, m.sortDesc = advanceSort(m.sortField, m.sortDesc)
 		m.keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(m.sortField, m.sortDesc)))
@@ -360,7 +386,9 @@ func (m Model) fetchDetailCmd(mr *domain.MergeRequest) tea.Cmd {
 	projectID := int64(mr.ProjectID)
 	mrIID := int64(mr.IID)
 	return func() tea.Msg {
-		desc, threads, err := src.GetDetail(projectID, mrIID)
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+		desc, threads, err := src.GetDetail(ctx, projectID, mrIID)
 		return DetailFetchResultMsg{
 			ProjectID:   int(projectID),
 			MRIID:       int(mrIID),

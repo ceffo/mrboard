@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -24,8 +25,8 @@ type mrKey struct {
 // (ProjectID, IID), excludes configured authors, and enriches each unique MR
 // with discussions and (for non-draft MRs) approvals. Enrichment is capped at
 // enrichConcurrency concurrent requests. Partial results are returned alongside
-// any errors.
-func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []error) {
+// any errors. All outbound API calls honour ctx for cancellation and timeout.
+func FetchAll(ctx context.Context, client *Client, cfg *config.Config) ([]domain.MergeRequest, []error) {
 	client.logger.Debug("gitlab: fetch start", "excluded_authors", cfg.ExcludedAuthors)
 
 	// First excluded author is applied server-side; any additional ones are
@@ -35,7 +36,7 @@ func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []erro
 		primaryExclusion = cfg.ExcludedAuthors[0]
 	}
 
-	raw, errs := listAllMRs(client, cfg, primaryExclusion)
+	raw, errs := listAllMRs(ctx, client, cfg, primaryExclusion)
 
 	excluded := make(map[string]bool, len(cfg.ExcludedAuthors))
 	for _, u := range cfg.ExcludedAuthors {
@@ -83,7 +84,7 @@ func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []erro
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			domainMR, err := enrichMR(client, mr, cfg.GitLab.RequiredApprovals)
+			domainMR, err := enrichMR(ctx, client, mr, cfg.GitLab.RequiredApprovals)
 			results[i] = result{mr: domainMR, err: err}
 		}()
 	}
@@ -105,19 +106,21 @@ func FetchAll(client *Client, cfg *config.Config) ([]domain.MergeRequest, []erro
 // listAllMRs iterates all sources and collects raw MR objects (may contain
 // duplicates). primaryExclusion, if non-empty, is forwarded to the GitLab API
 // as not[author_username] for group sources.
-func listAllMRs(client *Client, cfg *config.Config, primaryExclusion string) ([]*gl.BasicMergeRequest, []error) {
+func listAllMRs(
+	ctx context.Context, client *Client, cfg *config.Config, primaryExclusion string,
+) ([]*gl.BasicMergeRequest, []error) {
 	var all []*gl.BasicMergeRequest
 	var errs []error
 
 	for _, src := range cfg.Sources {
 		switch src.Type {
 		case "group":
-			allowedProjects, err := client.ListNonArchivedProjectIDs(src.ID)
+			allowedProjects, err := client.ListNonArchivedProjectIDs(ctx, src.ID)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
 				continue
 			}
-			mrs, err := client.ListGroupMRs(src.ID, primaryExclusion)
+			mrs, err := client.ListGroupMRs(ctx, src.ID, primaryExclusion)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
 				continue
@@ -130,13 +133,13 @@ func listAllMRs(client *Client, cfg *config.Config, primaryExclusion string) ([]
 				}
 			}
 		case "user":
-			mrs, err := client.ListUserMRs(src.Username)
+			mrs, err := client.ListUserMRs(ctx, src.Username)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("source user=%q: %w", src.Username, err))
 				continue
 			}
 			for _, mr := range mrs {
-				archived, err := client.IsProjectArchived(mr.ProjectID)
+				archived, err := client.IsProjectArchived(ctx, mr.ProjectID)
 				if err != nil {
 					errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", src.Username, mr.IID, err))
 					continue
@@ -158,9 +161,11 @@ func listAllMRs(client *Client, cfg *config.Config, primaryExclusion string) ([]
 // enrichMR fetches discussions and (for non-draft MRs) approvals, then maps to
 // domain.MergeRequest. Draft MRs skip the approvals call — their phase is
 // always PhaseDraft regardless of approval state.
-func enrichMR(client *Client, mr *gl.BasicMergeRequest, requiredApprovals int) (domain.MergeRequest, error) {
+func enrichMR(
+	ctx context.Context, client *Client, mr *gl.BasicMergeRequest, requiredApprovals int,
+) (domain.MergeRequest, error) {
 	if mr.Draft {
-		discussions, err := client.GetMRDiscussions(mr.ProjectID, mr.IID)
+		discussions, err := client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)
 		if err != nil {
 			return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d discussions: %w", mr.ProjectID, mr.IID, err)
 		}
@@ -187,11 +192,11 @@ func enrichMR(client *Client, mr *gl.BasicMergeRequest, requiredApprovals int) (
 	apprCh := make(chan apprResult, 1)
 
 	go func() {
-		d, err := client.GetMRDiscussions(mr.ProjectID, mr.IID)
+		d, err := client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)
 		discCh <- discResult{d, err}
 	}()
 	go func() {
-		a, err := client.GetMRApprovals(mr.ProjectID, mr.IID)
+		a, err := client.GetMRApprovals(ctx, mr.ProjectID, mr.IID)
 		apprCh <- apprResult{a, err}
 	}()
 

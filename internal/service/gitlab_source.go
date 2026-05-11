@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ceffo/mrboard/internal/config"
@@ -22,17 +23,17 @@ func NewGitLabSource(client *gitlab.Client, cfg *config.Config) *GitLabSource {
 }
 
 // FetchAll implements MergeRequestSource.
-func (s *GitLabSource) FetchAll() ([]domain.MergeRequest, []error) {
-	return gitlab.FetchAll(s.client, s.cfg)
+func (s *GitLabSource) FetchAll(ctx context.Context) ([]domain.MergeRequest, []error) {
+	return gitlab.FetchAll(ctx, s.client, s.cfg)
 }
 
 // GetDetail implements MergeRequestSource.
-func (s *GitLabSource) GetDetail(projectID, mrIID int64) (string, []domain.Thread, error) {
-	desc, err := s.client.GetMRDescription(projectID, mrIID)
+func (s *GitLabSource) GetDetail(ctx context.Context, projectID, mrIID int64) (string, []domain.Thread, error) {
+	desc, err := s.client.GetMRDescription(ctx, projectID, mrIID)
 	if err != nil {
 		return "", nil, fmt.Errorf("get detail project=%d MR=%d description: %w", projectID, mrIID, err)
 	}
-	discussions, err := s.client.GetMRDiscussions(projectID, mrIID)
+	discussions, err := s.client.GetMRDiscussions(ctx, projectID, mrIID)
 	if err != nil {
 		return desc, nil, fmt.Errorf("get detail project=%d MR=%d discussions: %w", projectID, mrIID, err)
 	}

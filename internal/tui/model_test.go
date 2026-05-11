@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	mock "github.com/stretchr/testify/mock"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -17,7 +18,7 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 	t.Helper()
 	src := mocks.NewMockMergeRequestSource(t)
 	// fetchCmd will call FetchAll once on Init; allow but don't require it.
-	src.EXPECT().FetchAll().Return(initialMRs, nil).Maybe()
+	src.EXPECT().FetchAll(mock.Anything).Return(initialMRs, nil).Maybe()
 
 	cfg := &config.Config{CurrentUser: currentUser}
 	st := config.DefaultState()
@@ -56,7 +57,7 @@ func TestModel_FetchResultMsg_PopulatesAllMRs(t *testing.T) {
 
 func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
-	src.EXPECT().FetchAll().Return(nil, nil).Maybe()
+	src.EXPECT().FetchAll(mock.Anything).Return(nil, nil).Maybe()
 
 	m := New(&config.Config{}, src, config.DefaultState())
 	next, _ := m.Update(FetchErrMsg{Err: errors.New("network down")})
@@ -74,7 +75,7 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 
 func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
-	src.EXPECT().FetchAll().Return(nil, nil).Maybe()
+	src.EXPECT().FetchAll(mock.Anything).Return(nil, nil).Maybe()
 
 	m := New(&config.Config{}, src, config.DefaultState())
 	next, _ := m.Update(FetchResultMsg{

@@ -5,6 +5,8 @@
 package mocks
 
 import (
+	"context"
+
 	"github.com/ceffo/mrboard/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -37,8 +39,8 @@ func (_m *MockMergeRequestSource) EXPECT() *MockMergeRequestSource_Expecter {
 }
 
 // FetchAll provides a mock function for the type MockMergeRequestSource
-func (_mock *MockMergeRequestSource) FetchAll() ([]domain.MergeRequest, []error) {
-	ret := _mock.Called()
+func (_mock *MockMergeRequestSource) FetchAll(ctx context.Context) ([]domain.MergeRequest, []error) {
+	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FetchAll")
@@ -46,18 +48,18 @@ func (_mock *MockMergeRequestSource) FetchAll() ([]domain.MergeRequest, []error)
 
 	var r0 []domain.MergeRequest
 	var r1 []error
-	if returnFunc, ok := ret.Get(0).(func() ([]domain.MergeRequest, []error)); ok {
-		return returnFunc()
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]domain.MergeRequest, []error)); ok {
+		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func() []domain.MergeRequest); ok {
-		r0 = returnFunc()
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []domain.MergeRequest); ok {
+		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.MergeRequest)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func() []error); ok {
-		r1 = returnFunc()
+	if returnFunc, ok := ret.Get(1).(func(context.Context) []error); ok {
+		r1 = returnFunc(ctx)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]error)
@@ -72,13 +74,20 @@ type MockMergeRequestSource_FetchAll_Call struct {
 }
 
 // FetchAll is a helper method to define mock.On call
-func (_e *MockMergeRequestSource_Expecter) FetchAll() *MockMergeRequestSource_FetchAll_Call {
-	return &MockMergeRequestSource_FetchAll_Call{Call: _e.mock.On("FetchAll")}
+//   - ctx context.Context
+func (_e *MockMergeRequestSource_Expecter) FetchAll(ctx interface{}) *MockMergeRequestSource_FetchAll_Call {
+	return &MockMergeRequestSource_FetchAll_Call{Call: _e.mock.On("FetchAll", ctx)}
 }
 
-func (_c *MockMergeRequestSource_FetchAll_Call) Run(run func()) *MockMergeRequestSource_FetchAll_Call {
+func (_c *MockMergeRequestSource_FetchAll_Call) Run(run func(ctx context.Context)) *MockMergeRequestSource_FetchAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -88,14 +97,14 @@ func (_c *MockMergeRequestSource_FetchAll_Call) Return(mergeRequests []domain.Me
 	return _c
 }
 
-func (_c *MockMergeRequestSource_FetchAll_Call) RunAndReturn(run func() ([]domain.MergeRequest, []error)) *MockMergeRequestSource_FetchAll_Call {
+func (_c *MockMergeRequestSource_FetchAll_Call) RunAndReturn(run func(ctx context.Context) ([]domain.MergeRequest, []error)) *MockMergeRequestSource_FetchAll_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetDetail provides a mock function for the type MockMergeRequestSource
-func (_mock *MockMergeRequestSource) GetDetail(projectID int64, mrIID int64) (string, []domain.Thread, error) {
-	ret := _mock.Called(projectID, mrIID)
+func (_mock *MockMergeRequestSource) GetDetail(ctx context.Context, projectID int64, mrIID int64) (string, []domain.Thread, error) {
+	ret := _mock.Called(ctx, projectID, mrIID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDetail")
@@ -104,23 +113,23 @@ func (_mock *MockMergeRequestSource) GetDetail(projectID int64, mrIID int64) (st
 	var r0 string
 	var r1 []domain.Thread
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(int64, int64) (string, []domain.Thread, error)); ok {
-		return returnFunc(projectID, mrIID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) (string, []domain.Thread, error)); ok {
+		return returnFunc(ctx, projectID, mrIID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(int64, int64) string); ok {
-		r0 = returnFunc(projectID, mrIID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) string); ok {
+		r0 = returnFunc(ctx, projectID, mrIID)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(int64, int64) []domain.Thread); ok {
-		r1 = returnFunc(projectID, mrIID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64, int64) []domain.Thread); ok {
+		r1 = returnFunc(ctx, projectID, mrIID)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]domain.Thread)
 		}
 	}
-	if returnFunc, ok := ret.Get(2).(func(int64, int64) error); ok {
-		r2 = returnFunc(projectID, mrIID)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, int64, int64) error); ok {
+		r2 = returnFunc(ctx, projectID, mrIID)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -133,25 +142,31 @@ type MockMergeRequestSource_GetDetail_Call struct {
 }
 
 // GetDetail is a helper method to define mock.On call
+//   - ctx context.Context
 //   - projectID int64
 //   - mrIID int64
-func (_e *MockMergeRequestSource_Expecter) GetDetail(projectID interface{}, mrIID interface{}) *MockMergeRequestSource_GetDetail_Call {
-	return &MockMergeRequestSource_GetDetail_Call{Call: _e.mock.On("GetDetail", projectID, mrIID)}
+func (_e *MockMergeRequestSource_Expecter) GetDetail(ctx interface{}, projectID interface{}, mrIID interface{}) *MockMergeRequestSource_GetDetail_Call {
+	return &MockMergeRequestSource_GetDetail_Call{Call: _e.mock.On("GetDetail", ctx, projectID, mrIID)}
 }
 
-func (_c *MockMergeRequestSource_GetDetail_Call) Run(run func(projectID int64, mrIID int64)) *MockMergeRequestSource_GetDetail_Call {
+func (_c *MockMergeRequestSource_GetDetail_Call) Run(run func(ctx context.Context, projectID int64, mrIID int64)) *MockMergeRequestSource_GetDetail_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 int64
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(int64)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 int64
 		if args[1] != nil {
 			arg1 = args[1].(int64)
 		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -162,7 +177,7 @@ func (_c *MockMergeRequestSource_GetDetail_Call) Return(description string, thre
 	return _c
 }
 
-func (_c *MockMergeRequestSource_GetDetail_Call) RunAndReturn(run func(projectID int64, mrIID int64) (string, []domain.Thread, error)) *MockMergeRequestSource_GetDetail_Call {
+func (_c *MockMergeRequestSource_GetDetail_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64) (string, []domain.Thread, error)) *MockMergeRequestSource_GetDetail_Call {
 	_c.Call.Return(run)
 	return _c
 }

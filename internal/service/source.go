@@ -3,7 +3,11 @@
 // future HTTP handlers depend only on these types — never on concrete infra.
 package service
 
-import "github.com/ceffo/mrboard/internal/domain"
+import (
+	"context"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
 
 // MergeRequestSource is the driven port for fetching MR data.
 // The TUI and any future frontend depend on this interface, not on the
@@ -11,8 +15,8 @@ import "github.com/ceffo/mrboard/internal/domain"
 type MergeRequestSource interface {
 	// FetchAll retrieves all open MRs from all configured sources.
 	// Partial results are valid: non-nil MRs may accompany non-nil errors.
-	FetchAll() ([]domain.MergeRequest, []error)
+	FetchAll(ctx context.Context) ([]domain.MergeRequest, []error)
 
 	// GetDetail fetches the description and discussion threads for a single MR.
-	GetDetail(projectID, mrIID int64) (description string, threads []domain.Thread, err error)
+	GetDetail(ctx context.Context, projectID, mrIID int64) (description string, threads []domain.Thread, err error)
 }

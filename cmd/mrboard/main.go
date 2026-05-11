@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -70,7 +71,8 @@ func runFetch(args []string) int {
 	}
 	logger := setupLogger(debugPath)
 
-	svc, err := app.New(loadTimeout(), logger)
+	timeout := loadTimeout()
+	svc, err := app.New(timeout, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1
@@ -80,7 +82,9 @@ func runFetch(args []string) int {
 		"excluded_authors", svc.Config.ExcludedAuthors,
 	)
 
-	mrs, errs := svc.MRSource.FetchAll()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	mrs, errs := svc.MRSource.FetchAll(ctx)
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}
