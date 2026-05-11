@@ -36,7 +36,7 @@ Now let me check the Go module file before creating the domain package.
 [94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96m*[0m
 No go.mod yet. I need to initialize the Go module first. Let me check AGENTS.md for the module name.
 [94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/AGENTS.md[0m
-[94m[Bash][0m Initialize Go module $ go mod init github.com/mrboard/mrboard
+[94m[Bash][0m Initialize Go module $ go mod init github.com/ceffo/mrboard
 Now I'll create the domain package with `mr.go` and tests.
 [94m[Bash][0m Create domain directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/domain
 [94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m "package domain

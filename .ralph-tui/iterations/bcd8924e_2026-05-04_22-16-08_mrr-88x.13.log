@@ -64,7 +64,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 type cardWidget struct {
@@ -78,7 +78,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 type columnWidget struct {
@@ -90,7 +90,7 @@ type columnWidget struct {
 import (
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 type boardWidget struct {
@@ -134,7 +134,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/key"
 	lip "charm.land/lipgloss/v2"
-	"github.com/mrboard/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/config"
 	"github... (4026 chars)"
 Now create the main entry point:
 [94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m "// Package main is the entry point for mrboard.
@@ -145,8 +145,8 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/... (647 chars)"
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/... (647 chars)"
 [94m[TodoWrite][0m
 [94m[Bash][0m Run go build to check for compile errors $ go build ./... 2>&1
 Clean build. Running vet and tests:

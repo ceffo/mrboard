@@ -40,8 +40,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/mrboard/mrboard/internal/config"
-	"github.com/mrboard/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
 	gl "github.com/xanzy/go-gitlab"
 )
 

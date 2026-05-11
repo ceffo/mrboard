@@ -49,7 +49,7 @@ package gitlab
 import (
 	"fmt"
 
-	"github.com/mrboard/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/config"
 	gl "github.com/xanzy/go-gitlab"
 )
 
@@ -102,7 +102,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrboard/mrboard/internal/con... (6338 chars)"
+	"github.com/ceffo/mrboard/internal/con... (6338 chars)"
 Now let me check if the client_test.go needs updating since `NewClient` signature changed:
 [94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m
 [94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m edit: "package gitlab

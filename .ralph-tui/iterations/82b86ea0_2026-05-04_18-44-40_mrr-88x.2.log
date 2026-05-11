@@ -58,7 +58,7 @@ func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "mrboard-*.toml")
 	if err != nil {... (3372 chars)"
-[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/mrboard.toml.example[0m "[gitlab]
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/ceffo/mrboard.toml.example[0m "[gitlab]
 url                = "https://gitlab.example.com"
 token              = "glpat-xxx"          # or set $GITLAB_TOKEN env var
 required_approvals = 2                    # default: 2

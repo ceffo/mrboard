@@ -46,7 +46,7 @@ Now I have everything I need. Let me create the client:
 import (
 	"fmt"
 
-	"github.com/mrboard/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/config"
 	gl "github.com/xanzy/go-gitlab"
 )
 
@@ -58,7 +58,7 @@ Now let me write a basic test:
 import (
 	"testing"
 
-	"github.com/mrboard/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/config"
 )
 
 func TestNewClient_ValidConfig(t *testing.T) {
