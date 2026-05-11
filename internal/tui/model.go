@@ -3,7 +3,6 @@ package tui
 import (
 	"os/exec"
 	"runtime"
-	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -431,70 +430,15 @@ func (m Model) renderContent() string {
 }
 
 // applyMRFilter applies the my-view filter then sorts, and pushes the result into the board.
-// All filter and sort logic lives here — no scattered conditionals elsewhere.
 func (m *Model) applyMRFilter() {
-	mrs := m.allMRs
-	if m.myView && m.currentUser != "" {
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			if mrIsRelevantToUser(mr, m.currentUser) {
-				filtered = append(filtered, mr)
-			}
-		}
-		mrs = filtered
-	}
-	mrs = sortedMRs(mrs, m.sortField, m.sortDesc)
+	mrs := service.FilterAndSort(m.allMRs, service.FilterOptions{
+		MyView:      m.myView,
+		CurrentUser: m.currentUser,
+		SortField:   m.sortField.stateKey(),
+		SortDesc:    m.sortDesc,
+	})
 	m.board.SetMRs(mrs)
 	m.header.SetMRs(mrs)
-}
-
-// sortedMRs returns a sorted copy of mrs by field + direction.
-func sortedMRs(mrs []domain.MergeRequest, field sortField, desc bool) []domain.MergeRequest {
-	out := make([]domain.MergeRequest, len(mrs))
-	copy(out, mrs)
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		var less, equal bool
-		switch field {
-		case sortByAuthor:
-			less, equal = a.Author < b.Author, a.Author == b.Author
-		case sortByAge:
-			less, equal = a.CreatedAt.Before(b.CreatedAt), a.CreatedAt.Equal(b.CreatedAt)
-		default: // sortByRepoIID
-			if a.ProjectPath != b.ProjectPath {
-				less = a.ProjectPath < b.ProjectPath
-			} else {
-				less, equal = a.IID < b.IID, a.IID == b.IID
-			}
-		}
-		if !equal {
-			if desc {
-				return !less
-			}
-			return less
-		}
-		// Tiebreaker: repo asc, IID asc.
-		if a.ProjectPath != b.ProjectPath {
-			return a.ProjectPath < b.ProjectPath
-		}
-		return a.IID < b.IID
-	})
-	return out
-}
-
-// mrIsRelevantToUser reports whether an MR should appear in "my view" for the given username.
-// An MR is relevant if the user authored it, or if the user is a reviewer whose turn it is.
-func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
-	if mr.Author == username {
-		return true
-	}
-	for _, r := range mr.Reviewers {
-		if r.Username == username &&
-			(r.State == domain.ReviewerNotStarted || r.State == domain.ReviewerReReviewRequested) {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Model) saveState() {

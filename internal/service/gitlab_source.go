@@ -21,10 +21,12 @@ func NewGitLabSource(client *gitlab.Client, cfg *config.Config) *GitLabSource {
 	return &GitLabSource{client: client, cfg: cfg}
 }
 
+// FetchAll implements MergeRequestSource.
 func (s *GitLabSource) FetchAll() ([]domain.MergeRequest, []error) {
 	return gitlab.FetchAll(s.client, s.cfg)
 }
 
+// GetDetail implements MergeRequestSource.
 func (s *GitLabSource) GetDetail(projectID, mrIID int64) (string, []domain.Thread, error) {
 	desc, err := s.client.GetMRDescription(projectID, mrIID)
 	if err != nil {
