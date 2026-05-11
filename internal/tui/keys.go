@@ -84,7 +84,7 @@ func (k FilterPopupKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k
 var DefaultFilterPopupKeyMap = FilterPopupKeyMap{
 	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle: key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle/select")),
+	Toggle: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle/select")),
 	Apply:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
 	Cancel: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 }
