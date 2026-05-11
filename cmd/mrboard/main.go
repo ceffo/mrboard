@@ -25,8 +25,7 @@ const (
 
 func main() {
 	if len(os.Args) < minArgs {
-		printUsage()
-		os.Exit(0)
+		os.Exit(runBoard())
 	}
 
 	switch os.Args[1] {
@@ -45,11 +44,16 @@ func printUsage() {
 	fmt.Print(`mrboard — GitLab MR review board
 
 Usage:
+  mrboard                          Launch TUI board (default)
   mrboard fetch [--debug <path>]   Fetch MRs and print as JSON
-  mrboard run                      Launch TUI board (not implemented)
+
+Config search path (first match wins):
+  $MRBOARD_CONFIG
+  $XDG_CONFIG_HOME/mrboard/mrboard.yaml  (default: ~/.config/mrboard/mrboard.yaml)
+  ./mrboard.yaml
 
 Environment:
-  MRBOARD_CONFIG   Path to config file (default: mrboard.toml)
+  MRBOARD_CONFIG   Explicit config file path
   GITLAB_TOKEN     Override gitlab.token from config
   MRBOARD_TIMEOUT  HTTP timeout (default: 30s, e.g. "60s")
   MRBOARD_DEBUG    Write debug logs to this file path
@@ -66,12 +70,12 @@ func runFetch(args []string) int {
 
 	logger := setupLogger(debugPath)
 
-	cfg, cfgPath, err := loadConfig()
+	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1
 	}
-	logger.Debug("config loaded", "path", cfgPath, "sources", len(cfg.Sources), "excluded_authors", cfg.ExcludedAuthors)
+	logger.Debug("config loaded", "sources", len(cfg.Sources), "excluded_authors", cfg.ExcludedAuthors)
 
 	timeout := loadTimeout()
 	client, err := gitlab.NewClient(cfg, timeout, logger)
@@ -128,17 +132,13 @@ func setupLogger(path string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-// loadConfig reads the config file and returns the config and the resolved path.
-func loadConfig() (*config.Config, string, error) {
-	path := "mrboard.toml"
-	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {
-		path = v
-	}
+// loadConfig reads the config file using the standard search path.
+func loadConfig() (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return cfg, path, nil
+	return cfg, nil
 }
 
 // loadTimeout reads MRBOARD_TIMEOUT or returns the 30s default.
@@ -227,9 +227,9 @@ func reviewerStateName(s domain.ReviewerState) string {
 	}
 }
 
-// runBoard launches the TUI (entry point kept for future use by the run subcommand).
+// runBoard loads config and launches the TUI.
 func runBoard() int {
-	cfg, err := config.Load()
+	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1

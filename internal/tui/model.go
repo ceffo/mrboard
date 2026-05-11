@@ -56,24 +56,26 @@ type DetailFetchResultMsg struct {
 
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state      appState
-	header     headerWidget
-	board      boardWidget
-	footer     footerWidget
-	sp         spinnerWidget
-	detail     detailWidget
-	showDetail bool
-	keys       KeyMap
-	detailKeys DetailKeyMap
-	styles     Styles
-	width      int
-	height     int
-	errors     []error
-	errMsg     string
-	cfg        *config.Config
-	client     *gitlab.Client
-	allMRs     []domain.MergeRequest
-	hideStale  bool
+	state       appState
+	header      headerWidget
+	board       boardWidget
+	footer      footerWidget
+	sp          spinnerWidget
+	detail      detailWidget
+	showDetail  bool
+	keys        KeyMap
+	detailKeys  DetailKeyMap
+	styles      Styles
+	width       int
+	height      int
+	errors      []error
+	errMsg      string
+	cfg         *config.Config
+	client      *gitlab.Client
+	allMRs      []domain.MergeRequest
+	hideStale   bool
+	myView      bool
+	currentUser string
 }
 
 // New creates a ready-to-run mrboard model.
@@ -81,17 +83,18 @@ func New(cfg *config.Config, client *gitlab.Client) Model {
 	styles := NewStyles()
 	keys := DefaultKeyMap
 	return Model{
-		state:      stateLoading,
-		header:     newHeaderWidget(styles),
-		board:      newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
-		footer:     newFooterWidget(keys, styles),
-		sp:         newSpinnerWidget(),
-		detail:     newDetailWidget(styles),
-		keys:       keys,
-		detailKeys: DefaultDetailKeyMap,
-		styles:     styles,
-		cfg:        cfg,
-		client:     client,
+		state:       stateLoading,
+		header:      newHeaderWidget(styles),
+		board:       newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		footer:      newFooterWidget(keys, styles),
+		sp:          newSpinnerWidget(),
+		detail:      newDetailWidget(styles),
+		keys:        keys,
+		detailKeys:  DefaultDetailKeyMap,
+		styles:      styles,
+		cfg:         cfg,
+		client:      client,
+		currentUser: cfg.CurrentUser,
 	}
 }
 
@@ -210,6 +213,16 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.cfg.StaleThresholdDays > 0 {
 			m.hideStale = !m.hideStale
 			m.applyMRFilter()
+		}
+	case key.Matches(msg, m.keys.ToggleView):
+		if m.currentUser != "" {
+			m.myView = !m.myView
+			m.applyMRFilter()
+			if m.myView {
+				m.header.SetTitle("mrboard — @" + m.currentUser)
+			} else {
+				m.header.SetTitle("mrboard")
+			}
 		}
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.board.FocusedMR(); mr != nil {
@@ -332,7 +345,8 @@ func (m Model) renderContent() string {
 	return ""
 }
 
-// applyMRFilter pushes allMRs (optionally filtered for staleness) into the board.
+// applyMRFilter pushes allMRs through active filters and updates the board and header.
+// Filters are applied in order: stale → my-view. All filter logic lives here.
 func (m *Model) applyMRFilter() {
 	mrs := m.allMRs
 	if m.hideStale && m.cfg.StaleThresholdDays > 0 {
@@ -350,8 +364,32 @@ func (m *Model) applyMRFilter() {
 		}
 		mrs = filtered
 	}
+	if m.myView && m.currentUser != "" {
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			if mrIsRelevantToUser(mr, m.currentUser) {
+				filtered = append(filtered, mr)
+			}
+		}
+		mrs = filtered
+	}
 	m.board.SetMRs(mrs)
 	m.header.SetMRs(mrs)
+}
+
+// mrIsRelevantToUser reports whether an MR should appear in "my view" for the given username.
+// An MR is relevant if the user authored it, or if the user is a reviewer whose turn it is.
+func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
+	if mr.Author == username {
+		return true
+	}
+	for _, r := range mr.Reviewers {
+		if r.Username == username &&
+			(r.State == domain.ReviewerNotStarted || r.State == domain.ReviewerReReviewRequested) {
+			return true
+		}
+	}
+	return false
 }
 
 func openBrowser(url string) tea.Cmd {

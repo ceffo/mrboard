@@ -25,7 +25,7 @@ check: fmt lint build test
 
 # run the tui
 run:
-  go run ./cmd/mrboard/... run 
+  go run ./cmd/mrboard/...
 
 # fetch calls the fetch command 
 fetch:

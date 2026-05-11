@@ -13,14 +13,16 @@ type headerWidget struct {
 	styles Styles
 	mrs    []domain.MergeRequest
 	width  int
+	title  string
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
-	return headerWidget{styles: styles}
+	return headerWidget{styles: styles, title: "mrboard"}
 }
 
 func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
+func (h *headerWidget) SetTitle(t string)                { h.title = t }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
 func (h headerWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return h, nil }
@@ -34,7 +36,7 @@ func (h headerWidget) render() string {
 		}
 	}
 
-	title := h.styles.HeaderTitle.Render("mrboard")
+	title := h.styles.HeaderTitle.Render(h.title)
 	stats := h.styles.HeaderStats.Render(fmt.Sprintf(
 		"Draft:%d  Review:%d  Author:%d  Ready:%d  Total:%d",
 		counts[0], counts[1], counts[2], counts[3], len(h.mrs),

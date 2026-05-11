@@ -138,6 +138,9 @@ func (c cardWidget) renderPills(now time.Time) []string {
 	}
 	parts := make([]string, 0, len(c.mr.Reviewers))
 	for _, r := range c.mr.Reviewers {
+		if r.State == domain.ReviewerNotStarted {
+			continue
+		}
 		icon := reviewerIcon(r.State)
 		pill := "[" + r.Username + "·" + icon
 		if !r.WaitingSince.IsZero() {

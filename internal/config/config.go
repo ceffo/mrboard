@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
-
-const defaultPath = "mrboard.yaml"
 
 // GitLab holds credentials and settings for the GitLab API.
 type GitLab struct {
@@ -32,27 +31,39 @@ type Config struct {
 	Sources            []Source `yaml:"sources"`
 	ExcludedAuthors    []string `yaml:"excluded_authors"`
 	StaleThresholdDays int      `yaml:"stale_threshold_days"` // 0 = no stale filtering
+	CurrentUser        string   `yaml:"current_user"`         // enables "my view" toggle (tab)
 }
 
-// Load reads and validates the configuration from mrboard.yaml or $MRBOARD_CONFIG.
+// Load reads and validates the configuration from the first file found in the
+// search path: $MRBOARD_CONFIG → $XDG_CONFIG_HOME/mrboard/mrboard.yaml →
+// ~/.config/mrboard/mrboard.yaml → ./mrboard.yaml.
 func Load() (*Config, error) {
-	path := defaultPath
-	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {
-		path = v
-	}
+	paths := searchPaths()
 
-	f, err := os.Open(filepath.Clean(path))
-	if err != nil {
-		return nil, fmt.Errorf("config: open %q: %w", path, err)
+	var f *os.File
+	var chosenPath string
+	for _, p := range paths {
+		var err error
+		f, err = os.Open(filepath.Clean(p))
+		if err == nil {
+			chosenPath = p
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("config: open %q: %w", p, err)
+		}
+	}
+	if f == nil {
+		return nil, fmt.Errorf("config: no config file found (tried: %s)", strings.Join(paths, ", "))
 	}
 	defer f.Close()
 
 	dec := yaml.NewDecoder(f)
-	dec.KnownFields(true) // error on unrecognized keys
+	dec.KnownFields(true)
 
 	var cfg Config
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("config: parse %q: %w", path, err)
+		return nil, fmt.Errorf("config: parse %q: %w", chosenPath, err)
 	}
 
 	if token := os.Getenv("GITLAB_TOKEN"); token != "" {
@@ -68,6 +79,28 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// searchPaths returns the ordered list of config file locations to try.
+func searchPaths() []string {
+	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {
+		return []string{v}
+	}
+
+	var paths []string
+
+	xdgHome := os.Getenv("XDG_CONFIG_HOME")
+	if xdgHome == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			xdgHome = filepath.Join(home, ".config")
+		}
+	}
+	if xdgHome != "" {
+		paths = append(paths, filepath.Join(xdgHome, "mrboard", "mrboard.yaml"))
+	}
+
+	paths = append(paths, "mrboard.yaml")
+	return paths
 }
 
 func validate(cfg *Config) error {

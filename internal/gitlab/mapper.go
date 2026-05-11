@@ -86,10 +86,6 @@ func DeriveReviewerStates(
 		rts := ts[r.Username]
 		state := deriveState(approvedBy[r.Username], rts.lastComment, rts.lastReReview)
 
-		if state == domain.ReviewerNotStarted {
-			continue
-		}
-
 		var waitingSince time.Time
 		switch state {
 		case domain.ReviewerReReviewRequested:
