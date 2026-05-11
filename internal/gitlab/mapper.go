@@ -156,6 +156,7 @@ func MapMR(
 		ProjectID:         int(mr.ProjectID),
 		Title:             mr.Title,
 		WebURL:            mr.WebURL,
+		ProjectPath:       projectPathFromRef(mr.References),
 		Reviewers:         reviewers,
 		CreatedAt:         createdAt,
 		ApprovalCount:     int(approvals.ApprovalsRequired - approvals.ApprovalsLeft),
@@ -273,4 +274,17 @@ func MapDiscussionsToThreads(discussions []*gl.Discussion) []domain.Thread {
 		threads = append(threads, domain.Thread{Notes: notes, Resolved: resolved})
 	}
 	return threads
+}
+
+// projectPathFromRef extracts the namespace/project path from a GitLab
+// IssueReferences struct. References.Full looks like "group/project!123".
+func projectPathFromRef(refs *gl.IssueReferences) string {
+	if refs == nil {
+		return ""
+	}
+	full := refs.Full
+	if i := strings.LastIndex(full, "!"); i > 0 {
+		return full[:i]
+	}
+	return ""
 }

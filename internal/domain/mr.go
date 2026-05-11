@@ -65,6 +65,7 @@ type MergeRequest struct {
 	Title       string
 	Author      string
 	WebURL      string
+	ProjectPath string // namespace/project without domain, e.g. "group/repo"
 	Description string
 
 	Phase     MRPhase

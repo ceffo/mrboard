@@ -33,6 +33,7 @@ type Styles struct {
 	DetailSectionHeader         lipgloss.Style
 	DetailBody                  lipgloss.Style
 	DetailMeta                  lipgloss.Style
+	MRNumberBang                lipgloss.Style // colored "!" sigil in !IID refs
 }
 
 // NewStyles creates and returns the default mrboard styles.
@@ -89,5 +90,6 @@ func NewStyles() Styles {
 		DetailSectionHeader: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")),
 		DetailBody:          lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
 		DetailMeta:          lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
+		MRNumberBang:        lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Bold(true),
 	}
 }

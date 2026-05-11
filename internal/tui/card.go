@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -66,8 +67,7 @@ func (c cardWidget) render() string {
 	}
 
 	rawLines := []string{
-		c.renderHeaderLine(authorLabel, openLabel, innerWidth),
-		"",
+		c.renderLine1(authorLabel, openLabel, innerWidth),
 		c.styles.CardTitle.Render(truncateWidth(c.mr.Title, innerWidth)),
 		"",
 	}
@@ -102,24 +102,33 @@ func (c cardWidget) render() string {
 	return style.Render(strings.Join(padded, "\n"))
 }
 
-// renderHeaderLine places left content left-aligned and right content right-aligned
-// within width display columns. Padding is added as plain spaces directly to the
-// raw string before styling so no outer Width() triggers lipgloss word-wrap.
-func (c cardWidget) renderHeaderLine(left, right string, width int) string {
-	if right == "" {
-		return c.styles.CardAuthor.Render(left)
+// renderLine1 builds the first card line: !IID + author left, duration right.
+// The MR ref prefix has its own style so it can't go through renderHeaderLine.
+func (c cardWidget) renderLine1(authorLabel, openLabel string, width int) string {
+	mrRef := c.styles.MRNumberBang.Render("!") +
+		c.styles.CardMeta.Render(fmt.Sprintf("%d ", c.mr.IID))
+	mrRefW := lip.Width(mrRef)
+
+	rightRendered := ""
+	rightW := 0
+	if openLabel != "" {
+		rightRendered = c.styles.CardMeta.Render(openLabel)
+		rightW = lip.Width(rightRendered)
 	}
-	rightRendered := c.styles.CardMeta.Render(right)
-	rightW := lip.Width(rightRendered)
-	leftW := width - rightW
-	if leftW < minLeftW {
-		leftW = minLeftW
+
+	availAuthorW := width - mrRefW - rightW
+	if availAuthorW < 0 {
+		availAuthorW = 0
 	}
-	truncated := truncateWidth(left, leftW)
-	if pad := leftW - lip.Width(truncated); pad > 0 {
-		truncated += strings.Repeat(" ", pad)
+	authorTrunc := truncateWidth(authorLabel, availAuthorW)
+	authorStyled := c.styles.CardAuthor.Render(authorTrunc)
+	authorW := lip.Width(authorStyled)
+
+	pad := width - mrRefW - authorW - rightW
+	if pad < 0 {
+		pad = 0
 	}
-	return c.styles.CardAuthor.Render(truncated) + rightRendered
+	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
 }
 
 // renderPills returns each reviewer pill as a separately styled string.

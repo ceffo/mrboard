@@ -218,6 +218,18 @@ func (c columnWidget) render() string {
 	}
 
 	content := header + "\n" + strings.Join(cardLines, "\n")
+
+	// Hard-cap content to the available inner height so Height() only ever
+	// pads (never overflows when cards fill the area exactly).
+	if c.height > colBorderWidth {
+		innerH := c.height - colBorderWidth
+		cl := strings.SplitN(content, "\n", innerH+1)
+		if len(cl) > innerH {
+			cl = cl[:innerH]
+		}
+		content = strings.Join(cl, "\n")
+	}
+
 	var borderStyle lip.Style
 	switch {
 	case c.focused && !c.active:
@@ -226,6 +238,9 @@ func (c columnWidget) render() string {
 		borderStyle = c.styles.ColumnBorderFocused
 	default:
 		borderStyle = c.styles.ColumnBorder
+	}
+	if c.height > colBorderWidth {
+		borderStyle = borderStyle.Height(c.height)
 	}
 	return borderStyle.Render(content)
 }

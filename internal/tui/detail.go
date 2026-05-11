@@ -15,17 +15,26 @@ const (
 	detailBorderWidth   = 2
 	detailPadWidth      = 2
 	detailMinInnerWidth = 20
-	maxDescriptionLines = 40
 	maxThreadBodyLines  = 10
-	threadBodyIndent    = 2 // indent thread body text from the left edge
+	threadBodyIndent    = 2
 )
 
+// detailWidget renders a single MR's description and discussion threads in a
+// side panel. Layout:
+//
+//	╭─ [title truncated]         ↑↓ ─╮   ← fixed header line (scroll indicator here)
+//	│  [scrollable body lines]       │   ← scrollViewport manages this area
+//	╰────────────────────────────────╯
+//
+// The panel style has no Width() so lipgloss never word-wraps the content.
+// Each visual line is built individually and the header always fills
+// innerWidth, keeping the panel at its assigned width.
 type detailWidget struct {
 	mr             *domain.MergeRequest
 	threads        []domain.Thread
 	descExpanded   bool
-	threadExpanded []bool // collapsed state per thread index
-	scrollOffset   int
+	threadExpanded []bool
+	vp             scrollViewport
 	styles         Styles
 	width          int
 	height         int
@@ -41,7 +50,7 @@ func (d *detailWidget) SetMR(mr *domain.MergeRequest) {
 	d.threads = nil
 	d.threadExpanded = nil
 	d.descExpanded = true
-	d.scrollOffset = 0
+	d.vp.reset()
 	d.loading = true
 }
 
@@ -54,45 +63,19 @@ func (d *detailWidget) SetThreads(threads []domain.Thread) {
 func (d *detailWidget) SetSize(width, height int) {
 	d.width = width
 	d.height = height
-	d.clampScroll()
 }
 
-func (d *detailWidget) ScrollUp() {
-	if d.scrollOffset > 0 {
-		d.scrollOffset--
-	}
-}
+func (d *detailWidget) ScrollUp()   { d.vp.scrollUp() }
+func (d *detailWidget) ScrollDown() { d.vp.scrollDown() }
 
-func (d *detailWidget) ScrollDown() {
-	total := d.totalContentLines()
-	visible := d.visibleLines()
-	if d.scrollOffset < total-visible {
-		d.scrollOffset++
-	}
-}
-
-func (d detailWidget) visibleLines() int {
-	v := d.height - detailBorderWidth
+// bodyLines returns the number of lines available for the scrollable body
+// (total height minus border rows and the fixed header line).
+func (d detailWidget) bodyLines() int {
+	v := d.height - detailBorderWidth - 1
 	if v < 0 {
 		return 0
 	}
 	return v
-}
-
-func (d detailWidget) totalContentLines() int {
-	return strings.Count(d.buildContent(), "\n") + 1
-}
-
-func (d *detailWidget) clampScroll() {
-	total := d.totalContentLines()
-	visible := d.visibleLines()
-	maxOffset := total - visible
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if d.scrollOffset > maxOffset {
-		d.scrollOffset = maxOffset
-	}
 }
 
 func (d detailWidget) Init() tea.Cmd                         { return nil }
@@ -104,156 +87,155 @@ func (d detailWidget) render() string {
 		return ""
 	}
 
-	full := d.buildContent()
-	lines := strings.Split(full, "\n")
-	total := len(lines)
-	visible := d.visibleLines()
-
-	// Apply scroll window.
-	offset := d.scrollOffset
-	if offset > total-visible {
-		offset = total - visible
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	end := offset + visible
-	if end > total {
-		end = total
-	}
-	window := strings.Join(lines[offset:end], "\n")
-
-	// Scroll indicator line in the top-right corner of the border.
-	hasAbove := offset > 0
-	hasBelow := end < total
-	ind := d.styles.ScrollIndicator.Render(scrollIndicator(hasAbove, hasBelow))
-
 	innerWidth := d.width - detailBorderWidth - detailPadWidth
 	if innerWidth < detailMinInnerWidth {
 		innerWidth = detailMinInnerWidth
 	}
-	indW := lip.Width(ind)
-	if indW < innerWidth {
-		// Overlay indicator on the first visible line (right-aligned).
-		firstLineEnd := strings.Index(window, "\n")
-		if firstLineEnd < 0 {
-			firstLineEnd = len(window)
-		}
-		first := window[:firstLineEnd]
-		rest := window[firstLineEnd:]
-		fw := lip.Width(first)
-		pad := innerWidth - fw - indW
-		if pad < 0 {
-			pad = 0
-		}
-		window = first + strings.Repeat(" ", pad) + ind + rest
-	}
 
-	return d.styles.DetailPanel.Width(d.width - detailBorderWidth).Render(window)
+	lines := d.buildLines(innerWidth)
+	visible := d.bodyLines()
+	total := len(lines)
+
+	header := d.renderHeader(innerWidth, d.vp.hasAbove(), d.vp.hasBelow(total, visible))
+	window := d.vp.window(lines, visible)
+	content := header + "\n" + strings.Join(window, "\n")
+
+	// No Width() on the panel — word-wrap is disabled. The header line is
+	// always exactly innerWidth wide, which anchors the panel to d.width.
+	// Height() fills the panel to the full assigned height (same as columns).
+	panelStyle := d.styles.DetailPanel
+	if d.height > 0 {
+		panelStyle = panelStyle.Height(d.height)
+	}
+	return panelStyle.Render(content)
 }
 
-// buildContent builds the full scrollable content string (no height limit applied).
-func (d detailWidget) buildContent() string {
-	innerWidth := d.width - detailBorderWidth - detailPadWidth
-	if innerWidth < detailMinInnerWidth {
-		innerWidth = detailMinInnerWidth
+// renderHeader builds the fixed title line with the scroll indicator
+// right-aligned, mirroring how columnWidget places its scroll indicator.
+func (d detailWidget) renderHeader(innerWidth int, hasAbove, hasBelow bool) string {
+	ind := d.styles.ScrollIndicator.Render(scrollIndicator(hasAbove, hasBelow))
+	indW := lip.Width(ind)
+	availW := innerWidth - indW
+	if availW < 0 {
+		availW = 0
+	}
+	title := truncateWidth(d.mr.Title, availW)
+	titleStyled := d.styles.DetailTitle.Render(title)
+	titleW := lip.Width(titleStyled)
+	pad := innerWidth - titleW - indW
+	if pad < 0 {
+		pad = 0
+	}
+	return titleStyled + strings.Repeat(" ", pad) + ind
+}
+
+// buildLines produces the full scrollable content as a flat []string of
+// individual visual lines. Each element is one rendered line (may contain
+// ANSI codes, must not contain embedded newlines).
+func (d detailWidget) buildLines(innerWidth int) []string {
+	var out []string
+
+	add := func(line string) { out = append(out, line) }
+
+	// Flatten a potentially multi-line rendered block into individual lines.
+	addBlock := func(rendered string) {
+		out = append(out, strings.Split(rendered, "\n")...)
 	}
 
-	var sb strings.Builder
+	// MR ref + project path
+	mrRef := d.styles.MRNumberBang.Render("!") +
+		d.styles.DetailMeta.Render(fmt.Sprintf("%d", d.mr.IID))
+	if d.mr.ProjectPath != "" {
+		mrRef += d.styles.DetailMeta.Render("  " + d.mr.ProjectPath)
+	}
+	add(mrRef)
 
-	// Title
-	title := wordWrap(d.mr.Title, innerWidth)
-	sb.WriteString(d.styles.DetailTitle.Width(innerWidth).Render(title))
-	sb.WriteByte('\n')
-
-	// Meta: author · phase · approvals
+	// author · phase · approvals
 	phaseLbl := mrPhaseLabel(d.mr.Phase)
 	approvals := fmt.Sprintf("%d/%d approvals", d.mr.ApprovalCount, d.mr.RequiredApprovals)
-	meta := fmt.Sprintf("%s  ·  %s  ·  %s", d.mr.Author, phaseLbl, approvals)
-	sb.WriteString(d.styles.DetailMeta.Render(meta))
-	sb.WriteByte('\n')
+	add(d.styles.DetailMeta.Render(
+		fmt.Sprintf("%s  ·  %s  ·  %s", d.mr.Author, phaseLbl, approvals)))
 
-	// Reviewers
 	if len(d.mr.Reviewers) > 0 {
-		sb.WriteString(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))
-		sb.WriteByte('\n')
+		add(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))
 	}
 
-	sb.WriteByte('\n')
+	add("") // blank separator
 
-	// Description section
 	descToggle := "▼"
 	if !d.descExpanded {
 		descToggle = "▶"
 	}
-	sb.WriteString(d.styles.DetailSectionHeader.Render(descToggle + " Description"))
-	sb.WriteByte('\n')
+	add(d.styles.DetailSectionHeader.Render(descToggle + " Description"))
 	if d.descExpanded {
 		body := strings.TrimSpace(d.mr.Description)
 		if body == "" {
-			sb.WriteString(d.styles.DetailMeta.Render("(no description)"))
+			add(d.styles.DetailMeta.Render("(no description)"))
 		} else {
-			sb.WriteString(renderMarkdown(body, innerWidth))
+			addBlock(renderMarkdown(body, innerWidth))
 		}
-		sb.WriteByte('\n')
 	}
 
-	sb.WriteByte('\n')
+	add("") // blank separator
 
-	// Discussions
 	if d.loading {
-		sb.WriteString(d.styles.DetailMeta.Render("Loading comments…"))
+		add(d.styles.DetailMeta.Render("Loading comments…"))
 	} else if len(d.threads) == 0 {
-		sb.WriteString(d.styles.DetailMeta.Render("No comment threads"))
+		add(d.styles.DetailMeta.Render("No comment threads"))
 	} else {
 		threadWord := "thread"
 		if len(d.threads) > 1 {
 			threadWord = "threads"
 		}
-		sb.WriteString(d.styles.DetailSectionHeader.Render(
+		add(d.styles.DetailSectionHeader.Render(
 			fmt.Sprintf("● %d %s", len(d.threads), threadWord)))
-		sb.WriteByte('\n')
 		for i, t := range d.threads {
-			d.renderThread(&sb, i, t, innerWidth)
+			for _, l := range d.threadLines(i, t, innerWidth) {
+				add(l)
+			}
 		}
 	}
 
-	return strings.TrimRight(sb.String(), "\n")
+	return out
 }
 
-func (d detailWidget) renderThread(sb *strings.Builder, idx int, t domain.Thread, innerWidth int) {
+// threadLines renders a single discussion thread as a flat []string.
+func (d detailWidget) threadLines(idx int, t domain.Thread, innerWidth int) []string {
 	if len(t.Notes) == 0 {
-		return
+		return nil
 	}
+	var out []string
 	first := t.Notes[0]
-	toggle := "▶"
 	expanded := idx < len(d.threadExpanded) && d.threadExpanded[idx]
+	toggle := "▶"
 	if expanded {
 		toggle = "▼"
 	}
-
 	status := ""
 	if t.Resolved {
 		status = " ✓"
 	}
-	header := fmt.Sprintf("%s %s%s", toggle, first.Author, status)
-	sb.WriteString(d.styles.DetailSectionHeader.Render(header))
-	sb.WriteByte('\n')
+	out = append(out, d.styles.DetailSectionHeader.Render(
+		fmt.Sprintf("%s %s%s", toggle, first.Author, status)))
 
 	if expanded {
 		for _, n := range t.Notes {
 			if n.System {
 				continue
 			}
-			noteHeader := d.styles.DetailMeta.Render(n.Author + ":")
+			out = append(out, d.styles.DetailMeta.Render(n.Author+":"))
 			body := wordWrap(strings.TrimSpace(n.Body), innerWidth-threadBodyIndent)
 			body = truncateLines(body, maxThreadBodyLines)
-			sb.WriteString(noteHeader + "\n")
-			sb.WriteString(d.styles.DetailBody.Render(body))
-			sb.WriteByte('\n')
+			for _, l := range strings.Split(body, "\n") {
+				out = append(out, d.styles.DetailBody.Render(
+					strings.Repeat(" ", threadBodyIndent)+l))
+			}
 		}
 	}
+	return out
 }
+
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 func mrPhaseLabel(p domain.MRPhase) string {
 	switch p {
@@ -323,7 +305,7 @@ func wordWrap(text string, width int) string {
 	return strings.TrimRight(out.String(), "\n")
 }
 
-// truncateLines limits rendered output to maxLines lines.
+// truncateLines limits output to maxLines lines.
 func truncateLines(s string, maxLines int) string {
 	if maxLines <= 0 {
 		return s
@@ -340,15 +322,9 @@ func joinHorizontalTop(left, right string) string {
 	return lip.JoinHorizontal(lip.Top, left, right)
 }
 
-// renderMarkdown renders a markdown string to ANSI terminal output via glamour.
-// WithEnvironmentConfig() falls back to "notty" when stdout is not a raw TTY,
-// which is always the case inside Bubble Tea's alt-screen. We check GLAMOUR_STYLE
-// ourselves and default to "dark" so inline code is always styled correctly.
+// renderMarkdown renders markdown to ANSI terminal output via glamour.
 // Falls back to plain word-wrapped text on error.
 func renderMarkdown(md string, width int) string {
-	// GitLab sometimes stores descriptions with backslash-escaped backticks (\`)
-	// which are literal backticks in CommonMark, not code spans. Unescape them
-	// so inline code renders correctly.
 	md = strings.ReplaceAll(md, "\\`", "`")
 
 	style := os.Getenv("GLAMOUR_STYLE")
