@@ -71,16 +71,13 @@ func mr(reviewers ...*gl.BasicUser) *gl.BasicMergeRequest {
 }
 
 // TestDeriveReviewerStates_NotStarted verifies a reviewer who has never commented
-// and was never re-requested gets ReviewerNotStarted.
+// and was never re-requested is filtered out (not-started reviewers don't participate).
 func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	result := DeriveReviewerStates(m, nil, approvals())
 
-	if len(result) != 1 {
-		t.Fatalf("want 1 reviewer, got %d", len(result))
-	}
-	if result[0].State != domain.ReviewerNotStarted {
-		t.Errorf("want NotStarted, got %v", result[0].State)
+	if len(result) != 0 {
+		t.Fatalf("want 0 reviewers (not-started filtered), got %d", len(result))
 	}
 }
 
@@ -174,8 +171,8 @@ func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if result[0].State != domain.ReviewerNotStarted {
-		t.Errorf("want NotStarted, got %v", result[0].State)
+	if len(result) != 0 {
+		t.Fatalf("want 0 reviewers (alice not-started, filtered), got %d", len(result))
 	}
 }
 

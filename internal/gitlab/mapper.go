@@ -86,9 +86,13 @@ func DeriveReviewerStates(
 		rts := ts[r.Username]
 		state := deriveState(approvedBy[r.Username], rts.lastComment, rts.lastReReview)
 
+		if state == domain.ReviewerNotStarted {
+			continue
+		}
+
 		var waitingSince time.Time
 		switch state {
-		case domain.ReviewerNotStarted, domain.ReviewerReReviewRequested:
+		case domain.ReviewerReReviewRequested:
 			waitingSince = rts.lastReReview
 			if waitingSince.IsZero() && mr.CreatedAt != nil {
 				waitingSince = *mr.CreatedAt
@@ -159,7 +163,7 @@ func MapMR(
 		ProjectPath:       projectPathFromRef(mr.References),
 		Reviewers:         reviewers,
 		CreatedAt:         createdAt,
-		ApprovalCount:     int(approvals.ApprovalsRequired - approvals.ApprovalsLeft),
+		ApprovalCount:     countApprovals(reviewers),
 		RequiredApprovals: requiredApprovals,
 		OpenThreads:       openThreads,
 		RoundTripCount:    countRoundTrips(discussions),
@@ -231,14 +235,14 @@ func countOpenThreads(discussions []*gl.Discussion) int {
 	return count
 }
 
-// MapMRApprovalCount returns the number of approvals granted, derived from
-// ApprovalsRequired - ApprovalsLeft (avoids negative values).
-func MapMRApprovalCount(approvals *gl.MergeRequestApprovals) int {
-	count := approvals.ApprovalsRequired - approvals.ApprovalsLeft
-	if count < 0 {
-		return 0
+func countApprovals(reviewers []domain.ReviewerInfo) int {
+	n := 0
+	for _, r := range reviewers {
+		if r.State == domain.ReviewerApproved {
+			n++
+		}
 	}
-	return int(count)
+	return n
 }
 
 // MapDiscussionsToThreads converts raw GitLab discussions into domain threads,
