@@ -31,7 +31,7 @@ func LoadState() State {
 	if dir == "" {
 		return DefaultState()
 	}
-	f, err := os.Open(filepath.Clean(filepath.Join(dir, "state.yaml")))
+	f, err := os.Open(filepath.Clean(filepath.Join(dir, "settings.yaml")))
 	if err != nil {
 		return DefaultState()
 	}
@@ -53,7 +53,7 @@ func SaveState(s State) {
 	if err := os.MkdirAll(dir, stateDirMode); err != nil {
 		return
 	}
-	path := filepath.Join(dir, "state.yaml")
+	path := filepath.Join(dir, "settings.yaml")
 	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, stateFileMode)
 	if err != nil {
 		return
