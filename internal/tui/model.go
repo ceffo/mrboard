@@ -35,9 +35,9 @@ func (f sortField) next() sortField { return (f + 1) % numSortFields }
 func (f sortField) display() string {
 	switch f {
 	case sortByAuthor:
-		return "author"
+		return sortKeyAuthor
 	case sortByAge:
-		return "age"
+		return sortKeyAge
 	default:
 		return "repo·id"
 	}
