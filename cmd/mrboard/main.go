@@ -11,10 +11,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/mrboard/mrboard/internal/app"
 	"github.com/mrboard/mrboard/internal/config"
 	"github.com/mrboard/mrboard/internal/domain"
-	"github.com/mrboard/mrboard/internal/gitlab"
-	"github.com/mrboard/mrboard/internal/service"
 	"github.com/mrboard/mrboard/internal/tui"
 )
 
@@ -68,30 +67,22 @@ func runFetch(args []string) int {
 	if debugPath == "" {
 		debugPath = os.Getenv("MRBOARD_DEBUG")
 	}
-
 	logger := setupLogger(debugPath)
 
-	cfg, err := loadConfig()
+	svc, err := app.New(loadTimeout(), logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1
 	}
-	logger.Debug("config loaded", "sources", len(cfg.Sources), "excluded_authors", cfg.ExcludedAuthors)
+	svc.Logger.Debug("config loaded",
+		"sources", len(svc.Config.Sources),
+		"excluded_authors", svc.Config.ExcludedAuthors,
+	)
 
-	timeout := loadTimeout()
-	client, err := gitlab.NewClient(cfg, timeout, logger)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-
-	src := service.NewGitLabSource(client, cfg)
-	mrs, errs := src.FetchAll()
-
+	mrs, errs := svc.MRSource.FetchAll()
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}
-
 	if len(mrs) == 0 && len(errs) > 0 {
 		return 1
 	}
@@ -100,11 +91,28 @@ func runFetch(args []string) int {
 	for _, mr := range mrs {
 		out = append(out, toJSON(mr))
 	}
-
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(out); err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: encode JSON: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// runBoard loads config and launches the TUI.
+func runBoard() int {
+	svc, err := app.New(loadTimeout(), nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
+		return 1
+	}
+
+	st := config.LoadState()
+	m := tui.New(svc.Config, svc.MRSource, st)
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
 		return 1
 	}
 	return 0
@@ -121,7 +129,7 @@ func parseFetchDebugFlag(args []string) string {
 }
 
 // setupLogger returns a logger that writes JSON debug logs to path,
-// or a no-op discard logger when path is empty.
+// or a discard logger when path is empty.
 func setupLogger(path string) *slog.Logger {
 	if path == "" {
 		return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -132,15 +140,6 @@ func setupLogger(path string) *slog.Logger {
 		return slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
-
-// loadConfig reads the config file using the standard search path.
-func loadConfig() (*config.Config, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	return cfg, nil
 }
 
 // loadTimeout reads MRBOARD_TIMEOUT or returns the 30s default.
@@ -227,31 +226,4 @@ func reviewerStateName(s domain.ReviewerState) string {
 	default:
 		return "unknown"
 	}
-}
-
-// runBoard loads config and launches the TUI.
-func runBoard() int {
-	cfg, err := loadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-
-	timeout := loadTimeout()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client, err := gitlab.NewClient(cfg, timeout, logger)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-
-	src := service.NewGitLabSource(client, cfg)
-	st := config.LoadState()
-	m := tui.New(cfg, src, st)
-	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-	return 0
 }
