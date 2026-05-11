@@ -14,12 +14,16 @@ type KeyMap struct {
 	CloseDetail key.Binding
 	Sort        key.Binding
 	ToggleView  key.Binding
+	Filter      key.Binding
 	Quit        key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Quit}
+	return []key.Binding{
+		k.Up, k.Down, k.Left, k.Right,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Quit,
+	}
 }
 
 // FullHelp implements help.KeyMap.
@@ -55,7 +59,34 @@ var DefaultKeyMap = KeyMap{
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
+	Filter:      key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+}
+
+// FilterPopupKeyMap holds keybindings used inside the filter popup.
+type FilterPopupKeyMap struct {
+	Up     key.Binding
+	Down   key.Binding
+	Toggle key.Binding
+	Apply  key.Binding
+	Cancel key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k FilterPopupKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.Apply, k.Cancel}
+}
+
+// FullHelp implements help.KeyMap.
+func (k FilterPopupKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// DefaultFilterPopupKeyMap is the default keybinding set for the filter popup.
+var DefaultFilterPopupKeyMap = FilterPopupKeyMap{
+	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Toggle: key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle/select")),
+	Apply:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
+	Cancel: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 }
 
 // DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.

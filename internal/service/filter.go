@@ -13,9 +13,16 @@ type FilterOptions struct {
 	CurrentUser string
 	SortField   string // "repo_iid" | "author" | "age"
 	SortDesc    bool
+	// Phases restricts visible MRs to those whose Phase is true in the map.
+	// nil or empty map means all phases are shown.
+	Phases map[domain.MRPhase]bool
+	// Author restricts visible MRs to the given author username. "" = all.
+	Author string
+	// Reviewer restricts visible MRs to those that include the given reviewer username. "" = all.
+	Reviewer string
 }
 
-// FilterAndSort applies the my-view filter and then sorts the slice.
+// FilterAndSort applies all active filters and then sorts the slice.
 // It always returns a new slice; mrs is never mutated.
 func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
 	if opts.MyView && opts.CurrentUser != "" {
@@ -23,6 +30,36 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 		for _, mr := range mrs {
 			if mrIsRelevantToUser(mr, opts.CurrentUser) {
 				filtered = append(filtered, mr)
+			}
+		}
+		mrs = filtered
+	}
+	if len(opts.Phases) > 0 {
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			if opts.Phases[mr.Phase] {
+				filtered = append(filtered, mr)
+			}
+		}
+		mrs = filtered
+	}
+	if opts.Author != "" {
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			if mr.Author == opts.Author {
+				filtered = append(filtered, mr)
+			}
+		}
+		mrs = filtered
+	}
+	if opts.Reviewer != "" {
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			for _, r := range mr.Reviewers {
+				if r.Username == opts.Reviewer {
+					filtered = append(filtered, mr)
+					break
+				}
 			}
 		}
 		mrs = filtered

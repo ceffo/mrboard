@@ -42,13 +42,13 @@ func newColumnWidget(phase domain.MRPhase, styles Styles, width, height int) col
 func phaseName(p domain.MRPhase) string {
 	switch p {
 	case domain.PhaseDraft:
-		return "Draft"
+		return phaseLabelDraft
 	case domain.PhaseNeedsReview:
-		return "Needs Review"
+		return phaseLabelReview
 	case domain.PhaseNeedsAuthorAction:
-		return "Needs Author Action"
+		return phaseLabelAuthorAc
 	case domain.PhaseReadyToMerge:
-		return "Ready to Merge"
+		return phaseLabelReady
 	default:
 		return "Unknown"
 	}

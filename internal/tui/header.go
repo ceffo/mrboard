@@ -11,10 +11,11 @@ import (
 )
 
 type headerWidget struct {
-	styles Styles
-	mrs    []domain.MergeRequest
-	width  int
-	title  string
+	styles       Styles
+	mrs          []domain.MergeRequest
+	width        int
+	title        string
+	filterActive bool
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -24,6 +25,7 @@ func newHeaderWidget(styles Styles) headerWidget {
 func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
+func (h *headerWidget) SetFilterActive(v bool)           { h.filterActive = v }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
 func (h headerWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return h, nil }
@@ -42,6 +44,9 @@ func (h headerWidget) render() string {
 		"Draft:%d  Review:%d  Author:%d  Ready:%d  Total:%d",
 		counts[0], counts[1], counts[2], counts[3], len(h.mrs),
 	))
+	if h.filterActive {
+		stats += "  " + h.styles.FilterActive.Render("[filtered]")
+	}
 
 	titleW := lip.Width(title)
 	statsW := lip.Width(stats)

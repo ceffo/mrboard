@@ -241,13 +241,13 @@ func (d detailWidget) threadLines(idx int, t domain.Thread, innerWidth int) []st
 func mrPhaseLabel(p domain.MRPhase) string {
 	switch p {
 	case domain.PhaseDraft:
-		return "Draft"
+		return phaseLabelDraft
 	case domain.PhaseNeedsReview:
-		return "Needs Review"
+		return phaseLabelReview
 	case domain.PhaseNeedsAuthorAction:
-		return "Needs Author Action"
+		return phaseLabelAuthorAc
 	case domain.PhaseReadyToMerge:
-		return "Ready to Merge"
+		return phaseLabelReady
 	default:
 		return "Unknown"
 	}

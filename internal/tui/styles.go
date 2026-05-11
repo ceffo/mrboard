@@ -34,6 +34,13 @@ type Styles struct {
 	DetailBody                  lipgloss.Style
 	DetailMeta                  lipgloss.Style
 	MRNumberBang                lipgloss.Style // colored "!" sigil in !IID refs
+	PopupBorder                 lipgloss.Style
+	PopupTitle                  lipgloss.Style
+	PopupSection                lipgloss.Style
+	PopupItem                   lipgloss.Style
+	PopupItemFocused            lipgloss.Style
+	PopupHint                   lipgloss.Style
+	FilterActive                lipgloss.Style
 }
 
 // NewStyles creates and returns the default mrboard styles.
@@ -91,5 +98,15 @@ func NewStyles() Styles {
 		DetailBody:          lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
 		DetailMeta:          lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 		MRNumberBang:        lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Bold(true),
+		PopupBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("99")).
+			Padding(0, 1),
+		PopupTitle:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")),
+		PopupSection:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245")),
+		PopupItem:        lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
+		PopupItemFocused: lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("236")).Bold(true),
+		PopupHint:        lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+		FilterActive:     lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
 	}
 }

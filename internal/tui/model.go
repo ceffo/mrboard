@@ -129,28 +129,34 @@ type DetailFetchResultMsg struct {
 
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state       appState
-	header      headerWidget
-	board       boardWidget
-	footer      footerWidget
-	sp          spinnerWidget
-	detail      detailWidget
-	showDetail  bool
-	keys        KeyMap
-	detailKeys  DetailKeyMap
-	styles      Styles
-	width       int
-	height      int
-	errors      []error
-	errMsg      string
-	cfg         *config.Config
-	src         service.MergeRequestSource
-	allMRs      []domain.MergeRequest
-	currentUser string
-	myView      bool
-	sortField   sortField
-	sortDesc    bool
-	fetchCancel context.CancelFunc
+	state          appState
+	header         headerWidget
+	board          boardWidget
+	footer         footerWidget
+	sp             spinnerWidget
+	detail         detailWidget
+	showDetail     bool
+	filterPopup    filterPopupWidget
+	showFilter     bool
+	keys           KeyMap
+	detailKeys     DetailKeyMap
+	filterKeys     FilterPopupKeyMap
+	styles         Styles
+	width          int
+	height         int
+	errors         []error
+	errMsg         string
+	cfg            *config.Config
+	src            service.MergeRequestSource
+	allMRs         []domain.MergeRequest
+	currentUser    string
+	myView         bool
+	sortField      sortField
+	sortDesc       bool
+	filterPhases   map[domain.MRPhase]bool
+	filterAuthor   string
+	filterReviewer string
+	fetchCancel    context.CancelFunc
 }
 
 // New creates a ready-to-run mrboard model, restoring sort/view state from st.
@@ -178,6 +184,7 @@ func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Mo
 		detail:      newDetailWidget(styles),
 		keys:        keys,
 		detailKeys:  DefaultDetailKeyMap,
+		filterKeys:  DefaultFilterPopupKeyMap,
 		styles:      styles,
 		cfg:         cfg,
 		src:         src,
@@ -258,6 +265,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case FilterAppliedMsg:
+		m.filterPhases = msg.Phases
+		m.filterAuthor = msg.Author
+		m.filterReviewer = msg.Reviewer
+		m.showFilter = false
+		m.applyMRFilter()
+		return m, nil
+
+	case FilterCancelledMsg:
+		m.showFilter = false
+		return m, nil
+
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
@@ -281,6 +300,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.state != stateBoard {
 		return m, nil
+	}
+
+	if m.showFilter {
+		updated, cmd := m.filterPopup.Update(msg)
+		m.filterPopup = updated.(filterPopupWidget)
+		return m, cmd
 	}
 
 	if m.showDetail {
@@ -351,6 +376,14 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.openDetail(mr)
 			return m, m.fetchDetailCmd(mr)
 		}
+	case key.Matches(msg, m.keys.Filter):
+		authors, reviewers := uniqueAuthorsReviewers(m.allMRs)
+		m.filterPopup = newFilterPopupWidget(
+			m.styles, m.filterKeys, authors, reviewers,
+			m.filterPhases, m.filterAuthor, m.filterReviewer,
+		)
+		m.showFilter = true
+		return m, nil
 	}
 	return m, nil
 }
@@ -418,6 +451,9 @@ func (m Model) renderContent() string {
 		return lip.Place(m.width, m.height, lip.Center, lip.Center, body)
 
 	case stateBoard:
+		if m.showFilter {
+			return m.renderWithPopup()
+		}
 		headerStr := m.header.render()
 		footerStr := m.footer.render()
 		boardH := m.height - chromeHeight
@@ -458,16 +494,29 @@ func (m Model) renderContent() string {
 	return ""
 }
 
-// applyMRFilter applies the my-view filter then sorts, and pushes the result into the board.
+func (m Model) renderWithPopup() string {
+	popup := m.filterPopup.render()
+	return lip.Place(m.width, m.height, lip.Center, lip.Center, popup)
+}
+
+// applyMRFilter applies all active filters and sort, then pushes the result into the board.
 func (m *Model) applyMRFilter() {
 	mrs := service.FilterAndSort(m.allMRs, service.FilterOptions{
 		MyView:      m.myView,
 		CurrentUser: m.currentUser,
 		SortField:   m.sortField.stateKey(),
 		SortDesc:    m.sortDesc,
+		Phases:      m.filterPhases,
+		Author:      m.filterAuthor,
+		Reviewer:    m.filterReviewer,
 	})
 	m.board.SetMRs(mrs)
 	m.header.SetMRs(mrs)
+	m.header.SetFilterActive(m.isFilterActive())
+}
+
+func (m *Model) isFilterActive() bool {
+	return len(m.filterPhases) > 0 || m.filterAuthor != "" || m.filterReviewer != ""
 }
 
 func (m *Model) saveState() {
