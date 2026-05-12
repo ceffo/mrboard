@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Usage: scripts/release.sh [patch|minor|major]
+# Usage: scripts/release.sh [patch|minor|major] [--force]
 # Reads the latest git tag, bumps the requested component, tags, and pushes.
 # Bootstraps to v0.0.1 if no tags exist.
+# --force skips the gum confirmation prompt (for non-interactive environments).
 set -euo pipefail
 
 bump=${1:-patch}
+force=false
+for arg in "$@"; do [[ "$arg" == "--force" ]] && force=true; done
 
 # Abort if local main has unpushed commits.
 unpushed=$(git log origin/main..main --oneline 2>/dev/null | wc -l | tr -d ' ')
@@ -28,4 +31,9 @@ else
   next="v${major}.${minor}.${patch}"
 fi
 
-echo "$next"
+if [[ "$force" == false ]]; then
+  gum confirm --default=false "Tag and push $next?" || { echo "Aborted."; exit 1; }
+fi
+echo "Tagging $next"
+git tag "$next"
+git push origin "$next"
