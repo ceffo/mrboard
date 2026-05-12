@@ -18,6 +18,7 @@ in a kanban board. Primary use: team daily standups.
 - [`docs/architecture.md`](docs/architecture.md) — package boundaries, data flow, dependency rules
 - [`docs/domain-model.md`](docs/domain-model.md) — domain types, reviewer state machine, phase rules
 - [`docs/tui-conventions.md`](docs/tui-conventions.md) — TUI file structure, widget rules, keybinding conventions
+- [`docs/clean_architecture.md`](docs/clean_architecture.md) — generic principles for building a (micro) service in go following a ports-and-adapters architecture. Use that when you need to redesign a significant part of the architecture or when evaluating architectural improvements.
 
 ## Quality gates
 
@@ -127,20 +128,19 @@ won't find the config file.
 6. Config loaded from `./mrboard.toml` or `$MRBOARD_CONFIG`. PAT also overridable via `$GITLAB_TOKEN`.
 
 
-## Token saving strategies
+## Token saving strategies: YOU MUST COMPLY WITH THIS
 
 Tokens are scarce and costly. You should do your best not to squander them.
 
-- use /file-search skill instead of find and grep 
+- use `/file-search` skill instead of find and grep 
 - don't read whole files if you don't need to. assess the size of a file with `wc` before hand.
-- use toon for handling json outputs (pipe commands through toon)
-- use /caveman skill to save on tokens 
+- use `toon` for handling json outputs (pipe commands through toon)
+- use `/caveman` skill to save on tokens 
 
 ## Minimizing interactions 
 
-Do you best not to bother the user with constant need for authorizing commands.
-DO NOT go for ad-hoc python commands whenever you feel so. If you need tooling, build them once and reuse them.
-
+IMPORTANT: Do your best not to bother the user with constant need for authorizing commands.
+DO NOT go for ad-hoc python commands whenever you feel so. If you need more tooling, propose to build them once in scripts and/or skills to be able to reuse them.
 
 <!-- bv-agent-instructions-v2 -->
 
@@ -197,13 +197,15 @@ bv --recipe high-impact --robot-triage       # Pre-filter: top PageRank scores
 ### br Commands for Issue Management
 
 ```bash
-br ready              # Show issues ready to work (no blockers)
-br list --status=open # All open issues
-br show <id>          # Full issue details with dependencies
+br ready --format toon              # Show issues ready to work (no blockers)
+br list --status=open --format toon # All open issues
+br list --status=in_progress --format toon # Issues in progress
+br show <id> --format toon          # Full issue details with dependencies
 br create --title="..." --type=task --priority=2
-br update <id> --status=in_progress
+br update <id> --status=in_progress # claim a task
 br close <id> --reason="Completed"
 br close <id1> <id2>  # Close multiple issues at once
+br epic close-eligible # 
 br sync --flush-only  # Export DB to JSONL
 ```
 
