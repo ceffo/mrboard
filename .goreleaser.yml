@@ -1,0 +1,47 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mrboard
+    main: ./cmd/mrboard
+    binary: mrboard
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: mrboard
+    name_template: "mrboard_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: mrboard
+    repository:
+      owner: ceffo
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/ceffo/mrboard"
+    description: "GitLab MR review board for daily standups"
+    license: "MIT"
+    install: |
+      bin.install "mrboard"
+    test: |
+      system "#{bin}/mrboard", "version"

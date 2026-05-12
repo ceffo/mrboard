@@ -170,7 +170,7 @@ type Model struct {
 }
 
 // New creates a ready-to-run mrboard model, restoring sort/view state from st.
-func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Model {
+func New(cfg *config.Config, src service.MergeRequestSource, st config.State, version string) Model {
 	styles := NewStyles()
 	keys := DefaultKeyMap
 
@@ -189,7 +189,7 @@ func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Mo
 		state:       stateLoading,
 		header:      newHeaderWidget(styles),
 		board:       newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
-		footer:      newFooterWidget(keys, styles),
+		footer:      newFooterWidget(keys, styles, version),
 		sp:          newSpinnerWidget(),
 		detail:      newDetailWidget(styles),
 		keys:        keys,
@@ -248,6 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.header.SetWidth(msg.Width)
+		m.footer.SetWidth(msg.Width)
 		m.resizeBoard()
 		return m, nil
 

@@ -41,6 +41,7 @@ type Styles struct {
 	PopupItemFocused            lipgloss.Style
 	PopupHint                   lipgloss.Style
 	FilterActive                lipgloss.Style
+	FooterVersion               lipgloss.Style
 }
 
 // NewStyles creates and returns the default mrboard styles.
@@ -108,5 +109,6 @@ func NewStyles() Styles {
 		PopupItemFocused: lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("236")).Bold(true),
 		PopupHint:        lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 		FilterActive:     lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
+		FooterVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color("238")),
 	}
 }

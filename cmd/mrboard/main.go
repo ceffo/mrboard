@@ -25,6 +25,9 @@ const (
 	logFileMode    = 0o600
 )
 
+// Version is set at build time via -ldflags "-X main.Version=<tag>".
+var Version = "dev"
+
 func main() {
 	if len(os.Args) < minArgs {
 		os.Exit(runBoard())
@@ -35,6 +38,9 @@ func main() {
 		os.Exit(runFetch(os.Args[2:]))
 	case "run":
 		os.Exit(runBoard())
+	case "version":
+		fmt.Println(Version)
+		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "mrboard: unknown subcommand %q\n\n", os.Args[1])
 		printUsage()
@@ -114,7 +120,7 @@ func runBoard() int {
 	}
 
 	st := config.LoadState()
-	m := tui.New(svc.Config, svc.MRSource, st)
+	m := tui.New(svc.Config, svc.MRSource, st, Version)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)

@@ -6,7 +6,7 @@ _default:
 
 # builds the cli binary and puts it in the bin directory
 build:
-  go build  -o ./bin/mrboard ./cmd/mrboard/...
+  go build -ldflags "-X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o ./bin/mrboard ./cmd/mrboard/...
 
 # runs unit tests for the project
 test:
@@ -38,4 +38,8 @@ generate:
 
 # installs the mrboard cli tool to the system
 install:
-  go install ./cmd/mrboard/... 
+  go install ./cmd/mrboard/...
+
+# bumps version, tags, and pushes to trigger a release (patch|minor|major)
+release bump="patch":
+  bash scripts/release.sh {{bump}}
