@@ -28,6 +28,4 @@ else
   next="v${major}.${minor}.${patch}"
 fi
 
-gum confirm --default=false "Tag and push $next?" || { echo "Aborted."; exit 1; }
-git tag "$next"
-git push origin "$next"
+echo "$next"

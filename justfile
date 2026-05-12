@@ -42,4 +42,9 @@ install:
 
 # bumps version, tags, and pushes to trigger a release (patch|minor|major)
 release bump="patch":
-  bash scripts/release.sh {{bump}}
+  #!/usr/bin/env bash
+  set -euo pipefail
+  next=$(bash scripts/release.sh {{bump}})
+  gum confirm --default=false "Tag and push $next?" || { echo "Aborted."; exit 1; }
+  git tag "$next"
+  git push origin "$next"
