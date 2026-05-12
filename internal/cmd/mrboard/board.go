@@ -10,12 +10,11 @@ import (
 )
 
 func execBoard(version string) error {
-	svc, err := app.New(loadTimeout(), nil)
+	svc, err := app.New(app.TimeoutFromEnv(), nil)
 	if err != nil {
 		return err
 	}
 	st := config.LoadState()
-	m := tui.New(svc.Config, svc.MRSource, st, version)
-	_, err = tea.NewProgram(m).Run()
+	_, err = tea.NewProgram(tui.New(svc.Config, svc.MRSource, st, version)).Run()
 	return err
 }

@@ -49,6 +49,38 @@ const (
 	PhaseReadyToMerge                     // all threads resolved + enough approvals
 )
 
+// String returns the snake_case name used in JSON output and logs.
+func (s ReviewerState) String() string {
+	switch s {
+	case ReviewerNotStarted:
+		return "not_started"
+	case ReviewerCommented:
+		return "commented"
+	case ReviewerReReviewRequested:
+		return "re_review_requested"
+	case ReviewerApproved:
+		return "approved"
+	default:
+		return "unknown"
+	}
+}
+
+// String returns the snake_case name used in JSON output and logs.
+func (p MRPhase) String() string {
+	switch p {
+	case PhaseDraft:
+		return "draft"
+	case PhaseNeedsReview:
+		return "needs_review"
+	case PhaseNeedsAuthorAction:
+		return "needs_author_action"
+	case PhaseReadyToMerge:
+		return "ready_to_merge"
+	default:
+		return "unknown"
+	}
+}
+
 // ReviewerInfo holds the current state for a single reviewer on an MR.
 type ReviewerInfo struct {
 	Username     string

@@ -43,6 +43,6 @@ fi
 if [[ "$force" == false ]]; then
   gum confirm --default=false "Tag and push $next?" || { echo "Aborted."; exit 1; }
 fi
-echo "Tagging $next"
+echo "Tagging $next" >&2
 git tag "$next"
 git push origin "$next"
