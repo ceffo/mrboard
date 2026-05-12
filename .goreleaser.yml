@@ -32,17 +32,18 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-brews:
+homebrew_casks:
   - name: mrboard
-    directory: Formula
+    directory: Casks
+    binaries:
+      - mrboard
     repository:
       owner: ceffo
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/ceffo/mrboard"
     description: "GitLab MR review board for daily standups"
-    license: "MIT"
-    install: |
-      bin.install "mrboard"
-    test: |
-      system "#{bin}/mrboard", "version"
+    hooks:
+      post:
+        install: |
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mrboard"]
