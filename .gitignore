@@ -7,3 +7,7 @@ mrboard.toml
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# any local md file 
+**/*.local.md
+
