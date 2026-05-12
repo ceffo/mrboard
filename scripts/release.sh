@@ -6,6 +6,13 @@ set -euo pipefail
 
 bump=${1:-patch}
 
+# Abort if local main has unpushed commits.
+unpushed=$(git log origin/main..main --oneline 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$unpushed" -gt 0 ]]; then
+  echo "error: $unpushed unpushed commit(s) on main — push first, then release" >&2
+  exit 1
+fi
+
 latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
 
 if [[ -z "$latest" ]]; then
