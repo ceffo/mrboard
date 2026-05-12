@@ -22,17 +22,17 @@ builds:
 archives:
   - id: mrboard
     name_template: "mrboard_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
 
 checksum:
   name_template: "checksums.txt"
 
-brews:
+homebrew_casks:
   - name: mrboard
     repository:
       owner: ceffo
