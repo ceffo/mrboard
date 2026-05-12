@@ -6,7 +6,7 @@ set -euo pipefail
 
 bump=${1:-patch}
 
-latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
 
 if [[ -z "$latest" ]]; then
   next="v0.0.1"
