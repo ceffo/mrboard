@@ -158,6 +158,7 @@ type Model struct {
 	cfg            *config.Config
 	src            service.MergeRequestSource
 	allMRs         []domain.MergeRequest
+	userMap        map[string]string
 	currentUser    string
 	myView         bool
 	sortField      sortField
@@ -278,11 +279,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filterPhases = msg.Phases
 		m.filterAuthor = msg.Author
 		m.filterReviewer = msg.Reviewer
-		m.showFilter = false
 		m.applyMRFilter()
 		return m, nil
 
-	case FilterCancelledMsg:
+	case FilterClosedMsg:
 		m.showFilter = false
 		return m, nil
 
@@ -391,7 +391,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Filter):
 		authors, reviewers := uniqueAuthorsReviewers(m.allMRs)
 		m.filterPopup = newFilterPopupWidget(
-			m.styles, m.filterKeys, authors, reviewers,
+			m.styles, m.filterKeys, authors, reviewers, m.userMap,
 			m.filterPhases, m.filterAuthor, m.filterReviewer,
 		)
 		m.showFilter = true
@@ -513,6 +513,7 @@ func (m Model) renderWithPopup() string {
 
 // applyMRFilter applies all active filters and sort, then pushes the result into the board.
 func (m *Model) applyMRFilter() {
+	m.userMap = service.BuildUserMap(m.allMRs)
 	mrs := service.FilterAndSort(m.allMRs, service.FilterOptions{
 		MyView:      m.myView,
 		CurrentUser: m.currentUser,

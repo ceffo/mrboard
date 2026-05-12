@@ -143,7 +143,11 @@ func (c cardWidget) renderPills(now time.Time) []string {
 			continue
 		}
 		icon := reviewerIcon(r.State)
-		pill := "[" + r.Username + "·" + icon
+		displayName := r.Name
+		if displayName == "" {
+			displayName = r.Username
+		}
+		pill := "[" + displayName + "·" + icon
 		if !r.WaitingSince.IsZero() {
 			pill += " " + withNBSP(domain.FormatDuration(now.Sub(r.WaitingSince)))
 		}

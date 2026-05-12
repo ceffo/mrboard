@@ -82,6 +82,28 @@ func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
 	return false
 }
 
+// BuildUserMap creates a username → full-name lookup table from reviewer info in the MR list.
+// Authors are not included: domain.MergeRequest stores only the display name, not a separate username.
+func BuildUserMap(mrs []domain.MergeRequest) map[string]string {
+	m := make(map[string]string)
+	for _, mr := range mrs {
+		for _, r := range mr.Reviewers {
+			if r.Username != "" && r.Name != "" {
+				m[r.Username] = r.Name
+			}
+		}
+	}
+	return m
+}
+
+// DisplayName returns the full name for username from userMap, or username if not found.
+func DisplayName(userMap map[string]string, username string) string {
+	if n, ok := userMap[username]; ok {
+		return n
+	}
+	return username
+}
+
 func sortedMRs(mrs []domain.MergeRequest, field string, desc bool) []domain.MergeRequest {
 	out := make([]domain.MergeRequest, len(mrs))
 	copy(out, mrs)

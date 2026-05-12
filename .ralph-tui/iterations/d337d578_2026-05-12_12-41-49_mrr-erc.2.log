@@ -1,0 +1,123 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-erc.2
+- **Task Title**: Username consistency: lookup table, @ prefix, full-name display
+- **Description**: Eliminate the current inconsistency where some places show a GitLab username and
+others show a full name, and where the @ prefix is applied to full names.
+Also fix filter modal interaction to use imme...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-12T16:41:49.638Z
+- **Ended At**: 2026-05-12T16:48:06.590Z
+- **Duration**: 6m 16s
+- **Input Tokens**: 1111
+- **Output Tokens**: 25299
+- **Total Tokens**: 26410
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-erc
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and studying the relevant code to understand what needs to be implemented.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Check file sizes before reading $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go /Users/moncefnaji/code/github.com/...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard/[0m pattern: [96minternal/service/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/filter.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/source.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/[0m pattern: [96mFilterCancelledMsg|FilterAppliedMsg|FilterClosedMsg[0m
+Now I have the full picture. Let me implement all the changes.
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[TodoWrite][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/filter.go[0m edit: "func sortedMRs(mrs []domain.MergeRequest, field st..." → "// BuildUserMap creates a username → full-name loo..."
+[94m[TodoWrite][0m
+Now update `keys.go` to replace `Apply`/`Cancel` with `Close`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// FilterPopupKeyMap holds keybindings used inside..." → "// FilterPopupKeyMap holds keybindings used inside..."
+[94m[TodoWrite][0m
+Now rewrite `filter_popup.go` with all the changes:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// FilterAppliedMsg is sent when the user confirms..." → "// FilterAppliedMsg is sent on every toggle to imm..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// filterPopupWidget is the modal filter popup. It..." → "// filterPopupWidget is the modal filter popup. Ev..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// newFilterPopupWidget builds a popup pre-populat..." → "// lookupName returns the full name for key from m..."
+Now update the `Update` function to use immediate-apply semantics:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	switch {
+	case key.Matches(kMsg, p.keys.Up):
+		if..." → "	switch {
+	case key.Matches(kMsg, p.keys.Up):
+		if..."
+Now update the hint text in `render()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	sb.WriteString("\n" + p.styles.PopupHint.Render("..." → "	sb.WriteString("\n" + p.styles.PopupHint.Render("..."
+[94m[TodoWrite][0m
+Now update `card.go` to use `r.Name` in pills:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "		icon := reviewerIcon(r.State)
+		pill := "[" + r...." → "		icon := reviewerIcon(r.State)
+		displayName := r..."
+[94m[TodoWrite][0m
+Now update `model.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	allMRs         []domain.MergeRequest
+	currentUser..." → "	allMRs         []domain.MergeRequest
+	userMap    ..."
+Now update the `FilterAppliedMsg` handler (no longer closes popup) and replace `FilterCancelledMsg` with `FilterClosedMsg`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FilterAppliedMsg:
+		m.filterPhases = msg.Pha..." → "	case FilterAppliedMsg:
+		m.filterPhases = msg.Pha..."
+Now update `applyMRFilter` to build the userMap, and update the filter popup call to pass `userMap`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// applyMRFilter applies all active filters and so..." → "// applyMRFilter applies all active filters and so..."
+Now update the call to `newFilterPopupWidget` to pass `userMap`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.Filter):
+		authors, ..." → "	case key.Matches(msg, m.keys.Filter):
+		authors, ..."
+[94m[TodoWrite][0m
+[94m[Bash][0m Run just check (fmt + lint + build + test) $ just check 2>&1
+All tests pass. Now do the visual verification.
+[94m[TodoWrite][0m
+[94m[Bash][0m Start TUI via agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for stable state then screenshot initial board $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Cards show full names in pills — no @ prefix. Now verify the filter popup:
+[94m[Bash][0m Open filter modal and screenshot $ agent-tui press f 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Filter popup shows full names without @ prefix. Hint text is correct. Now test immediate-apply by selecting a reviewer:
+[94m[Bash][0m Navigate to Moncef Naji in reviewer list $ done agent-tui wait --stable 2>&1 agent-tui screenshot 2>&1
+[94m[Bash][0m Navigate to Moncef Naji and toggle to test immediate-apply $ agent-tui press ArrowDown 2>&1 && agent-tui type " " 2>&1 && agent-tui wait --stable 2>&1 && agent-t...
+Moncef Naji is selected and the popup remains open — immediate-apply works. Now close with `f` and verify the board filters:
+[94m[Bash][0m Close filter with f and check board is filtered $ agent-tui press f 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Board filtered correctly (12→8 MRs, `[filtered]` badge shown). `f` closed the popup. Now test Esc also closes, and Enter does NOT:
+[94m[Bash][0m Open filter, press Enter (should NOT close) $ # Open filter, try Enter (should NOT close), then Esc (should close) agent-tui press f 2>&1 && agent...
+Enter did NOT close the popup. Now test Esc:
+[94m[Bash][0m Close filter popup with Esc $ agent-tui press Escape 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+All acceptance criteria verified:
+- Esc closes the popup ✓
+- Filter remains active (Total:8, `[filtered]` badge) ✓
+- Board shows correct filtered results ✓
+[94m[Bash][0m Kill agent-tui session $ agent-tui kill 2>&1
+[94m[TodoWrite][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/\.ralph-tui/progress.md[0m edit: "## 2026-05-12 - mrr-erc.1" → "## 2026-05-12 - mrr-erc.2
+- Implemented username c..."
+
+[91m[Error: <tool_use_error>File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-12 - mrr-erc.1" → "## 2026-05-12 - mrr-erc.2
+- Implemented username c..."
+[94m[Bash][0m Close bead and sync $ br close mrr-erc.2 --reason "Username consistency: full names in cards/filter, immediate-apply filte...
+[94m[TodoWrite][0m
+All tasks complete. Here's a summary of what was implemented:
+
+**Files changed:**
+- `internal/service/filter.go` — added `BuildUserMap` (username→fullname from reviewer data) and `DisplayName` (fallback helper)
+- `internal/tui/keys.go` — replaced `Apply`/`Cancel` with `Close` (f/esc) in `FilterPopupKeyMap`
+- `internal/tui/filter_popup.go` — immediate-apply on toggle (emits `FilterAppliedMsg`), `FilterClosedMsg` replaces `FilterCancelledMsg`, `lookupName` helper for reviewer full names, no `@` prefix on author/reviewer labels
+- `internal/tui/card.go` — reviewer pills use `r.Name` (fallback to `r.Username`)
+- `internal/tui/model.go` — `userMap` field, built in `applyMRFilter`, passed to filter popup; `FilterAppliedMsg` no longer closes popup; new `FilterClosedMsg` handler closes it
+
+**Verified:** `just check` passes, visual verification confirmed full names in cards, full names in filter modal without `@`, immediate-apply works (popup stays open), `f` and `Esc` close the popup, `Enter` does not.
+
+<promise>COMPLETE</promise>

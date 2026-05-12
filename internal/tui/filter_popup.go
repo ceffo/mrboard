@@ -11,15 +11,15 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
-// FilterAppliedMsg is sent when the user confirms the filter popup.
+// FilterAppliedMsg is sent on every toggle to immediately update the board filter.
 type FilterAppliedMsg struct {
 	Phases   map[domain.MRPhase]bool
 	Author   string
 	Reviewer string
 }
 
-// FilterCancelledMsg is sent when the user closes the popup without applying.
-type FilterCancelledMsg struct{}
+// FilterClosedMsg is sent when the user closes the filter popup (f or Esc).
+type FilterClosedMsg struct{}
 
 type filterItemKind int
 
@@ -36,8 +36,8 @@ type filterItem struct {
 	value string // author or reviewer username; "" = "all"
 }
 
-// filterPopupWidget is the modal filter popup. It is self-contained: pressing
-// Enter emits FilterAppliedMsg and pressing Esc emits FilterCancelledMsg.
+// filterPopupWidget is the modal filter popup. Every toggle immediately emits
+// FilterAppliedMsg; f or Esc emits FilterClosedMsg to close the popup.
 type filterPopupWidget struct {
 	styles   Styles
 	keys     FilterPopupKeyMap
@@ -57,13 +57,23 @@ const (
 
 var phaseLabels = [4]string{phaseLabelDraft, phaseLabelReview, phaseLabelAuthorAc, phaseLabelReady}
 
+// lookupName returns the full name for key from m, or key itself if not found.
+func lookupName(m map[string]string, key string) string {
+	if n, ok := m[key]; ok {
+		return n
+	}
+	return key
+}
+
 // newFilterPopupWidget builds a popup pre-populated with the current filter state.
-// authors and reviewers are the distinct values available in the current MR list.
+// authors are distinct author display names; reviewers are distinct reviewer usernames.
+// userMap maps reviewer username → full name for display.
 func newFilterPopupWidget(
 	styles Styles,
 	keys FilterPopupKeyMap,
 	authors []string,
 	reviewers []string,
+	userMap map[string]string,
 	phases map[domain.MRPhase]bool,
 	author string,
 	reviewer string,
@@ -79,11 +89,11 @@ func newFilterPopupWidget(
 	}
 	items = append(items, filterItem{kind: filterItemAuthor, label: "All authors", value: ""})
 	for _, a := range authors {
-		items = append(items, filterItem{kind: filterItemAuthor, label: "@" + a, value: a})
+		items = append(items, filterItem{kind: filterItemAuthor, label: a, value: a})
 	}
 	items = append(items, filterItem{kind: filterItemReviewer, label: "All reviewers", value: ""})
 	for _, r := range reviewers {
-		items = append(items, filterItem{kind: filterItemReviewer, label: "@" + r, value: r})
+		items = append(items, filterItem{kind: filterItemReviewer, label: lookupName(userMap, r), value: r})
 	}
 
 	// Convert map → array; nil/empty map means all phases shown.
@@ -125,11 +135,10 @@ func (p filterPopupWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:i
 		}
 	case key.Matches(kMsg, p.keys.Toggle):
 		p = p.toggle()
-	case key.Matches(kMsg, p.keys.Apply):
 		applied := p.buildApplied()
 		return p, func() tea.Msg { return applied }
-	case key.Matches(kMsg, p.keys.Cancel):
-		return p, func() tea.Msg { return FilterCancelledMsg{} }
+	case key.Matches(kMsg, p.keys.Close):
+		return p, func() tea.Msg { return FilterClosedMsg{} }
 	}
 	return p, nil
 }
@@ -197,7 +206,7 @@ func (p filterPopupWidget) render() string {
 		sb.WriteString(line + "\n")
 	}
 
-	sb.WriteString("\n" + p.styles.PopupHint.Render("  ↑/↓ move  space toggle  ↵ apply  esc cancel"))
+	sb.WriteString("\n" + p.styles.PopupHint.Render("  ↑/↓ move  space toggle  f/esc close"))
 
 	return p.styles.PopupBorder.Render(sb.String())
 }

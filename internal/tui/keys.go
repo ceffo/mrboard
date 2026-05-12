@@ -68,13 +68,12 @@ type FilterPopupKeyMap struct {
 	Up     key.Binding
 	Down   key.Binding
 	Toggle key.Binding
-	Apply  key.Binding
-	Cancel key.Binding
+	Close  key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
 func (k FilterPopupKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.Apply, k.Cancel}
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.Close}
 }
 
 // FullHelp implements help.KeyMap.
@@ -84,9 +83,8 @@ func (k FilterPopupKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k
 var DefaultFilterPopupKeyMap = FilterPopupKeyMap{
 	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle/select")),
-	Apply:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
-	Cancel: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	Toggle: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+	Close:  key.NewBinding(key.WithKeys("f", "esc"), key.WithHelp("f/esc", "close")),
 }
 
 // DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.

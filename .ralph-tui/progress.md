@@ -24,6 +24,21 @@ After the no-reviewer filter was added to board.SetMRs, test MRs without reviewe
 
 ---
 
+## 2026-05-12 - mrr-erc.2
+- Implemented username consistency and filter UX overhaul:
+  1. **UserMap (Task A)**: `service.BuildUserMap` + `service.DisplayName` in service/filter.go; builds username→full-name map from reviewer info; model rebuilds it in `applyMRFilter` and stores as `m.userMap`
+  2. **Card full names (Task B)**: `card.go` pills use `r.Name` with fallback to `r.Username`; author line was already full name, no change needed
+  3. **Filter modal full names (Task C)**: `newFilterPopupWidget` accepts `userMap`; author labels use display name without `@`; reviewer labels use `lookupName(userMap, r)` (no `@` prefix)
+  4. **@ prefix audit (Task D)**: removed all `"@" +` constructs from filter popup; no `@` on full names anywhere
+  5. **Immediate-apply + close keybindings (Task E)**: Toggle emits `FilterAppliedMsg` immediately; model no longer closes popup on `FilterAppliedMsg`; added `FilterClosedMsg`; `f`/`Esc` close the popup; `Enter` does nothing inside popup; hint text updated
+- Files changed: `internal/service/filter.go`, `internal/tui/keys.go`, `internal/tui/filter_popup.go`, `internal/tui/card.go`, `internal/tui/model.go`
+- **Learnings:**
+  - `domain.MergeRequest.Author` already stores the full name (set by mapper from `mr.Author.Name`); no username field on author — so UserMap only covers reviewers
+  - Separating "filter changed" (`FilterAppliedMsg`, keeps popup open) from "filter closed" (`FilterClosedMsg`) is the clean immediate-apply pattern
+  - `f` closes filter because popup's Update handles it before the board's `keys.Filter` binding sees it
+  - `lookupName` helper in filter_popup.go avoids adding a service import to that file
+---
+
 ## 2026-05-12 - mrr-erc.1
 - Implemented three display fixes:
   1. **No-reviewer filter**: `hasAssignedReviewer()` helper in board.go; `SetMRs` skips MRs with no non-empty reviewer username
