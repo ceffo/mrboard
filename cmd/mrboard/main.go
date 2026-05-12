@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/spf13/cobra"
 
 	"github.com/ceffo/mrboard/internal/app"
 	"github.com/ceffo/mrboard/internal/config"
@@ -21,7 +22,6 @@ import (
 
 const (
 	defaultTimeout = 30 * time.Second
-	minArgs        = 2
 	logFileMode    = 0o600
 )
 
@@ -29,31 +29,16 @@ const (
 var Version = "dev"
 
 func main() {
-	if len(os.Args) < minArgs {
-		os.Exit(runBoard())
-	}
-
-	switch os.Args[1] {
-	case "fetch":
-		os.Exit(runFetch(os.Args[2:]))
-	case "run":
-		os.Exit(runBoard())
-	case "version":
-		fmt.Println(Version)
-		os.Exit(0)
-	default:
-		fmt.Fprintf(os.Stderr, "mrboard: unknown subcommand %q\n\n", os.Args[1])
-		printUsage()
+	if err := buildRootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func printUsage() {
-	fmt.Print(`mrboard — GitLab MR review board
-
-Usage:
-  mrboard                          Launch TUI board (default)
-  mrboard fetch [--debug <path>]   Fetch MRs and print as JSON
+func buildRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "mrboard",
+		Short: "GitLab MR review board for daily standups",
+		Long: `mrboard displays GitLab merge requests in a kanban board.
 
 Config search path (first match wins):
   $MRBOARD_CONFIG
@@ -64,14 +49,67 @@ Environment:
   MRBOARD_CONFIG   Explicit config file path
   GITLAB_TOKEN     Override gitlab.token from config
   MRBOARD_TIMEOUT  HTTP timeout (default: 30s, e.g. "60s")
-  MRBOARD_DEBUG    Write debug logs to this file path
-`)
+  MRBOARD_DEBUG    Write debug logs to this file path`,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return execBoard()
+		},
+	}
+
+	root.AddCommand(buildRunCmd())
+	root.AddCommand(buildFetchCmd())
+	root.AddCommand(buildVersionCmd())
+
+	return root
 }
 
-// runFetch fetches all MRs and prints them as a JSON array to stdout.
-// Returns exit code: 0 on success or partial success, 1 if all sources fail.
-func runFetch(args []string) int {
-	debugPath := parseFetchDebugFlag(args)
+func buildRunCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "run",
+		Short: "Launch the TUI board (default)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return execBoard()
+		},
+	}
+}
+
+func buildFetchCmd() *cobra.Command {
+	var debugPath string
+	cmd := &cobra.Command{
+		Use:   "fetch",
+		Short: "Fetch MRs and print as JSON",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return execFetch(debugPath)
+		},
+	}
+	cmd.Flags().StringVar(&debugPath, "debug", "", "write debug logs to this path (overrides $MRBOARD_DEBUG)")
+	return cmd
+}
+
+func buildVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print mrboard version",
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Println(Version)
+		},
+	}
+}
+
+func execBoard() error {
+	svc, err := app.New(loadTimeout(), nil)
+	if err != nil {
+		return err
+	}
+	st := config.LoadState()
+	m := tui.New(svc.Config, svc.MRSource, st, Version)
+	p := tea.NewProgram(m)
+	_, err = p.Run()
+	return err
+}
+
+func execFetch(debugPath string) error {
 	if debugPath == "" {
 		debugPath = os.Getenv("MRBOARD_DEBUG")
 	}
@@ -80,8 +118,7 @@ func runFetch(args []string) int {
 	timeout := loadTimeout()
 	svc, err := app.New(timeout, logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
+		return err
 	}
 	svc.Logger.Debug("config loaded",
 		"sources", len(svc.Config.Sources),
@@ -95,7 +132,7 @@ func runFetch(args []string) int {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}
 	if len(mrs) == 0 && len(errs) > 0 {
-		return 1
+		os.Exit(1)
 	}
 
 	out := make([]mrJSON, 0, len(mrs))
@@ -104,43 +141,9 @@ func runFetch(args []string) int {
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: encode JSON: %v\n", err)
-		return 1
-	}
-	return 0
+	return enc.Encode(out)
 }
 
-// runBoard loads config and launches the TUI.
-func runBoard() int {
-	svc, err := app.New(loadTimeout(), nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-
-	st := config.LoadState()
-	m := tui.New(svc.Config, svc.MRSource, st, Version)
-	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "mrboard: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
-// parseFetchDebugFlag extracts the --debug <path> value from fetch subcommand args.
-func parseFetchDebugFlag(args []string) string {
-	for i := 0; i < len(args)-1; i++ {
-		if args[i] == "--debug" {
-			return args[i+1]
-		}
-	}
-	return ""
-}
-
-// setupLogger returns a logger that writes JSON debug logs to path,
-// or a discard logger when path is empty.
 func setupLogger(path string) *slog.Logger {
 	if path == "" {
 		return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -153,7 +156,6 @@ func setupLogger(path string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-// loadTimeout reads MRBOARD_TIMEOUT or returns the 30s default.
 func loadTimeout() time.Duration {
 	if v := os.Getenv("MRBOARD_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
@@ -165,7 +167,6 @@ func loadTimeout() time.Duration {
 	return defaultTimeout
 }
 
-// mrJSON is the JSON representation of a domain.MergeRequest for the fetch subcommand.
 type mrJSON struct {
 	ID             int            `json:"id"`
 	Title          string         `json:"title"`
@@ -191,11 +192,7 @@ func toJSON(mr domain.MergeRequest) mrJSON {
 			State:    reviewerStateName(r.State),
 		})
 	}
-
 	now := time.Now()
-	timeInPhase := domain.FormatDuration(now.Sub(mr.WaitingSince))
-	timeOpen := domain.FormatDuration(now.Sub(mr.CreatedAt))
-
 	return mrJSON{
 		ID:             mr.ID,
 		Title:          mr.Title,
@@ -203,8 +200,8 @@ func toJSON(mr domain.MergeRequest) mrJSON {
 		Phase:          phaseName(mr.Phase),
 		Author:         mr.Author,
 		ReviewerStates: reviewers,
-		TimeInPhase:    timeInPhase,
-		TimeOpen:       timeOpen,
+		TimeInPhase:    domain.FormatDuration(now.Sub(mr.WaitingSince)),
+		TimeOpen:       domain.FormatDuration(now.Sub(mr.CreatedAt)),
 		RoundTrips:     mr.RoundTripCount,
 	}
 }
