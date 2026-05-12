@@ -31,8 +31,14 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 
 func someMRs() []domain.MergeRequest {
 	return []domain.MergeRequest{
-		{ID: 1, IID: 10, Author: "alice", ProjectPath: "org/alpha"},
-		{ID: 2, IID: 20, Author: "bob", ProjectPath: "org/beta"},
+		{
+			ID: 1, IID: 10, Author: "alice", ProjectPath: "org/alpha",
+			Reviewers: []domain.ReviewerInfo{{Username: "bob", State: domain.ReviewerNotStarted}},
+		},
+		{
+			ID: 2, IID: 20, Author: "bob", ProjectPath: "org/beta",
+			Reviewers: []domain.ReviewerInfo{{Username: "alice", State: domain.ReviewerNotStarted}},
+		},
 	}
 }
 

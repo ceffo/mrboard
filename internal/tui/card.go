@@ -67,11 +67,11 @@ func (c cardWidget) render() string {
 		openLabel = withNBSP(domain.FormatDuration(now.Sub(base)))
 	}
 
-	rawLines := []string{
-		c.renderLine1(authorLabel, openLabel, innerWidth),
-		c.styles.CardTitle.Render(truncateWidth(c.mr.Title, innerWidth)),
-		"",
+	rawLines := []string{c.renderLine1(authorLabel, openLabel, innerWidth)}
+	for _, tl := range wrapTitleLines(c.mr.Title, innerWidth) {
+		rawLines = append(rawLines, c.styles.CardTitle.Render(tl))
 	}
+	rawLines = append(rawLines, "")
 
 	rawLines = append(rawLines, c.wrapPills(now, innerWidth)...)
 
@@ -220,6 +220,45 @@ func withNBSP(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// wrapTitleLines wraps title into at most two lines within width display columns.
+// Line 1 breaks at the last word boundary that fits; line 2 is hard-truncated with "…".
+func wrapTitleLines(title string, width int) []string {
+	if width <= 0 {
+		return []string{""}
+	}
+	if lip.Width(title) <= width {
+		return []string{title}
+	}
+	words := strings.Fields(title)
+	if len(words) == 0 {
+		return []string{truncateWidth(title, width)}
+	}
+	line1 := ""
+	splitAt := 0
+	for i, w := range words {
+		candidate := line1
+		if candidate != "" {
+			candidate += " "
+		}
+		candidate += w
+		if lip.Width(candidate) <= width {
+			line1 = candidate
+			splitAt = i + 1
+		} else {
+			break
+		}
+	}
+	if splitAt == 0 {
+		// Even the first word is wider than the column — hard-truncate to one line.
+		return []string{truncateWidth(title, width)}
+	}
+	if splitAt >= len(words) {
+		return []string{line1}
+	}
+	remaining := strings.Join(words[splitAt:], " ")
+	return []string{line1, truncateWidth(remaining, width)}
 }
 
 // truncateWidth truncates s to fit within maxWidth display columns using

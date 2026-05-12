@@ -60,6 +60,9 @@ func (b *boardWidget) SetSize(width, height int) {
 func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
 	var byPhase [numColumns][]domain.MergeRequest
 	for _, mr := range mrs {
+		if !hasAssignedReviewer(mr) {
+			continue
+		}
 		idx := int(mr.Phase)
 		if idx >= 0 && idx < numColumns {
 			byPhase[idx] = append(byPhase[idx], mr)
@@ -69,6 +72,16 @@ func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
 		b.columns[i].SetCards(byPhase[i])
 	}
 	b.setInitialFocus()
+}
+
+// hasAssignedReviewer reports whether mr has at least one reviewer with a non-empty username.
+func hasAssignedReviewer(mr domain.MergeRequest) bool {
+	for _, r := range mr.Reviewers {
+		if r.Username != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *boardWidget) setInitialFocus() {

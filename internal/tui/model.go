@@ -109,6 +109,15 @@ const (
 	chromeHeight       = headerHeight + footerHeight
 )
 
+// tickMsg is sent every minute to refresh displayed durations.
+type tickMsg time.Time
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
 // FetchResultMsg carries the result of a successful (or partial) fetch.
 type FetchResultMsg struct {
 	MRs    []domain.MergeRequest
@@ -199,9 +208,9 @@ func New(cfg *config.Config, src service.MergeRequestSource, st config.State) Mo
 	return m
 }
 
-// Init starts the spinner and fires the first data fetch.
+// Init starts the spinner, fires the first data fetch, and schedules the minute ticker.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Init(), makeFetchCmd(m.src))
+	return tea.Batch(m.sp.Init(), makeFetchCmd(m.src), tickCmd())
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
@@ -276,6 +285,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FilterCancelledMsg:
 		m.showFilter = false
 		return m, nil
+
+	case tickMsg:
+		return m, tickCmd()
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
