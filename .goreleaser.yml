@@ -9,7 +9,7 @@ builds:
     main: ./cmd/mrboard
     binary: mrboard
     ldflags:
-      - -s -w -X main.Version={{.Version}}
+      - -s -w -X github.com/ceffo/mrboard/internal/cmd/mrboard.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:

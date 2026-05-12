@@ -6,7 +6,7 @@ _default:
 
 # builds the cli binary and puts it in the bin directory
 build:
-  go build -ldflags "-X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o ./bin/mrboard ./cmd/mrboard/...
+  go build -ldflags "-X github.com/ceffo/mrboard/internal/cmd/mrboard.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o ./bin/mrboard ./cmd/mrboard/...
 
 # runs unit tests for the project
 test:
