@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Usage: scripts/release.sh [patch|minor|major] [--force]
+# Usage: scripts/release.sh [patch|minor|major] [--force] [--dry-run]
 # Reads the latest git tag, bumps the requested component, tags, and pushes.
 # Bootstraps to v0.0.1 if no tags exist.
-# --force skips the gum confirmation prompt (for non-interactive environments).
+# --force   skips the gum confirmation prompt (for non-interactive environments).
+# --dry-run prints the next version without tagging or pushing.
 set -euo pipefail
 
 bump=${1:-patch}
 force=false
-for arg in "$@"; do [[ "$arg" == "--force" ]] && force=true; done
+dry_run=false
+for arg in "$@"; do
+  [[ "$arg" == "--force" ]] && force=true
+  [[ "$arg" == "--dry-run" ]] && dry_run=true
+done
 
 # Abort if local main has unpushed commits.
 unpushed=$(git log origin/main..main --oneline 2>/dev/null | wc -l | tr -d ' ')
@@ -31,6 +36,10 @@ else
   next="v${major}.${minor}.${patch}"
 fi
 
+if [[ "$dry_run" == true ]]; then
+  echo "dry-run: would tag and push $next"
+  exit 0
+fi
 if [[ "$force" == false ]]; then
   gum confirm --default=false "Tag and push $next?" || { echo "Aborted."; exit 1; }
 fi
