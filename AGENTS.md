@@ -24,8 +24,6 @@ in a kanban board. Primary use: team daily standups.
 
 Every bead must pass before closing (use the justfile — never bare `go` commands):
 ```
-just build      # build binary to ./bin/mrboard
-just test       # run all tests
 just check      # fmt + lint + build + test
 just generate   # regenerate all mocks (run after changing any interface in internal/service)
 ```
@@ -134,7 +132,7 @@ Tokens are scarce and costly. You should do your best not to squander them.
 
 - use `/file-search` skill instead of find and grep 
 - don't read whole files if you don't need to. assess the size of a file with `wc` before hand.
-- use `toon` for handling json outputs (pipe commands through toon)
+- use `toon` for raw JSON outputs (e.g. `bv --robot-* | toon`); `br` commands use `--format toon` flag instead — never combine both
 - use `/caveman` skill to save on tokens 
 
 ## Minimizing interactions 
