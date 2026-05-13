@@ -16,6 +16,15 @@ The `internal/app/services.go` composition root converts AppConfig → pkg/gitla
 ### mockery.yml must match current package path
 After moving the `MergeRequestSource` interface, update `.mockery.yml` → `packages:` to the new import path and run `just generate`. The old `internal/service/mocks/` dir is gone; the new mock lives at `internal/domain/service/mrsvc/mocks/`.
 
+### StateStore: call store.Load() inside tui.New(), not in the composition root
+`tui.New()` owns the `StateStore` and calls `Load()` at construction time. The composition
+root (`board.go`) only creates the concrete `statestore.YAMLStore` and passes it as the
+interface — it never touches state values directly.
+
+### noopStore pattern for TUI unit tests
+Define a `noopStore{}` (returns `DefaultState()`, discards `Save()`) inside `model_test.go`
+(same package) instead of importing a concrete adapter. Keeps TUI tests free of I/O.
+
 ---
 
 ## 2026-05-12 - mrr-xhh
@@ -41,5 +50,22 @@ After moving the `MergeRequestSource` interface, update `.mockery.yml` → `pack
   - The `enrichMR` goroutine had a variable shadowing issue (`a` used both as receiver and local var for approvals); renamed inner to avoid shadow
   - `just generate` (mockery v3) picks up the package change in `.mockery.yml` with zero extra flags
   - Import alias needed in `gitlabadpt.go` for `pkg/gitlab` (`pkggitlab`) and `internal/log` (`ilog`) to avoid collision with the `gl` alias for the go-gitlab SDK
+---
+
+## 2026-05-12 - mrr-rt6
+- Implemented bead mrr-rt6: TUI state ownership, StateStore port, YAML-backed adapter
+- **Files created:**
+  - `internal/tui/state.go` — `ViewMode` enum, `State` struct (replaces `config.State`), `StateStore` interface, `DefaultState()`
+  - `internal/adapters/statestore/statestore.go` — `YAMLStore` implementing `tui.StateStore`; stores state in `{Dir}/state.yaml` (0600), creates dir (0700); missing file returns DefaultState without error
+- **Files deleted:** `internal/config/state.go`
+- **Files updated:**
+  - `internal/tui/model.go` — `myView bool` → `viewMode ViewMode`, `New()` accepts `StateStore` (loads on construction, saves on state change), removed `config.SaveState` call
+  - `internal/tui/model_test.go` — added `noopStore{}` test double, updated `New()` calls
+  - `internal/tui/export_test.go` — `MyView()` now returns `m.viewMode == ViewMine`
+  - `internal/cmd/mrboard/board.go` — creates `statestore.YAMLStore` using `config.XDGDataDir()`, passes to `tui.New()`
+- **Learnings:**
+  - `revive` lint requires either a comment on the const block or on each exported const; a doc comment on the block (`// ViewMode values.`) satisfies it
+  - `tui.New()` owns the state load — the composition root only constructs the concrete store; this keeps the boundary clean
+  - `noopStore{}` (same package, returns `DefaultState()`, discards `Save()`) is the right test double for TUI unit tests — no I/O, no import of adapter
 ---
 

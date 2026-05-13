@@ -1,0 +1,233 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-xhh
+- **Task Title**: Service layer: internal/domain/service/mrsvc/ + pkg/gitlab/ + internal/adapters/gitlabadpt/
+- **Description**: Second bead of the clean architecture refactor (epic mrr-l7g). Restructures the GitLab client and MR service into proper clean architecture layers.
+
+## Scope
+
+### 1. pkg/gitlab/ — raw HTTP client, no ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-13T03:40:49.161Z
+- **Ended At**: 2026-05-13T03:48:13.727Z
+- **Duration**: 7m 24s
+- **Input Tokens**: 1812
+- **Output Tokens**: 34218
+- **Total Tokens**: 36030
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-l7g
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m List Go files and root directory structure $ find /Users/moncefnaji/code/github.com/mrboard -type f -name "*.go" | head -50 && echo "---" && ls /...
+[94m[Bash][0m Read go.mod to understand module name and deps $ cat go.mod
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/fetcher.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/source.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/gitlab_source.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/filter.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/app/services.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/mocks/mock_MergeRequestSource.go[0m
+Now let me check the remaining files I need to understand before implementing.
+[94m[Bash][0m Read mockery config and justfile $ cat /Users/moncefnaji/code/github.com/mrboard/.mockery.yml && echo "---" && cat /Users/moncefnaji/co...
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/service|internal/gitlab|internal/app[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/filter_test.go[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mservice\.[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log/log.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/client_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/service/filter_test.go[0m
+I have a complete picture of the codebase. Let me implement the refactoring now. I'll create all new files and update callers.
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[TodoWrite][0m
+[94m[Bash][0m Create pkg/gitlab directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/pkg/gitlab
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/config.go[0m "// Package gitlab provides a thin HTTP client wrapper around the GitLab REST API.
+// It has no dependency on internal/* — callers pass a Config built from their own
+// config layer.
+package gitlab
+
+im... (361 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m "package gitlab
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+)
+
+const perPage = 100
+
+// Client wraps the go-gitlab API client and exposes the m... (7652 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client_test.go[0m "package gitlab
+
+import (
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+)
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestNewClient_ValidConfig(t *testing... (490 chars)"
+[94m[TodoWrite][0m
+[94m[Bash][0m Create mrsvc package directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m "// Package mrsvc owns the MergeRequest service port and its configuration types.
+// Adapters in internal/adapters/ implement MergeRequestSource; the TUI and
+// future handlers depend only on this pack... (1116 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/filter.go[0m "package mrsvc
+
+import (
+	"sort"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// FilterOptions controls which MRs are shown and in what order.
+// The zero value shows all MRs sorted by repo+IID asce... (3682 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/filter_test.go[0m "package mrsvc_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+)
+
+// helpers
+
+const (
+	userAlice  = "alice"
+	use... (6460 chars)"
+[94m[TodoWrite][0m
+[94m[Bash][0m Create gitlabadpt adapter directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m "package gitlabadpt
+
+import (
+	"strings"
+	"time"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// reReviewPrefix is the system note body prefix GitLab emits... (6307 chars)"
+Now I need to read the mapper_test to understand what it tests, then write the new one:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/gitlab/mapper_test.go[0m
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m "package gitlabadpt
+
+import (
+	"testing"
+	"time"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+func ptr[T any](v T) *T { return &v }
+
+var (
+	t0 = time.Date(... (7043 chars)"
+Now I'll create the main adapter file that combines the fetcher and gitlab_source logic:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m "// Package gitlabadpt implements mrsvc.MergeRequestSource using the GitLab REST API.
+package gitlabadpt
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/cef... (6724 chars)"
+[94m[TodoWrite][0m
+Now update `.mockery.yml` to point to the new package:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.mockery.yml[0m edit: "packages:
+  github.com/ceffo/mrboard/internal/serv..." → "packages:
+  github.com/ceffo/mrboard/internal/doma..."
+[94m[Bash][0m Regenerate mocks with updated mockery config $ just generate 2>&1
+[94m[Bash][0m Check new mock was generated $ ls /Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mocks/
+Good, the mock was generated. Now update the callers:
+[94m[TodoWrite][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	"github.com/ceffo/mrboard/internal/config"
+	"gith..." → "	"github.com/ceffo/mrboard/internal/config"
+	"gith..."
+Now I need to update all the `service.` references in model.go:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mservice\.[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "service." → "mrsvc."
+Now update model_test.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	"github.com/ceffo/mrboard/internal/service/mocks"" → "	"github.com/ceffo/mrboard/internal/domain/service..."
+Now update `internal/app/services.go` to use the new packages:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/app/services.go[0m "// Package app is the composition root for mrboard binaries.
+// It is the only place in the codebase where concrete adapter types meet
+// service constructors. All other packages see interfaces only.
+... (1688 chars)"
+Now check `internal/cmd/mrboard/board.go` — it calls `tui.New` with `svc.MRSource` which now has type `mrsvc.MergeRequestSource`. That should be fine. Let me also check what `tui.New` signature is now and whether it needs updating:
+[94m[Bash][0m Check tui.New signature $ grep -n "func New\|func tui.New" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | h...
+Good. Now let me delete the old packages and run the checks:
+[94m[TodoWrite][0m
+[94m[Bash][0m Delete old internal/gitlab and internal/service packages $ rm -rf /Users/moncefnaji/code/github.com/mrboard/internal/gitlab /Users/moncefnaji/code/github.com/m...
+[94m[TodoWrite][0m
+[94m[Bash][0m Run just check (fmt + lint + build + test) $ just check 2>&1
+All tests pass, lint is clean, build succeeds. Let me do a final verification of the import constraints:
+[94m[Bash][0m Verify no old package imports remain $ grep -r "internal/gitlab\|internal/service" /Users/moncefnaji/code/github.com/mrboard --include="*.g...
+[94m[Bash][0m Verify pkg/gitlab has no internal imports $ grep -r '"github.com/ceffo/mrboard/internal/.*"' /Users/moncefnaji/code/github.com/mrboard/pkg --inc...
+All constraints satisfied. Now close the bead, flush, and update progress.md:
+[94m[TodoWrite][0m
+[94m[Bash][0m Close bead mrr-xhh $ br close mrr-xhh --reason "Restructured GitLab client into pkg/gitlab/, service port into internal/d...
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+### pkg/..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Completed bead mrr-xhh — full ports-and-adapters restructure of the GitLab client and MR service layer.
+
+**Why**: Part of epic mrr-l7g clean architecture refactor. Enforces strict layer boun... (1402 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement bead mrr-xhh: restructure GitLab client + MR service into clean architecture layers (pkg/gitlab, mrsvc port, gitlabadpt adapter).
+
+## Instructions
+- Use justfile for all quality gate... (2255 chars)"
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_judge[0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+`just check` passed cleanly — 0 lint issues, all tests green.
+
+**Summary of mrr-xhh:**
+
+| New package | Role |
+|---|---|
+| `pkg/gitlab/` | Raw HTTP client — zero `internal/*` imports |
+| `internal/domain/service/mrsvc/` | `MergeRequestSource` port + `FilterAndSort` + mocks |
+| `internal/adapters/gitlabadpt/` | Adapter implementing the port; mapper + fetcher logic |
+
+**Deleted:** `internal/gitlab/` and `internal/service/` (all files migrated).
+
+**Key gotcha:** `enrichMR` had a variable shadow — method receiver `a *GitLabAdapter` clashed with the inner goroutine local for approvals. Also needed import aliases `pkggitlab` and `ilog` in the adapter file to avoid name collisions.
+
+<promise>COMPLETE</promise>

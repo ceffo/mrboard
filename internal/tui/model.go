@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"log/slog"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -157,10 +158,11 @@ type Model struct {
 	errMsg         string
 	cfg            *config.Config
 	src            mrsvc.MergeRequestSource
+	store          StateStore
 	allMRs         []domain.MergeRequest
 	userMap        map[string]string
 	currentUser    string
-	myView         bool
+	viewMode       ViewMode
 	sortField      sortField
 	sortDesc       bool
 	filterPhases   map[domain.MRPhase]bool
@@ -169,16 +171,26 @@ type Model struct {
 	fetchCancel    context.CancelFunc
 }
 
-// New creates a ready-to-run mrboard model, restoring sort/view state from st.
-func New(cfg *config.Config, src mrsvc.MergeRequestSource, st config.State, version string) Model {
+// New creates a ready-to-run mrboard model. It loads persisted UI state from
+// store; on error it logs and falls back to DefaultState().
+func New(cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string) Model {
+	st, err := store.Load()
+	if err != nil {
+		slog.Default().Error("statestore: load failed, using defaults", "err", err)
+		st = DefaultState()
+	}
+
 	styles := NewStyles()
 	keys := DefaultKeyMap
 
 	sf := sortFieldFromState(st.SortField)
 	keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(sf, st.SortDesc)))
 
-	myView := st.MyView && cfg.CurrentUser != ""
-	if myView {
+	viewMode := st.ViewMode
+	if viewMode == ViewMine && cfg.CurrentUser == "" {
+		viewMode = ViewAll
+	}
+	if viewMode == ViewMine {
 		keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
 	}
 	if cfg.CurrentUser == "" {
@@ -198,12 +210,13 @@ func New(cfg *config.Config, src mrsvc.MergeRequestSource, st config.State, vers
 		styles:      styles,
 		cfg:         cfg,
 		src:         src,
+		store:       store,
 		currentUser: cfg.CurrentUser,
-		myView:      myView,
+		viewMode:    viewMode,
 		sortField:   sf,
 		sortDesc:    st.SortDesc,
 	}
-	if myView {
+	if viewMode == ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
 	}
 	return m
@@ -369,13 +382,14 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.applyMRFilter()
 		m.saveState()
 	case key.Matches(msg, m.keys.ToggleView):
-		m.myView = !m.myView
-		if m.myView {
-			m.header.SetTitle("mrboard — @" + m.currentUser)
-			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
-		} else {
+		if m.viewMode == ViewMine {
+			m.viewMode = ViewAll
 			m.header.SetTitle("mrboard")
 			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view"))
+		} else {
+			m.viewMode = ViewMine
+			m.header.SetTitle("mrboard — @" + m.currentUser)
+			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
 		}
 		m.footer.SetKeyMap(m.keys)
 		m.applyMRFilter()
@@ -516,7 +530,7 @@ func (m Model) renderWithPopup() string {
 func (m *Model) applyMRFilter() {
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
 	mrs := mrsvc.FilterAndSort(m.allMRs, mrsvc.FilterOptions{
-		MyView:      m.myView,
+		MyView:      m.viewMode == ViewMine,
 		CurrentUser: m.currentUser,
 		SortField:   m.sortField.stateKey(),
 		SortDesc:    m.sortDesc,
@@ -534,11 +548,13 @@ func (m *Model) isFilterActive() bool {
 }
 
 func (m *Model) saveState() {
-	config.SaveState(config.State{
+	if err := m.store.Save(State{
 		SortField: m.sortField.stateKey(),
 		SortDesc:  m.sortDesc,
-		MyView:    m.myView,
-	})
+		ViewMode:  m.viewMode,
+	}); err != nil {
+		slog.Default().Error("statestore: save failed", "err", err)
+	}
 }
 
 func openBrowser(url string) tea.Cmd {

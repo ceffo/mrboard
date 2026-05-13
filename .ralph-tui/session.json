@@ -3,10 +3,10 @@
   "sessionId": "765b4394-4ba8-4fe7-aa4b-caa5a195621d",
   "status": "running",
   "startedAt": "2026-05-13T03:40:44.801Z",
-  "updatedAt": "2026-05-13T03:48:13.760Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-05-13T03:53:23.143Z",
+  "currentIteration": 1,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -29,8 +29,8 @@
       {
         "id": "mrr-xhh",
         "title": "Service layer: internal/domain/service/mrsvc/ + pkg/gitlab/ + internal/adapters/gitlabadpt/",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-5f3",
@@ -40,7 +40,18 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "mrr-xhh",
+      "taskTitle": "Service layer: internal/domain/service/mrsvc/ + pkg/gitlab/ + internal/adapters/gitlabadpt/",
+      "taskCompleted": true,
+      "durationMs": 444566,
+      "startedAt": "2026-05-13T03:40:49.161Z",
+      "endedAt": "2026-05-13T03:48:13.727Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
   "activeTaskIds": [],
