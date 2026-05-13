@@ -3,10 +3,10 @@
   "sessionId": "765b4394-4ba8-4fe7-aa4b-caa5a195621d",
   "status": "running",
   "startedAt": "2026-05-13T03:40:44.801Z",
-  "updatedAt": "2026-05-13T04:01:19.552Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-05-13T04:01:19.691Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "mrr-r4e",
         "title": "Wiring: internal/core/ + root context + signal handling + --config flag",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-rt6",
@@ -60,6 +60,16 @@
       "durationMs": 307947,
       "startedAt": "2026-05-13T03:48:15.152Z",
       "endedAt": "2026-05-13T03:53:23.099Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "mrr-r4e",
+      "taskTitle": "Wiring: internal/core/ + root context + signal handling + --config flag",
+      "taskCompleted": true,
+      "durationMs": 474929,
+      "startedAt": "2026-05-13T03:53:24.579Z",
+      "endedAt": "2026-05-13T04:01:19.508Z"
     }
   ],
   "skippedTaskIds": [],

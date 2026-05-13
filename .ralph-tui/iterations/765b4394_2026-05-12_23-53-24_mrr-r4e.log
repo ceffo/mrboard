@@ -1,0 +1,334 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-r4e
+- **Task Title**: Wiring: internal/core/ + root context + signal handling + --config flag
+- **Description**: Fourth and final bead of the clean architecture refactor (epic mrr-l7g). Assembles the new composition root, wires the root context, and updates CLI entry points.
+
+## Scope
+
+### 1. internal/core/ — co...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-13T03:53:24.579Z
+- **Ended At**: 2026-05-13T04:01:19.508Z
+- **Duration**: 7m 54s
+- **Input Tokens**: 410
+- **Output Tokens**: 24205
+- **Total Tokens**: 1184134
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-l7g
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Let me quickly explore the current structure to understand what needs to be done.
+[94m[Bash][0m $ \ls -la internal/ && echo "---" && \ls -la internal/app/ 2>/dev/null || echo "NO internal/app" && ec...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/app/services.go[0m
+[94m[Bash][0m $ \ls internal/cmd/mrboard/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/root.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/config'][0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/log'][0m
+[94m[Bash][0m $ \ls internal/config/ && echo "---" && \ls internal/log/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log/log.go[0m
+[94m[Bash][0m $ wc -l internal/config/config.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m $ wc -l internal/adapters/statestore/statestore.go && head -30 internal/adapters/statestore/statestore...
+[94m[Bash][0m $ cat internal/tui/state.go | head -40
+Now I have enough context to implement the bead. Let me delegate to an agent for the full implementation.
+[94m[Agent][0m Implement bead mrr-r4e: composition root + signal handling
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/app/ && \ls /Users/moncefnaji/code/github.com...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/app/services.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/root.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/log'][0m
+[94m[Glob][0m pattern: [96m/Users/moncefnaji/code/github.com/mrboard/internal/log/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/config'][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log/log.go[0m
+[94m[Glob][0m pattern: [96m/Users/moncefnaji/code/github.com/mrboard/internal/config/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/core
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m "// Package core is the composition root for mrboard binaries.
+// It wires concrete adapter types to service interfaces.
+// No TUI imports are allowed here.
+package core
+
+import (
+	"context"
+	"io"
+	"lo... (2242 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m "// Package main is the entry point for mrboard.
+package main
+
+import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+
+	mrboardcmd "github.com/ceffo/mrboard/internal/cmd/mrboard"
+)
+
+func main() {
+	ctx, stop... (359 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/root.go[0m "// Package mrboardcmd wires the cobra CLI and boots the application.
+package mrboardcmd
+
+import (
+	"context"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/... (1890 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m "package mrboardcmd
+
+import (
+	"context"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/ceffo/mrboard/internal/core"
+	"github.com/ceffo/mrboard/internal/tui"
+)
+
+func execBoard(ctx context.Context, c *co... (333 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m "package mrboardcmd
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ceffo/mrboard/internal/core"
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+func ... (2339 chars)"
+[94m[Bash][0m $ rm -rf /Users/moncefnaji/code/github.com/mrboard/internal/app
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/cmd/mrboard/board.go:12:16: unused-parameter: parameter 'ctx' seems to be unused, consider removing or renaming it as _ (revive)
+func execBoard(ctx context.Context, c *core.Core, version string) error {
+               ^
+internal/core/core.go:30:10: unused-parameter: parameter 'ctx' seems to be unused, consider removing or renaming it as _ (revive)
+func New(ctx context.Context, cfg *config.AppConfig) (*Core, error) {
+         ^
+2 issues:
+* revive: 2
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "func New(ctx context.Context, cfg *config.AppConfi..." → "func New(_ context.Context, cfg *config.AppConfig)..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "func execBoard(ctx context.Context, c *core.Core, ..." → "func execBoard(_ context.Context, c *core.Core, ve..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "import (
+	"context"
+
+	tea "charm.land/bubbletea/v2..." → "import (
+	tea "charm.land/bubbletea/v2"
+
+	"github...."
+[94m[Bash][0m $ just check 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/CLAUDE.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/CLAUDE.md[0m edit: "| Layer | Package | Purpose |
+|---|---|---|
+| Type..." → "| Layer | Package | Purpose |
+|---|---|---|
+| Type..."
+
+[91m[Error: Refusing to write through symlink: /Users/moncefnaji/code/github.com/mrboard/CLAUDE.md. Resolve the symlink and pass the real target path explicitly.][0m
+[94m[Bash][0m $ readlink /Users/moncefnaji/code/github.com/mrboard/CLAUDE.md
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/AGENTS.md[0m edit: "| Layer | Package | Purpose |
+|---|---|---|
+| Type..." → "| Layer | Package | Purpose |
+|---|---|---|
+| Type..."
+
+[91m[Error: <tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/AGENTS.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/AGENTS.md[0m edit: "| Layer | Package | Purpose |
+|---|---|---|
+| Type..." → "| Layer | Package | Purpose |
+|---|---|---|
+| Type..."
+[94m[Bash][0m $ \   echo "=== context.Background() (excluding main.go) ===" && \   grep -r 'context\.Background()' ....
+
+[91m[Error: Exit code 1
+=== context.Background() (excluding main.go) ===
+./internal/tui/model.go:	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+./internal/tui/model.go:	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+./internal/tui/model.go:		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+=== context.TODO() ===][0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "## What
+Implemented bead mrr-r4e — final clean-architecture wiring bead.
+
+## Changes
+- Created `internal/core/core.go` — composition root; wires logger, GitLab client, adapter, statestore. No TUI impo... (1090 chars)"
+Let me verify the quality gate audits pass and then run TUI verification.
+[94m[Bash][0m $ grep -r 'context\.Background()' . --include='*.go' | grep -v 'cmd/mrboard/main.go' | grep -v '_test....
+[94m[Bash][0m $ grep -r 'context\.TODO()' . --include='*.go' && echo "audit passed" || echo "audit passed (no result...
+[94m[Bash][0m $ grep -r 'internal/app' . --include='*.go' && echo "FOUND" || echo "audit passed (no results)"
+There are `context.Background()` calls in `internal/tui/model.go` that need to be fixed. Let me check the TUI model.
+[94m[Bash][0m $ grep -n 'context\.Background\|context\.WithTimeout\|tea\.NewProgram\|func.*tea\.\|WithContext' inter...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+I need to fix the `context.Background()` calls in the TUI model. The fix: add a `baseCtx` to the Model and pass ctx from `execBoard`. Let me check the bubbletea v2 API for WithContext first.
+[94m[Bash][0m $ grep -r 'WithContext\|withContext' $(go env GOPATH)/pkg/mod/charm.land/ 2>/dev/null | grep -i 'func\...
+[94m[Bash][0m $ grep -r 'WithContext' $(go env GOMODCACHE)/charm.land/ 2>/dev/null | head -10
+Good. `tea.WithContext(ctx)` exists and will cause the program to exit when the signal context is cancelled. But the TUI's internal `context.Background()` calls for fetch timeouts still need to be fixed.
+
+The right fix: add `baseCtx context.Context` to the Model, update `tui.New` to accept ctx, and update board.go to pass it. Let me make these changes.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I'll make the targeted changes:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filterPhases   map[domain.MRPhase]bool
+	filterAut..." → "	filterPhases   map[domain.MRPhase]bool
+	filterAut..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// New creates a ready-to-run mrboard model. It lo..." → "// New creates a ready-to-run mrboard model. It lo..."
+Now update the model construction to store baseCtx and the fetch functions to use it:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		sortDesc:    st.SortDesc,
+	}
+	if viewMode == Vie..." → "		sortDesc:    st.SortDesc,
+		baseCtx:     ctx,
+	}..."
+Now update `makeFetchCmd` to accept a base context, `Init` to pass it, and `startFetch`/`fetchDetailCmd` to use `m.baseCtx`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// Init starts the spinner, fires the first data f..." → "// Init starts the spinner, fires the first data f..."
+Now fix `startFetch` and `fetchDetailCmd`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) startFetch() tea.Cmd {
+	ctx, cance..." → "func (m *Model) startFetch() tea.Cmd {
+	ctx, cance..."
+Now fix `fetchDetailCmd`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m Model) fetchDetailCmd(mr *domain.MergeRequ..." → "func (m Model) fetchDetailCmd(mr *domain.MergeRequ..."
+Now update board.go to pass ctx to tui.New and use tea.WithContext:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "func execBoard(_ context.Context, c *core.Core, ve..." → "func execBoard(ctx context.Context, c *core.Core, ..."
+Now update the model_test.go to pass a context to `tui.New`:
+[94m[Bash][0m $ grep -n 'tui\.New\|New(' internal/tui/model_test.go | head -20
+[94m[Bash][0m $ s/New(\&config\.Config{}, src, noopStore{}, "dev")/New(\&config.Config{}, src, noopStore{}, "dev", c...
+[94m[Bash][0m $ head -5 internal/tui/model_test.go
+[94m[Bash][0m $ grep -n 'context' internal/tui/model_test.go
+Need to add the `context` import to the test file:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "import (
+	"errors"
+	"testing"" → "import (
+	"context"
+	"errors"
+	"testing""
+Now run quality checks:
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/model.go:177:94: context-as-argument: context.Context should be the first parameter of a function (revive)
+func New(cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string, ctx context.Context) Model {
+                                                                                             ^
+internal/tui/model.go:234:49: context-as-argument: context.Context should be the first parameter of a function (revive)
+func makeFetchCmd(src mrsvc.MergeRequestSource, base context.Context) tea.Cmd {
+                                                ^
+2 issues:
+* revive: 2
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Need to move `ctx` to first parameter in both functions:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func New(cfg *config.Config, src mrsvc.MergeReques..." → "func New(ctx context.Context, cfg *config.Config, ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func makeFetchCmd(src mrsvc.MergeRequestSource, ba..." → "func makeFetchCmd(base context.Context, src mrsvc...."
+Update the call site for `makeFetchCmd` and `tui.New` in board.go/tests:
+[94m[Bash][0m $ grep -n 'makeFetchCmd\|tui\.New\|New(' internal/tui/model.go | grep -v '//'
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	return tea.Batch(m.sp.Init(), makeFetchCmd(m.src,..." → "	return tea.Batch(m.sp.Init(), makeFetchCmd(m.base..."
+Now update board.go and model_test.go to use the new signature:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "		tui.New(c.Config, c.MRSource, c.StateStore, vers..." → "		tui.New(ctx, c.Config, c.MRSource, c.StateStore,..."
+[94m[Bash][0m $ s/New(\&config\.Config{}, src, noopStore{}, "dev", context\.Background())/New(context.Background(), ...
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/model.go:177:1: The line is 121 characters long, which exceeds the maximum of 120 characters. (lll)
+func New(ctx context.Context, cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string) Model {
+^
+1 issues:
+* lll: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Line too long — wrap the function signature:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func New(ctx context.Context, cfg *config.Config, ..." → "func New(
+	ctx context.Context, cfg *config.Config..."
+[94m[Bash][0m $ just check 2>&1
+All checks pass. Now run the final audits and TUI verification:
+[94m[Bash][0m $ grep -r 'context\.Background()' . --include='*.go' | grep -v 'cmd/mrboard/main.go' | grep -v '_test....
+[94m[Bash][0m $ grep -r 'context\.TODO()' . --include='*.go' && echo "FAIL" || echo "PASS: no context.TODO()"
+[94m[Bash][0m $ grep -r 'internal/app' . --include='*.go' && echo "FAIL" || echo "PASS: no internal/app references"
+All audits pass. Now TUI verification:
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh
+[94m[Bash][0m $ agent-tui wait --stable && agent-tui screenshot
+TUI is fully working end-to-end with the new wiring. Kill the session and close the bead.
+[94m[Bash][0m $ agent-tui kill
+[94m[Bash][0m $ br close mrr-r4e --reason "Composition root (internal/core), signal context in main, PersistentPreRu...
+Now update `progress.md` and save memory:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "### pkg/gitlab has zero internal/* imports
+`pkg/gi..." → "### internal/core is the composition root (interna..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-12 - mrr-rt6" → "## 2026-05-13 - mrr-r4e
+- Implemented bead mrr-r4e..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Completed bead mrr-r4e — final clean architecture wiring bead. Created `internal/core/` composition root, added signal context in main, wired PersistentPreRunE, deleted `internal/app/`.
+
+**W... (1500 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement bead mrr-r4e: final clean architecture wiring — composition root, signal handling, context propagation, delete internal/app.
+
+## Instructions
+- Use justfile for all quality gates (`j... (2085 chars)"
+<promise>COMPLETE</promise>
+
+Bead mrr-r4e is done. Here's a summary of what was implemented:
+
+**Created:**
+- `internal/core/core.go` — composition root replacing `internal/app/`; wires logger → GitLab client → adapter → statestore into `Core{MRSource, StateStore, Config, Logger}`
+
+**Updated:**
+- `cmd/mrboard/main.go` — `signal.NotifyContext` for SIGINT/SIGTERM; passes `ctx` to `Execute(ctx)`
+- `internal/cmd/mrboard/root.go` — `Execute` now takes `ctx`; added `--log-level` flag; `PersistentPreRunE` builds `core.New`, attaches logger to ctx, stores core via `coreKey{}`
+- `internal/cmd/mrboard/board.go` — uses core from context; `tea.WithContext(ctx)` for program-level cancellation
+- `internal/cmd/mrboard/fetch.go` — uses signal ctx as parent for fetch timeout (no more `context.Background()`)
+- `internal/tui/model.go` — `New(ctx, ...)` takes ctx as first arg; `baseCtx` field used in all fetch goroutines
+
+**Deleted:** `internal/app/`
+
+**All audits pass:**
+- `grep context.Background()` → only `cmd/mrboard/main.go`
+- `grep context.TODO()` → empty
+- `grep internal/app` → empty
+- `just check` → 0 issues, all tests green
+- agent-tui screenshot confirms full TUI working end-to-end
