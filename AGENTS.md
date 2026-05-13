@@ -126,6 +126,32 @@ won't find the config file.
 6. Config loaded from `./mrboard.toml` or `$MRBOARD_CONFIG`. PAT also overridable via `$GITLAB_TOKEN`.
 
 
+## Engram memory: YOU MUST COMPLY WITH THIS
+
+At the **start of every session**, retrieve context before touching any code:
+```bash
+# 1. detect project
+mcp__plugin_engram_engram__mem_current_project
+
+# 2. load recent session history
+mcp__plugin_engram_engram__mem_context
+
+# 3. search for relevant prior decisions if working on a specific area
+mcp__plugin_engram_engram__mem_search  query="<topic>"
+```
+
+During the session, **save proactively** after every significant decision, bug fix, or discovery:
+```
+mcp__plugin_engram_engram__mem_save  title="..."  type="decision|bugfix|pattern|architecture"
+```
+
+At the **end of every session** (before saying "done"), save a summary:
+```
+mcp__plugin_engram_engram__mem_session_summary  content="## Goal\n...\n## Discoveries\n...\n## Accomplished\n..."
+```
+
+Never skip these steps. Memory is how work persists across context resets.
+
 ## Token saving strategies: YOU MUST COMPLY WITH THIS
 
 Tokens are scarce and costly. You should do your best not to squander them.
