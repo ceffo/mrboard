@@ -1,4 +1,4 @@
-package service
+package mrsvc
 
 import (
 	"sort"
@@ -68,7 +68,6 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 }
 
 // mrIsRelevantToUser reports whether an MR should appear in "my view".
-// An MR is relevant if the user authored it, or is a reviewer whose turn it is.
 func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
 	if mr.Author == username {
 		return true
@@ -83,7 +82,6 @@ func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
 }
 
 // BuildUserMap creates a username → full-name lookup table from reviewer info in the MR list.
-// Authors are not included: domain.MergeRequest stores only the display name, not a separate username.
 func BuildUserMap(mrs []domain.MergeRequest) map[string]string {
 	m := make(map[string]string)
 	for _, mr := range mrs {

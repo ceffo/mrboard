@@ -1,5 +1,3 @@
-// Package gitlab provides a thin wrapper around the xanzy/go-gitlab client
-// for fetching MR data needed by mrboard.
 package gitlab
 
 import (
@@ -10,30 +8,27 @@ import (
 	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
-
-	"github.com/ceffo/mrboard/internal/config"
 )
 
 const perPage = 100
 
-// Client wraps the xanzy/go-gitlab client and exposes the methods needed by
-// the fetcher to retrieve raw MR data.
+// Client wraps the go-gitlab API client and exposes the methods needed to
+// retrieve raw MR data.
 type Client struct {
 	gl     *gl.Client
 	logger *slog.Logger
 
-	// projectArchived caches archival status keyed by project ID to avoid
+	// projectArchivedCache caches archival status keyed by project ID to avoid
 	// redundant API calls when filtering MRs from user sources.
 	projectArchivedCache map[int64]bool
 }
 
-// NewClient creates an authenticated GitLab client from the app config.
-// timeout controls the HTTP request deadline for every API call; pass 0 for no timeout.
-// logger is used to record API call telemetry; pass slog.New(slog.DiscardHandler) for silence.
-func NewClient(cfg *config.Config, timeout time.Duration, logger *slog.Logger) (*Client, error) {
-	httpClient := &http.Client{Timeout: timeout}
-	c, err := gl.NewClient(cfg.GitLab.Token,
-		gl.WithBaseURL(cfg.GitLab.URL),
+// NewClient creates an authenticated GitLab client.
+// logger is used for API call telemetry; pass slog.New(slog.DiscardHandler) for silence.
+func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
+	httpClient := &http.Client{Timeout: cfg.Timeout}
+	c, err := gl.NewClient(cfg.Token,
+		gl.WithBaseURL(cfg.URL),
 		gl.WithHTTPClient(httpClient),
 	)
 	if err != nil {
@@ -42,8 +37,8 @@ func NewClient(cfg *config.Config, timeout time.Duration, logger *slog.Logger) (
 	return &Client{gl: c, logger: logger, projectArchivedCache: make(map[int64]bool)}, nil
 }
 
-// ListGroupMRs returns all open merge requests for the given group ID (name or numeric ID).
-// excludedAuthor, if non-empty, is applied server-side as not[author_username] to reduce payload size.
+// ListGroupMRs returns all open merge requests for the given group ID.
+// excludedAuthor, if non-empty, is applied server-side as not[author_username].
 func (c *Client) ListGroupMRs(ctx context.Context, groupID, excludedAuthor string) ([]*gl.BasicMergeRequest, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: list group MRs", "group", groupID)
@@ -127,7 +122,7 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 	return all, nil
 }
 
-// GetMRApprovals returns the approval status (who approved, how many required) for an MR.
+// GetMRApprovals returns the approval status for an MR.
 func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*gl.MergeRequestApprovals, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: get approvals", "project", projectID, "mr", mrIID)
@@ -142,7 +137,7 @@ func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*g
 	return approvals, nil
 }
 
-// GetMRDescription fetches the description (body text) of a single MR.
+// GetMRDescription fetches the description of a single MR.
 func (c *Client) GetMRDescription(ctx context.Context, projectID, mrIID int64) (string, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: get MR description", "project", projectID, "mr", mrIID)
@@ -157,8 +152,7 @@ func (c *Client) GetMRDescription(ctx context.Context, projectID, mrIID int64) (
 	return mr.Description, nil
 }
 
-// ListNonArchivedProjectIDs returns the set of non-archived project IDs for a
-// group. IncludeSubGroups is set so that nested group projects are included.
+// ListNonArchivedProjectIDs returns the set of non-archived project IDs for a group.
 func (c *Client) ListNonArchivedProjectIDs(ctx context.Context, groupID string) (map[int64]bool, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: list non-archived projects", "group", groupID)
@@ -186,8 +180,7 @@ func (c *Client) ListNonArchivedProjectIDs(ctx context.Context, groupID string) 
 	return ids, nil
 }
 
-// IsProjectArchived reports whether the given project is archived. Results are
-// cached in the client so repeated calls for the same project ID are free.
+// IsProjectArchived reports whether the given project is archived. Results are cached.
 func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, error) {
 	if archived, ok := c.projectArchivedCache[projectID]; ok {
 		return archived, nil

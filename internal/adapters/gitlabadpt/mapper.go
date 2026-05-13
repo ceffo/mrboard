@@ -1,4 +1,4 @@
-package gitlab
+package gitlabadpt
 
 import (
 	"strings"
@@ -15,12 +15,6 @@ const reReviewPrefix = "requested review from @"
 
 // DeriveReviewerStates processes GitLab discussions chronologically and returns
 // a ReviewerInfo slice for the active reviewers listed on the MR.
-//
-// Active reviewers are taken from mr.Reviewers (the GitLab Reviewers field).
-// Approval state comes from approvals.ApprovedBy.
-// Discussion notes are scanned for:
-//   - Non-system notes authored by a reviewer → updates lastComment timestamp.
-//   - System notes matching "requested review from @<username>" → updates lastReReview timestamp.
 func DeriveReviewerStates(
 	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
@@ -30,7 +24,6 @@ func DeriveReviewerStates(
 		return nil
 	}
 
-	// Build set of approved usernames.
 	approvedBy := make(map[string]bool, len(approvals.ApprovedBy))
 	for _, a := range approvals.ApprovedBy {
 		if a.User != nil {
@@ -48,10 +41,6 @@ func DeriveReviewerStates(
 		ts[r.Username] = &reviewerTimestamps{}
 	}
 
-	// Walk all notes in chronological order.
-	// GitLab returns discussions in chronological order; notes within a
-	// discussion are also in order. We iterate discussion by discussion, note
-	// by note — effectively chronological.
 	for _, d := range discussions {
 		for _, note := range d.Notes {
 			if note.CreatedAt == nil {
@@ -60,7 +49,6 @@ func DeriveReviewerStates(
 			t := *note.CreatedAt
 
 			if note.System {
-				// Check for re-review request system notes.
 				username := extractReReviewUsername(note.Body)
 				if username == "" {
 					continue
@@ -73,7 +61,6 @@ func DeriveReviewerStates(
 				continue
 			}
 
-			// Non-system note: check if the author is an active reviewer.
 			if rts, ok := ts[note.Author.Username]; ok {
 				if t.After(rts.lastComment) {
 					rts.lastComment = t
@@ -108,19 +95,15 @@ func DeriveReviewerStates(
 	return result
 }
 
-// extractReReviewUsername parses a system note body and returns the reviewer
-// username if the note is a re-review request, or "" otherwise.
 func extractReReviewUsername(body string) string {
 	if !strings.HasPrefix(body, reReviewPrefix) {
 		return ""
 	}
 	username := strings.TrimPrefix(body, reReviewPrefix)
-	// Strip any trailing punctuation or whitespace GitLab might append.
 	username = strings.TrimRight(username, " \t\n\r")
 	return username
 }
 
-// deriveState applies the four state rules to produce the reviewer's state.
 func deriveState(approved bool, lastComment, lastReReview time.Time) domain.ReviewerState {
 	if approved {
 		return domain.ReviewerApproved
@@ -135,7 +118,6 @@ func deriveState(approved bool, lastComment, lastReReview time.Time) domain.Revi
 }
 
 // MapMR converts raw GitLab API responses into a domain.MergeRequest.
-// requiredApprovals comes from project config, not the API, so it is passed in.
 func MapMR(
 	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
@@ -143,7 +125,6 @@ func MapMR(
 	requiredApprovals int,
 ) domain.MergeRequest {
 	reviewers := DeriveReviewerStates(mr, discussions, approvals)
-
 	openThreads := countOpenThreads(discussions)
 
 	var createdAt time.Time
@@ -181,9 +162,6 @@ func MapMR(
 		reviewers,
 	)
 
-	// MR-level WaitingSince: how long the ball has been in the current court.
-	// NeedsAuthorAction → latest comment time across Commented reviewers.
-	// NeedsReview → MR creation time (or latest re-review request).
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:
 		for _, r := range reviewers {
@@ -203,8 +181,6 @@ func MapMR(
 	return domainMR
 }
 
-// countRoundTrips returns the total number of "requested review from @X" system
-// notes across all discussions. Each re-request counts independently; no dedup.
 func countRoundTrips(discussions []*gl.Discussion) int {
 	count := 0
 	for _, d := range discussions {
@@ -217,7 +193,6 @@ func countRoundTrips(discussions []*gl.Discussion) int {
 	return count
 }
 
-// countOpenThreads returns the number of unresolved, resolvable discussion threads.
 func countOpenThreads(discussions []*gl.Discussion) int {
 	count := 0
 	for _, d := range discussions {
@@ -243,8 +218,7 @@ func countApprovals(reviewers []domain.ReviewerInfo) int {
 }
 
 // MapDiscussionsToThreads converts raw GitLab discussions into domain threads,
-// filtering out system-only threads (e.g. pipeline events) so only human
-// comment threads are surfaced in the detail panel.
+// filtering out system-only threads.
 func MapDiscussionsToThreads(discussions []*gl.Discussion) []domain.Thread {
 	threads := make([]domain.Thread, 0, len(discussions))
 	for _, d := range discussions {
@@ -277,8 +251,6 @@ func MapDiscussionsToThreads(discussions []*gl.Discussion) []domain.Thread {
 	return threads
 }
 
-// projectPathFromRef extracts the namespace/project path from a GitLab
-// IssueReferences struct. References.Full looks like "group/project!123".
 func projectPathFromRef(refs *gl.IssueReferences) string {
 	if refs == nil {
 		return ""

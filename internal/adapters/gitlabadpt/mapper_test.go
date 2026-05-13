@@ -1,4 +1,4 @@
-package gitlab
+package gitlabadpt
 
 import (
 	"testing"
@@ -71,8 +71,6 @@ func mr(reviewers ...*gl.BasicUser) *gl.BasicMergeRequest {
 	}
 }
 
-// TestDeriveReviewerStates_NotStarted verifies a reviewer who has never commented
-// and was never re-requested appears in the result with ReviewerNotStarted state.
 func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	result := DeriveReviewerStates(m, nil, approvals())
@@ -85,13 +83,11 @@ func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_Commented verifies that a reviewer whose last comment
-// is more recent than the last re-review request gets ReviewerCommented.
 func TestDeriveReviewerStates_Commented(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	discussions := []*gl.Discussion{
 		discussion(systemNote("requested review from @alice", t1)),
-		discussion(userNote("alice", t2)), // alice comments after re-request
+		discussion(userNote("alice", t2)),
 	}
 
 	result := DeriveReviewerStates(m, discussions, approvals())
@@ -101,13 +97,11 @@ func TestDeriveReviewerStates_Commented(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_ReReviewRequested verifies that a re-review request
-// more recent than the reviewer's last comment produces ReviewerReReviewRequested.
 func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	discussions := []*gl.Discussion{
-		discussion(userNote("alice", t1)),                          // alice comments first
-		discussion(systemNote("requested review from @alice", t2)), // then re-requested
+		discussion(userNote("alice", t1)),
+		discussion(systemNote("requested review from @alice", t2)),
 	}
 
 	result := DeriveReviewerStates(m, discussions, approvals())
@@ -117,8 +111,6 @@ func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_Approved verifies that a reviewer in ApprovedBy gets
-// ReviewerApproved regardless of discussion state.
 func TestDeriveReviewerStates_Approved(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	discussions := []*gl.Discussion{
@@ -132,15 +124,11 @@ func TestDeriveReviewerStates_Approved(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_MultipleReviewers verifies independent state derivation
-// for multiple reviewers in the same MR.
 func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"), basicUser("bob", "Bob"))
 	discussions := []*gl.Discussion{
-		// alice: commented after re-request → Commented
 		discussion(systemNote("requested review from @alice", t1)),
 		discussion(userNote("alice", t2)),
-		// bob: re-requested after comment → ReReviewRequested
 		discussion(userNote("bob", t1)),
 		discussion(systemNote("requested review from @bob", t3)),
 	}
@@ -165,8 +153,6 @@ func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_NonReviewerNotesIgnored verifies that comments from
-// non-reviewers do not affect reviewer state — alice remains NotStarted.
 func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	discussions := []*gl.Discussion{
@@ -183,7 +169,6 @@ func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
 	}
 }
 
-// TestDeriveReviewerStates_NoReviewers verifies nil return when there are no reviewers.
 func TestDeriveReviewerStates_NoReviewers(t *testing.T) {
 	m := mr()
 	result := DeriveReviewerStates(m, nil, approvals())
@@ -192,8 +177,6 @@ func TestDeriveReviewerStates_NoReviewers(t *testing.T) {
 	}
 }
 
-// TestCountRoundTrips verifies that every "requested review from @X" system note
-// is counted, including multiple requests to the same reviewer.
 func TestCountRoundTrips(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -251,7 +234,6 @@ func TestCountRoundTrips(t *testing.T) {
 	}
 }
 
-// TestMapMR_RoundTripCount verifies MapMR populates RoundTripCount correctly.
 func TestMapMR_RoundTripCount(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	discussions := []*gl.Discussion{
@@ -265,7 +247,6 @@ func TestMapMR_RoundTripCount(t *testing.T) {
 	}
 }
 
-// TestExtractReReviewUsername covers the system note parsing helper.
 func TestExtractReReviewUsername(t *testing.T) {
 	cases := []struct {
 		body string

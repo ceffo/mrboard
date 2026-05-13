@@ -13,7 +13,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/service"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 // sortField identifies which MR attribute to sort by.
@@ -156,7 +156,7 @@ type Model struct {
 	errors         []error
 	errMsg         string
 	cfg            *config.Config
-	src            service.MergeRequestSource
+	src            mrsvc.MergeRequestSource
 	allMRs         []domain.MergeRequest
 	userMap        map[string]string
 	currentUser    string
@@ -170,7 +170,7 @@ type Model struct {
 }
 
 // New creates a ready-to-run mrboard model, restoring sort/view state from st.
-func New(cfg *config.Config, src service.MergeRequestSource, st config.State, version string) Model {
+func New(cfg *config.Config, src mrsvc.MergeRequestSource, st config.State, version string) Model {
 	styles := NewStyles()
 	keys := DefaultKeyMap
 
@@ -216,7 +216,7 @@ func (m Model) Init() tea.Cmd {
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
 // The cancel is also called via defer inside the goroutine once the fetch finishes.
-func makeFetchCmd(src service.MergeRequestSource) tea.Cmd {
+func makeFetchCmd(src mrsvc.MergeRequestSource) tea.Cmd {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
@@ -514,8 +514,8 @@ func (m Model) renderWithPopup() string {
 
 // applyMRFilter applies all active filters and sort, then pushes the result into the board.
 func (m *Model) applyMRFilter() {
-	m.userMap = service.BuildUserMap(m.allMRs)
-	mrs := service.FilterAndSort(m.allMRs, service.FilterOptions{
+	m.userMap = mrsvc.BuildUserMap(m.allMRs)
+	mrs := mrsvc.FilterAndSort(m.allMRs, mrsvc.FilterOptions{
 		MyView:      m.myView,
 		CurrentUser: m.currentUser,
 		SortField:   m.sortField.stateKey(),

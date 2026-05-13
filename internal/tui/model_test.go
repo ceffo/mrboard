@@ -9,7 +9,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/service/mocks"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc/mocks"
 )
 
 // makeModel creates a Model wired to a mock source and transitions it to

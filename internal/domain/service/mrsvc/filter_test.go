@@ -1,11 +1,11 @@
-package service_test
+package mrsvc_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/service"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 // helpers
@@ -48,7 +48,7 @@ func TestFilterAndSort_MyViewOff_ReturnsAll(t *testing.T) {
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 1, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: false, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: false, CurrentUser: userAlice})
 	if len(got) != 2 {
 		t.Fatalf("expected 2, got %d", len(got))
 	}
@@ -59,7 +59,7 @@ func TestFilterAndSort_MyViewOn_FiltersByAuthor(t *testing.T) {
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 1, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: true, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
 	if len(got) != 1 || got[0].Author != userAlice {
 		t.Fatalf("expected alice's MR only, got %v", got)
 	}
@@ -70,7 +70,7 @@ func TestFilterAndSort_MyViewOn_IncludesNotStartedReviewer(t *testing.T) {
 		mr(1, "bob", "repo/a", 1, t0, reviewer(domain.ReviewerNotStarted)),
 		mr(2, userBob, "repo/b", 2, t0, reviewer(domain.ReviewerApproved)),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: true, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
 	if len(got) != 1 || got[0].IID != 1 {
 		t.Fatalf("expected only the not-started reviewer MR, got %v", got)
 	}
@@ -80,7 +80,7 @@ func TestFilterAndSort_MyViewOn_IncludesReReviewRequested(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, "bob", "repo/a", 1, t0, reviewer(domain.ReviewerReReviewRequested)),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: true, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
 	if len(got) != 1 {
 		t.Fatalf("expected 1, got %d", len(got))
 	}
@@ -90,7 +90,7 @@ func TestFilterAndSort_MyViewOn_ExcludesCommentedReviewer(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, "bob", "repo/a", 1, t0, reviewer(domain.ReviewerCommented)),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: true, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
 	if len(got) != 0 {
 		t.Fatalf("expected 0, got %d", len(got))
 	}
@@ -101,8 +101,7 @@ func TestFilterAndSort_MyViewOn_EmptyUserReturnsAll(t *testing.T) {
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 1, t0),
 	}
-	// CurrentUser empty: my-view is a no-op
-	got := service.FilterAndSort(mrs, service.FilterOptions{MyView: true, CurrentUser: ""})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: ""})
 	if len(got) != 2 {
 		t.Fatalf("expected 2, got %d", len(got))
 	}
@@ -116,7 +115,7 @@ func TestFilterAndSort_SortRepoIID_Ascending(t *testing.T) {
 		mr(1, userAlice, "repo/a", 10, t0),
 		mr(3, userCarol, "repo/a", 2, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortRepoID})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortRepoID})
 	want := []int{2, 10, 5} // repo/a IID 2, repo/a IID 10, repo/b IID 5
 	for i, mr := range got {
 		if mr.IID != want[i] {
@@ -131,8 +130,7 @@ func TestFilterAndSort_SortRepoIID_Descending(t *testing.T) {
 		mr(1, userAlice, "repo/a", 10, t0),
 		mr(2, userBob, "repo/b", 5, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortRepoID, SortDesc: true})
-	// desc on ProjectPath means repo/b first, then repo/a highest IID first
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortRepoID, SortDesc: true})
 	want := []int{5, 10, 2}
 	for i, mr := range got {
 		if mr.IID != want[i] {
@@ -149,7 +147,7 @@ func TestFilterAndSort_SortAuthor_Ascending(t *testing.T) {
 		mr(2, "alice", "repo/b", 2, t0),
 		mr(3, "bob", "repo/c", 3, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortAuthor})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor})
 	wantAuthors := []string{"alice", "bob", "carol"}
 	for i, mr := range got {
 		if mr.Author != wantAuthors[i] {
@@ -164,7 +162,7 @@ func TestFilterAndSort_SortAuthor_Descending(t *testing.T) {
 		mr(2, "carol", "repo/b", 2, t0),
 		mr(3, "bob", "repo/c", 3, t0),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortAuthor, SortDesc: true})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor, SortDesc: true})
 	wantAuthors := []string{"carol", "bob", "alice"}
 	for i, mr := range got {
 		if mr.Author != wantAuthors[i] {
@@ -176,13 +174,12 @@ func TestFilterAndSort_SortAuthor_Descending(t *testing.T) {
 // FilterAndSort — sort by age
 
 func TestFilterAndSort_SortAge_Ascending(t *testing.T) {
-	// ascending age = oldest first (smallest CreatedAt)
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t2),
 		mr(2, userBob, "repo/b", 2, t0),
 		mr(3, userCarol, "repo/c", 3, t1),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortAge})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAge})
 	wantIDs := []int{2, 3, 1} // t0, t1, t2
 	for i, mr := range got {
 		if mr.ID != wantIDs[i] {
@@ -197,7 +194,7 @@ func TestFilterAndSort_SortAge_Descending(t *testing.T) {
 		mr(2, userBob, "repo/b", 2, t0),
 		mr(3, userCarol, "repo/c", 3, t1),
 	}
-	got := service.FilterAndSort(mrs, service.FilterOptions{SortField: sortAge, SortDesc: true})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAge, SortDesc: true})
 	wantIDs := []int{1, 3, 2} // t2, t1, t0
 	for i, mr := range got {
 		if mr.ID != wantIDs[i] {
@@ -215,7 +212,7 @@ func TestFilterAndSort_DoesNotMutateInput(t *testing.T) {
 	}
 	original := make([]domain.MergeRequest, len(mrs))
 	copy(original, mrs)
-	service.FilterAndSort(mrs, service.FilterOptions{SortField: sortAuthor})
+	mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor})
 	for i := range mrs {
 		if mrs[i].ID != original[i].ID {
 			t.Fatal("input slice was mutated")
