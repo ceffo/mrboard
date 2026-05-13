@@ -14,27 +14,30 @@ import (
 )
 
 func buildFetchCmd() *cobra.Command {
-	var debugPath string
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Fetch MRs and print as JSON",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return execFetch(debugPath)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfgPath, err := cmd.Root().PersistentFlags().GetString("config")
+			if err != nil {
+				return err
+			}
+			return execFetch(cfgPath)
 		},
 	}
-	cmd.Flags().StringVar(&debugPath, "debug", "", "write debug logs to this path (overrides $MRBOARD_DEBUG)")
 	return cmd
 }
 
-func execFetch(debugPath string) error {
-	if debugPath == "" {
-		debugPath = os.Getenv("MRBOARD_DEBUG")
-	}
-
-	timeout := app.TimeoutFromEnv()
-	svc, err := app.New(timeout, app.LoggerFromPath(debugPath))
+func execFetch(cfgPath string) error {
+	svc, err := app.New(cfgPath, nil)
 	if err != nil {
 		return err
+	}
+
+	const defaultTimeout = 30 * time.Second
+	timeout := svc.Config.GitLab.Timeout
+	if timeout == 0 {
+		timeout = defaultTimeout
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -61,7 +64,6 @@ func printJSON(mrs []domain.MergeRequest) error {
 	return enc.Encode(out)
 }
 
-// mrJSON is the JSON representation of a MergeRequest for the fetch command.
 type mrJSON struct {
 	ID             int            `json:"id"`
 	Title          string         `json:"title"`

@@ -9,8 +9,8 @@ import (
 	"github.com/ceffo/mrboard/internal/tui"
 )
 
-func execBoard(version string) error {
-	svc, err := app.New(app.TimeoutFromEnv(), nil)
+func execBoard(cfgPath, version string) error {
+	svc, err := app.New(cfgPath, nil)
 	if err != nil {
 		return err
 	}

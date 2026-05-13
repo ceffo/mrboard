@@ -17,27 +17,28 @@ func Execute() {
 }
 
 func buildRootCmd() *cobra.Command {
+	var cfgPath string
+
 	root := &cobra.Command{
 		Use:   "mrboard",
 		Short: "GitLab MR review board for daily standups",
 		Long: `mrboard displays GitLab merge requests in a kanban board.
 
 Config search path (first match wins):
-  $MRBOARD_CONFIG
+  --config flag
   $XDG_CONFIG_HOME/mrboard/mrboard.yaml  (default: ~/.config/mrboard/mrboard.yaml)
   ./mrboard.yaml
 
 Environment:
-  MRBOARD_CONFIG   Explicit config file path
-  GITLAB_TOKEN     Override gitlab.token from config
-  MRBOARD_TIMEOUT  HTTP timeout (default: 30s, e.g. "60s")
-  MRBOARD_DEBUG    Write debug logs to this file path`,
+  GITLAB_TOKEN     Override gitlab.token from config`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return execBoard(Version)
+			return execBoard(cfgPath, Version)
 		},
 	}
+
+	root.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "config file path (default: XDG search)")
 
 	root.AddCommand(buildFetchCmd())
 	root.AddCommand(buildVersionCmd())

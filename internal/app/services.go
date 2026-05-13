@@ -4,9 +4,7 @@
 package app
 
 import (
-	"io"
 	"log/slog"
-	"time"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/gitlab"
@@ -15,25 +13,20 @@ import (
 
 // Services holds every dependency a binary needs, fully wired.
 type Services struct {
-	Config   *config.Config
+	Config   *config.AppConfig
 	Logger   *slog.Logger
 	MRSource service.MergeRequestSource
 }
 
-// New builds all services from environment and config. timeout controls the
-// HTTP deadline for every GitLab API call; pass 0 for no timeout.
-// logger is used for structured output; pass slog.New(slog.DiscardHandler) for silence.
-func New(timeout time.Duration, logger *slog.Logger) (*Services, error) {
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
-	cfg, err := config.Load()
+// New builds all services from the config at path (empty = XDG discovery).
+// logger may be nil; pass slog.New(slog.DiscardHandler) for silence.
+func New(cfgPath string, logger *slog.Logger) (*Services, error) {
+	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := gitlab.NewClient(cfg, timeout, logger)
+	client, err := gitlab.NewClient(cfg, cfg.GitLab.Timeout, logger)
 	if err != nil {
 		return nil, err
 	}

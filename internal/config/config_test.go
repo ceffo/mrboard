@@ -19,11 +19,6 @@ func writeTemp(t *testing.T, content string) string {
 	return f.Name()
 }
 
-func setEnv(t *testing.T, key, val string) {
-	t.Helper()
-	t.Setenv(key, val)
-}
-
 func TestLoadValid(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:
@@ -34,9 +29,7 @@ sources:
   - type: group
     id: my-team
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	cfg, err := Load()
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,9 +52,7 @@ sources:
   - type: group
     id: x
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	cfg, err := Load()
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,10 +71,9 @@ sources:
   - type: group
     id: x
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-	setEnv(t, "GITLAB_TOKEN", "from-env")
+	t.Setenv("GITLAB_TOKEN", "from-env")
 
-	cfg, err := Load()
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +96,7 @@ sources:
   - type: group
     id: my-team
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	cfg, err := Load()
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,9 +117,7 @@ sources:
   - type: group
     id: x
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	_, err := Load()
+	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing URL")
 	}
@@ -146,10 +132,8 @@ sources:
   - type: group
     id: x
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
 	os.Unsetenv("GITLAB_TOKEN")
-
-	_, err := Load()
+	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing token")
 	}
@@ -161,30 +145,55 @@ gitlab:
   url: https://gitlab.example.com
   token: glpat-abc
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	_, err := Load()
+	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for empty sources")
 	}
 }
 
-func TestUnrecognizedKeyErrors(t *testing.T) {
+func TestValidationInvalidSourceType(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:
   url: https://gitlab.example.com
   token: glpat-abc
-  typo_key: oops
+
+sources:
+  - type: invalid
+    id: x
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid source type")
+	}
+}
+
+func TestValidationGroupSourceMissingID(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
 
 sources:
   - type: group
-    id: x
 `)
-	setEnv(t, "MRBOARD_CONFIG", path)
-
-	_, err := Load()
+	_, err := Load(path)
 	if err == nil {
-		t.Fatal("expected error for unrecognized key")
+		t.Fatal("expected error for group source missing id")
+	}
+}
+
+func TestValidationUserSourceMissingUsername(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: user
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for user source missing username")
 	}
 }
 
@@ -208,14 +217,62 @@ sources:
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	os.Unsetenv("MRBOARD_CONFIG")
 	os.Unsetenv("GITLAB_TOKEN")
 
-	cfg, err := Load()
+	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("unexpected error with default path: %v", err)
 	}
 	if cfg.GitLab.URL == "" {
 		t.Error("expected URL to be loaded")
+	}
+}
+
+func TestSubConfigAccessors(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+  timeout: 60s
+  required_approvals: 3
+
+sources:
+  - type: group
+    id: my-team
+  - type: user
+    username: alice
+
+excluded_authors:
+  - bot
+
+current_user: alice
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	glClient := cfg.GitLabClientConfig()
+	if glClient.URL != "https://gitlab.example.com" {
+		t.Errorf("GitLabClientConfig.URL = %q", glClient.URL)
+	}
+	if glClient.Timeout.String() != "1m0s" {
+		t.Errorf("GitLabClientConfig.Timeout = %v", glClient.Timeout)
+	}
+
+	glAdapt := cfg.GitLabAdapterConfig()
+	if glAdapt.RequiredApprovals != 3 {
+		t.Errorf("GitLabAdapterConfig.RequiredApprovals = %d", glAdapt.RequiredApprovals)
+	}
+	if len(glAdapt.Sources) != 2 {
+		t.Errorf("GitLabAdapterConfig.Sources len = %d", len(glAdapt.Sources))
+	}
+
+	mrSvc := cfg.MRServiceConfig()
+	if mrSvc.CurrentUser != "alice" {
+		t.Errorf("MRServiceConfig.CurrentUser = %q", mrSvc.CurrentUser)
+	}
+	if len(mrSvc.ExcludedAuthors) != 1 {
+		t.Errorf("MRServiceConfig.ExcludedAuthors len = %d", len(mrSvc.ExcludedAuthors))
 	}
 }

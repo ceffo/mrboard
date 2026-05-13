@@ -1,76 +1,163 @@
-// Package config provides YAML-based configuration loading for mrboard.
+// Package config loads and validates mrboard configuration from a YAML file.
+// It uses Viper for file loading and env-variable binding, and ozzo-validation
+// for declarative validation rules.
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
-	"gopkg.in/yaml.v3"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/go-ozzo/ozzo-validation/v4/is"
+	"github.com/spf13/viper"
 )
 
-// GitLab holds credentials and settings for the GitLab API.
-type GitLab struct {
-	URL               string `yaml:"url"`
-	Token             string `yaml:"token"`
-	RequiredApprovals int    `yaml:"required_approvals"`
-}
-
-// Source describes a single source of MRs — either a group or a user.
+// Source describes a single source of MRs.
 type Source struct {
-	Type     string `yaml:"type"`     // "group" or "user"
-	ID       string `yaml:"id"`       // used when type == "group"
-	Username string `yaml:"username"` // used when type == "user"
+	Type     string `mapstructure:"type"`     // "group" or "user"
+	ID       string `mapstructure:"id"`       // used when type == "group"
+	Username string `mapstructure:"username"` // used when type == "user"
 }
 
-// Config is the top-level application configuration loaded from mrboard.yaml.
-type Config struct {
-	GitLab          GitLab   `yaml:"gitlab"`
-	Sources         []Source `yaml:"sources"`
-	ExcludedAuthors []string `yaml:"excluded_authors"`
-	CurrentUser     string   `yaml:"current_user"` // enables "my view" toggle (tab)
+// GitLab mirrors the [gitlab] YAML section for Viper unmarshalling.
+// Exported so existing call-sites (e.g. cfg.GitLab.URL) continue to compile
+// during the architecture migration.
+type GitLab struct {
+	URL               string        `mapstructure:"url"`
+	Token             string        `mapstructure:"token"`
+	Timeout           time.Duration `mapstructure:"timeout"`
+	RequiredApprovals int           `mapstructure:"required_approvals"`
 }
 
-// Load reads and validates the configuration from the first file found in the
-// search path: $MRBOARD_CONFIG → $XDG_CONFIG_HOME/mrboard/mrboard.yaml →
-// ~/.config/mrboard/mrboard.yaml → ./mrboard.yaml.
-func Load() (*Config, error) {
-	paths := searchPaths()
+// logSection mirrors the [log] YAML section.
+type logSection struct {
+	Path  string `mapstructure:"path"`
+	Level string `mapstructure:"level"`
+}
 
-	var f *os.File
-	var chosenPath string
-	for _, p := range paths {
-		var err error
-		f, err = os.Open(filepath.Clean(p))
-		if err == nil {
-			chosenPath = p
-			break
+// AppConfig is the top-level application configuration.
+// Field access patterns (e.g. cfg.GitLab.URL, cfg.Sources) are intentionally
+// preserved from the previous Config type so existing call-sites keep working
+// while the architecture migrates.
+type AppConfig struct {
+	GitLab          GitLab     `mapstructure:"gitlab"`
+	Sources         []Source   `mapstructure:"sources"`
+	ExcludedAuthors []string   `mapstructure:"excluded_authors"`
+	CurrentUser     string     `mapstructure:"current_user"`
+	Log             logSection `mapstructure:"log"`
+}
+
+// Config is a backward-compatible alias for AppConfig.
+// Deprecated: new code should refer to AppConfig and use the typed sub-config
+// accessor methods (GitLabClientConfig, GitLabAdapterConfig, etc.).
+type Config = AppConfig
+
+// --- Typed sub-config types (used by adapters and services) -----------------
+
+// GitLabClientConfig is the configuration consumed by pkg/gitlab.Client.
+type GitLabClientConfig struct {
+	URL     string
+	Token   string
+	Timeout time.Duration
+}
+
+// GitLabAdapterConfig is the configuration consumed by internal/adapters/gitlabadpt.
+type GitLabAdapterConfig struct {
+	RequiredApprovals int
+	Sources           []Source
+	ExcludedAuthors   []string
+}
+
+// MRServiceConfig is the configuration consumed by internal/domain/service/mrsvc.
+type MRServiceConfig struct {
+	Sources         []Source
+	ExcludedAuthors []string
+	CurrentUser     string
+}
+
+// LogConfig is the configuration consumed by internal/log.
+type LogConfig struct {
+	Path  string
+	Level string
+}
+
+// --- Accessors --------------------------------------------------------------
+
+// GitLabClientConfig extracts the configuration slice consumed by pkg/gitlab.Client.
+func (c *AppConfig) GitLabClientConfig() GitLabClientConfig {
+	return GitLabClientConfig{
+		URL:     c.GitLab.URL,
+		Token:   c.GitLab.Token,
+		Timeout: c.GitLab.Timeout,
+	}
+}
+
+// GitLabAdapterConfig extracts the configuration slice consumed by internal/adapters/gitlabadpt.
+func (c *AppConfig) GitLabAdapterConfig() GitLabAdapterConfig {
+	return GitLabAdapterConfig{
+		RequiredApprovals: c.GitLab.RequiredApprovals,
+		Sources:           c.Sources,
+		ExcludedAuthors:   c.ExcludedAuthors,
+	}
+}
+
+// MRServiceConfig extracts the configuration slice consumed by internal/domain/service/mrsvc.
+func (c *AppConfig) MRServiceConfig() MRServiceConfig {
+	return MRServiceConfig{
+		Sources:         c.Sources,
+		ExcludedAuthors: c.ExcludedAuthors,
+		CurrentUser:     c.CurrentUser,
+	}
+}
+
+// LogConfig extracts the configuration slice consumed by internal/log.
+func (c *AppConfig) LogConfig() LogConfig {
+	return LogConfig{Path: c.Log.Path, Level: c.Log.Level}
+}
+
+// --- Loading ----------------------------------------------------------------
+
+const defaultRequiredApprovals = 2
+
+// Load reads configuration from path. When path is empty, it searches:
+//
+//	$XDG_CONFIG_HOME/mrboard/mrboard.yaml
+//	~/.config/mrboard/mrboard.yaml
+//	./mrboard.yaml
+//
+// GITLAB_TOKEN overrides gitlab.token if set.
+func Load(path string) (*AppConfig, error) {
+	v := viper.New()
+
+	v.SetDefault("gitlab.timeout", "30s")
+	v.SetDefault("gitlab.required_approvals", defaultRequiredApprovals)
+	v.SetDefault("log.level", "info")
+
+	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
+	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {
+		return nil, fmt.Errorf("config: bind env: %w", err)
+	}
+
+	if path != "" {
+		v.SetConfigFile(path)
+	} else {
+		v.SetConfigName("mrboard")
+		v.SetConfigType("yaml")
+		for _, dir := range xdgSearchDirs() {
+			v.AddConfigPath(dir)
 		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("config: open %q: %w", p, err)
-		}
-	}
-	if f == nil {
-		return nil, fmt.Errorf("config: no config file found (tried: %s)", strings.Join(paths, ", "))
-	}
-	defer f.Close()
-
-	dec := yaml.NewDecoder(f)
-	dec.KnownFields(true)
-
-	var cfg Config
-	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("config: parse %q: %w", chosenPath, err)
+		v.AddConfigPath(".")
 	}
 
-	if token := os.Getenv("GITLAB_TOKEN"); token != "" {
-		cfg.GitLab.Token = token
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
 	}
 
-	if cfg.GitLab.RequiredApprovals == 0 {
-		cfg.GitLab.RequiredApprovals = 2
+	var cfg AppConfig
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
 	if err := validate(&cfg); err != nil {
@@ -80,21 +167,51 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// searchPaths returns the ordered list of config file locations to try.
-func searchPaths() []string {
-	if v := os.Getenv("MRBOARD_CONFIG"); v != "" {
-		return []string{v}
+// --- Validation -------------------------------------------------------------
+
+func validate(cfg *AppConfig) error {
+	if err := validateGitLab(&cfg.GitLab); err != nil {
+		return err
 	}
-	var paths []string
-	if dir := XDGConfigDir(); dir != "" {
-		paths = append(paths, filepath.Join(dir, "mrboard.yaml"))
+	if err := validateSources(cfg.Sources); err != nil {
+		return err
 	}
-	paths = append(paths, "mrboard.yaml")
-	return paths
+	return nil
 }
 
-// XDGConfigDir returns the mrboard-specific XDG config directory
-// ($XDG_CONFIG_HOME/mrboard or ~/.config/mrboard). Returns "" on error.
+func validateGitLab(gl *GitLab) error {
+	return validation.ValidateStruct(gl,
+		validation.Field(&gl.URL, validation.Required, is.URL),
+		validation.Field(&gl.Token, validation.Required.Error("gitlab.token is required (or set $GITLAB_TOKEN)")),
+	)
+}
+
+func validateSources(sources []Source) error {
+	if err := validation.Validate(sources, validation.Required, validation.Length(1, 0)); err != nil {
+		return fmt.Errorf("config: sources: %w", err)
+	}
+	for i, src := range sources {
+		if err := validateSource(src); err != nil {
+			return fmt.Errorf("config: sources[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func validateSource(src Source) error {
+	return validation.ValidateStruct(&src,
+		validation.Field(&src.Type, validation.Required, validation.In("group", "user")),
+		validation.Field(&src.ID,
+			validation.Required.When(src.Type == "group").Error("id is required for group sources")),
+		validation.Field(&src.Username,
+			validation.Required.When(src.Type == "user").Error("username is required for user sources")),
+	)
+}
+
+// --- XDG helpers ------------------------------------------------------------
+
+// XDGConfigDir returns the mrboard-specific XDG config directory.
+// Returns "" on error.
 func XDGConfigDir() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
@@ -107,15 +224,24 @@ func XDGConfigDir() string {
 	return filepath.Join(base, "mrboard")
 }
 
-func validate(cfg *Config) error {
-	if cfg.GitLab.URL == "" {
-		return errors.New("config: gitlab.url is required")
+// XDGDataDir returns the mrboard-specific XDG data directory.
+// Returns "" on error.
+func XDGDataDir() string {
+	base := os.Getenv("XDG_DATA_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".local", "share")
 	}
-	if cfg.GitLab.Token == "" {
-		return errors.New("config: gitlab.token is required (or set $GITLAB_TOKEN)")
+	return filepath.Join(base, "mrboard")
+}
+
+func xdgSearchDirs() []string {
+	var dirs []string
+	if dir := XDGConfigDir(); dir != "" {
+		dirs = append(dirs, dir)
 	}
-	if len(cfg.Sources) == 0 {
-		return errors.New("config: at least one sources entry is required")
-	}
-	return nil
+	return dirs
 }

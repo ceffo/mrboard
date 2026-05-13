@@ -200,6 +200,8 @@ br list --status=open --format toon # All open issues
 br list --status=in_progress --format toon # Issues in progress
 br show <id> --format toon          # Full issue details with dependencies
 br create --title="..." --type=task --priority=2
+br create --title="..." --type=task --priority=2 --parent <epic-id>  # child task of an epic
+br dep add <child> <epic> --type parent-child  # link existing task to epic as child (NOT blocks)
 br update <id> --status=in_progress # claim a task
 br close <id> --reason="Completed"
 br close <id1> <id2>  # Close multiple issues at once
