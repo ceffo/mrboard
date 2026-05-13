@@ -8,11 +8,14 @@ in a kanban board. Primary use: team daily standups.
 | Layer | Package | Purpose |
 |---|---|---|
 | Types | `internal/domain` | Pure Go domain types — zero non-stdlib imports |
-| Config | `internal/config` | TOML loading and validation |
-| API | `internal/gitlab` | GitLab REST API client + mapper + fetcher |
-| Service ports | `internal/service` | Interfaces (ports) owned by the business layer; adapters live here too |
+| Config | `internal/config` | YAML loading and validation |
+| API | `pkg/gitlab` | GitLab REST API client |
+| Service ports | `internal/domain/service/mrsvc` | Interfaces (ports) owned by the business layer |
+| Adapters | `internal/adapters/` | Concrete implementations of service ports |
+| Composition root | `internal/core` | Wires config → adapters → stores; no TUI imports |
 | UI | `internal/tui` | Bubble Tea TUI — only layer allowed to import charmbracelet |
-| Entry | `cmd/mrboard` | Wires config → fetcher → tui |
+| CLI | `internal/cmd/mrboard` | Cobra commands; boots core, launches TUI |
+| Entry | `cmd/mrboard` | Signal handling + calls `mrboardcmd.Execute` |
 
 **Architecture docs (read before coding):**
 - [`docs/architecture.md`](docs/architecture.md) — package boundaries, data flow, dependency rules

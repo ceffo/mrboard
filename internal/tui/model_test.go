@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -27,7 +28,7 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 	src.EXPECT().FetchAll(mock.Anything).Return(initialMRs, nil).Maybe()
 
 	cfg := &config.Config{CurrentUser: currentUser}
-	m := New(cfg, src, noopStore{}, "dev")
+	m := New(context.Background(), cfg, src, noopStore{}, "dev")
 
 	// Deliver results directly without running the real fetch.
 	next, _ := m.Update(FetchResultMsg{MRs: initialMRs})
@@ -70,7 +71,7 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(&config.Config{}, src, noopStore{}, "dev")
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, "dev")
 	next, _ := m.Update(FetchErrMsg{Err: errors.New("network down")})
 	m2 := next.(Model)
 
@@ -88,7 +89,7 @@ func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(&config.Config{}, src, noopStore{}, "dev")
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, "dev")
 	next, _ := m.Update(FetchResultMsg{
 		MRs:    someMRs(),
 		Errors: []error{errors.New("source A failed")},

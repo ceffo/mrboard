@@ -3,10 +3,10 @@
   "sessionId": "765b4394-4ba8-4fe7-aa4b-caa5a195621d",
   "status": "running",
   "startedAt": "2026-05-13T03:40:44.801Z",
-  "updatedAt": "2026-05-13T03:53:23.143Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-05-13T04:01:19.552Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -23,8 +23,8 @@
       {
         "id": "mrr-rt6",
         "title": "State: internal/adapters/statestore/ + TUI ViewMode enum + StateStore injection",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-xhh",
@@ -50,6 +50,16 @@
       "durationMs": 444566,
       "startedAt": "2026-05-13T03:40:49.161Z",
       "endedAt": "2026-05-13T03:48:13.727Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-rt6",
+      "taskTitle": "State: internal/adapters/statestore/ + TUI ViewMode enum + StateStore injection",
+      "taskCompleted": true,
+      "durationMs": 307947,
+      "startedAt": "2026-05-13T03:48:15.152Z",
+      "endedAt": "2026-05-13T03:53:23.099Z"
     }
   ],
   "skippedTaskIds": [],

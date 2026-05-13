@@ -5,9 +5,12 @@ after each iteration and it's included in prompts for context.
 
 ## Codebase Patterns (Study These First)
 
+### internal/core is the composition root (internal/app deleted)
+`internal/core.Core` wires logger → GitLab client → gitlabadpt → statestore. `cmd/mrboard/main.go` owns the single `context.Background()` call via `signal.NotifyContext`. `PersistentPreRunE` in root.go builds core and attaches logger to ctx via an unexported `coreKey{}` context value.
+
 ### pkg/gitlab has zero internal/* imports
 `pkg/gitlab.Client` takes its own `Config{URL, Token, Timeout}` struct — never `*config.AppConfig`.
-The `internal/app/services.go` composition root converts AppConfig → pkg/gitlab.Config explicitly.
+`internal/core.New` converts AppConfig → pkg/gitlab.Config explicitly.
 
 ### Adapter logger comes from context, client logger stored in struct
 - `pkg/gitlab.Client` stores `*slog.Logger` in its struct (set in constructor, used in API call methods).
@@ -50,6 +53,25 @@ Define a `noopStore{}` (returns `DefaultState()`, discards `Save()`) inside `mod
   - The `enrichMR` goroutine had a variable shadowing issue (`a` used both as receiver and local var for approvals); renamed inner to avoid shadow
   - `just generate` (mockery v3) picks up the package change in `.mockery.yml` with zero extra flags
   - Import alias needed in `gitlabadpt.go` for `pkg/gitlab` (`pkggitlab`) and `internal/log` (`ilog`) to avoid collision with the `gl` alias for the go-gitlab SDK
+---
+
+## 2026-05-13 - mrr-r4e
+- Implemented bead mrr-r4e: composition root, signal handling, full context wiring
+- **Files created:**
+  - `internal/core/core.go` — `Core` struct with `MRSource`, `StateStore`, `Config`, `Logger`, `logCloser`; `New(ctx, cfg)` builds all dependencies in order; `Close(ctx)` closes log file
+- **Files deleted:** `internal/app/` entirely
+- **Files updated:**
+  - `cmd/mrboard/main.go` — `signal.NotifyContext(context.Background(), SIGINT, SIGTERM)` + `Execute(ctx)`
+  - `internal/cmd/mrboard/root.go` — `Execute(ctx context.Context) error`, added `--log-level` flag, `PersistentPreRunE` builds core + stores in ctx via `coreKey{}`
+  - `internal/cmd/mrboard/board.go` — uses core from PersistentPreRunE, `tea.WithContext(ctx)`
+  - `internal/cmd/mrboard/fetch.go` — uses core from ctx, uses signal ctx as parent for timeout
+  - `internal/tui/model.go` — `New()` now takes `ctx context.Context` as first arg, stores as `baseCtx`; all `context.Background()` in fetch cmds replaced with `m.baseCtx`; `makeFetchCmd` takes `base context.Context` as first arg
+  - `internal/tui/model_test.go` — added `context` import, pass `context.Background()` to `New()`
+- **Learnings:**
+  - `revive` enforces `context.Context` as first parameter — put ctx first even in internal helpers
+  - `lll` linter enforces 120-char line limit — wrap long function signatures with multi-line style
+  - `tea.WithContext(ctx)` on `tea.NewProgram` handles signal cancellation at program level; model's `baseCtx` handles cancellation of in-flight fetch goroutines
+  - After bead: `grep context.Background()` returns only `cmd/mrboard/main.go`; `grep context.TODO()` returns empty; `grep internal/app` returns empty
 ---
 
 ## 2026-05-12 - mrr-rt6

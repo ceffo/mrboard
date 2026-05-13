@@ -1,0 +1,205 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-rt6
+- **Task Title**: State: internal/adapters/statestore/ + TUI ViewMode enum + StateStore injection
+- **Description**: Third bead of the clean architecture refactor (epic mrr-l7g). Moves UI state ownership into the TUI and wires a clean store interface.
+
+## Scope
+
+### 1. TUI state types (internal/tui/)
+Move State out ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-13T03:48:15.152Z
+- **Ended At**: 2026-05-13T03:53:23.099Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 3887
+- **Output Tokens**: 21587
+- **Total Tokens**: 25474
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-l7g
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me survey the relevant existing code before implementing.
+[94m[Glob][0m pattern: [96minternal/config/**/*.go[0m
+[94m[Glob][0m pattern: [96minternal/tui/**/*.go[0m
+[94m[Glob][0m pattern: [96minternal/adapters/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/state.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me look at the config and the app wiring:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/app/services.go[0m
+Now let me look at the cmd entry point and config_test:
+[94m[Glob][0m pattern: [96mcmd/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/cmd/mrboard/main.go[0m
+[94m[Glob][0m pattern: [96minternal/cmd/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+Let me check the model test and the module path:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+Let me check go.mod for dependencies:
+[94m[Bash][0m Check yaml and slog dependencies in go.mod $ grep -E "yaml|slog" /Users/moncefnaji/code/github.com/mrboard/go.mod | head -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/log/log.go[0m
+I now have the full picture. Let me implement all the changes for bead mrr-rt6:
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/state.go[0m "package tui
+
+// ViewMode controls whether the board shows all MRs or only the current user's.
+type ViewMode int
+
+const (
+	ViewAll  ViewMode = iota
+	ViewMine          // filters to current_user's MRs
+)... (714 chars)"
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/statestore.go[0m "// Package statestore provides a YAML-backed implementation of tui.StateStore.
+package statestore
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/ceffo/mrboard/int... (1692 chars)"
+[94m[TodoWrite][0m
+Now update `model.go` — replace `myView bool` with `viewMode ViewMode`, change `New()` to accept `StateStore`, wire load/save:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "import (
+	"context"
+	"os/exec"
+	"runtime"
+	"string..." → "import (
+	"context"
+	"log/slog"
+	"os/exec"
+	"runti..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// Model is the root Bubble Tea model for mrboard...." → "// Model is the root Bubble Tea model for mrboard...."
+Now update `New()` to accept `StateStore` and load state from it:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// New creates a ready-to-run mrboard model, resto..." → "// New creates a ready-to-run mrboard model. It lo..."
+Now update the toggle-view handler to use `viewMode` instead of `myView`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.ToggleView):
+		m.myV..." → "	case key.Matches(msg, m.keys.ToggleView):
+		if m...."
+Now update `applyMRFilter` and `saveState` to use `viewMode`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// applyMRFilter applies all active filters and so..." → "// applyMRFilter applies all active filters and so..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) saveState() {
+	config.SaveState(co..." → "func (m *Model) saveState() {
+	if err := m.store.S..."
+Now I need to check if `config` is still imported in model.go (it's needed for `*config.Config`):
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mconfig\.[0m
+
+[91m[Error: <tool_use_error>InputValidationError: Grep failed due to the following issue:
+An unexpected parameter `file_path` was provided</tool_use_error>][0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mconfig\."[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mconfig\.[0m
+Good, `config` is still needed for `*config.Config`. Now update export_test.go to use `viewMode`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m edit: "func (m Model) MyView() bool                  { re..." → "func (m Model) MyView() bool                  { re..."
+Now update `model_test.go` — replace `config.DefaultState()` / `config.State` with a `noopStore`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "package tui
+
+import (
+	"errors"
+	"testing"
+
+	tea "..." → "package tui
+
+import (
+	"errors"
+	"testing"
+
+	tea "..."
+Now update the two other `New()` calls in model_test.go that still use `config.DefaultState()`:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m pattern: [96mconfig\.DefaultState\(\)[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "config.DefaultState()" → "noopStore{}"
+Now check if `config` import is still needed in model_test.go:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m pattern: [96mconfig\.[0m
+Good — `config` is still needed for `*config.Config`. Now update `board.go` to wire statestore:
+[94m[TodoWrite][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "// Package mrboardcmd wires the cobra CLI and boot..." → "// Package mrboardcmd wires the cobra CLI and boot..."
+Now delete `internal/config/state.go`:
+[94m[TodoWrite][0m
+[94m[Bash][0m Delete config/state.go $ rm /Users/moncefnaji/code/github.com/mrboard/internal/config/state.go
+[94m[TodoWrite][0m
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/state.go:7:2: exported: exported const ViewAll should have comment (or a comment on this block) or be unexported (revive)
+	ViewAll  ViewMode = iota
+	^
+1 issues:
+* revive: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/state.go[0m edit: "const (
+	ViewAll  ViewMode = iota
+	ViewMine       ..." → "const (
+	ViewAll  ViewMode = iota // show all MRs
+..."
+[94m[Bash][0m Run quality gates again $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/state.go:7:2: exported: exported const ViewAll should have comment (or a comment on this block) or be unexported (revive)
+	ViewAll  ViewMode = iota // show all MRs
+	^
+1 issues:
+* revive: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+The linter wants a comment on the const block, not the individual constant:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/state.go[0m edit: "const (
+	ViewAll  ViewMode = iota // show all MRs
+..." → "// ViewMode values.
+const (
+	ViewAll  ViewMode = i..."
+[94m[Bash][0m Run quality gates again $ just check 2>&1
+All tests pass. Now close the bead, flush, and update progress.md:
+[94m[TodoWrite][0m
+[94m[Bash][0m Close bead mrr-rt6 $ deleted config/state.go" 2>&1
+[94m[Bash][0m Flush beads to JSONL $ br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-12 - mrr-xhh" → "### StateStore: call store.Load() inside tui.New()..."
+
+[91m[Error: <tool_use_error>File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-12 - mrr-xhh" → "### StateStore: call store.Load() inside tui.New()..."
+Now append the bead entry at the end:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - Import alias needed in `gitlabadpt.go` for `pk..." → "  - Import alias needed in `gitlabadpt.go` for `pk..."
+[94m[TodoWrite][0m
+Now save the session summary to engram:
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary,mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement bead mrr-rt6: move UI state into tui package, add StateStore port, and wire a YAML-backed adapter.
+
+## Instructions
+- Use justfile for all quality gates (`just check`)
+- revive lint ... (2345 chars)"
+All done. `just check` passes with all tests green.
+
+**Summary of changes for mrr-rt6:**
+
+- **`internal/tui/state.go`** (new) — `ViewMode` enum, `State` struct (replaces `config.State`), `StateStore` port interface, `DefaultState()`
+- **`internal/adapters/statestore/statestore.go`** (new) — YAML-backed `YAMLStore`; state in `{Dir}/state.yaml` (0600), dir created at 0700, missing file returns `DefaultState()` (not error), `Save` returns errors to caller
+- **`internal/config/state.go`** (deleted)
+- **`internal/tui/model.go`** — `myView bool` → `viewMode ViewMode`, `New()` now accepts `StateStore` and loads state at construction; `saveState()` uses the store interface
+- **`internal/tui/model_test.go`** — `noopStore{}` test double (same-package, no I/O)
+- **`internal/tui/export_test.go`** — `MyView()` returns `m.viewMode == ViewMine`
+- **`internal/cmd/mrboard/board.go`** — wires `statestore.YAMLStore` using `config.XDGDataDir()`
+
+<promise>COMPLETE</promise>

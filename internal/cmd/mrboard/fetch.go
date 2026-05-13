@@ -9,48 +9,38 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ceffo/mrboard/internal/app"
+	"github.com/ceffo/mrboard/internal/core"
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
 func buildFetchCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "fetch",
 		Short: "Fetch MRs and print as JSON",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfgPath, err := cmd.Root().PersistentFlags().GetString("config")
-			if err != nil {
-				return err
-			}
-			return execFetch(cfgPath)
+			return execFetch(cmd.Context())
 		},
 	}
-	return cmd
 }
 
-func execFetch(cfgPath string) error {
-	svc, err := app.New(cfgPath, nil)
-	if err != nil {
-		return err
-	}
+func execFetch(ctx context.Context) error {
+	c := ctx.Value(coreKey{}).(*core.Core)
 
 	const defaultTimeout = 30 * time.Second
-	timeout := svc.Config.GitLab.Timeout
+	timeout := c.Config.GitLab.Timeout
 	if timeout == 0 {
 		timeout = defaultTimeout
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	mrs, errs := svc.MRSource.FetchAll(ctx)
 
+	mrs, errs := c.MRSource.FetchAll(fetchCtx)
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}
 	if len(mrs) == 0 && len(errs) > 0 {
 		os.Exit(1)
 	}
-
 	return printJSON(mrs)
 }
 

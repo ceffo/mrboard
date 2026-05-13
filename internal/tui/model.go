@@ -169,11 +169,14 @@ type Model struct {
 	filterAuthor   string
 	filterReviewer string
 	fetchCancel    context.CancelFunc
+	baseCtx        context.Context
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
 // store; on error it logs and falls back to DefaultState().
-func New(cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string) Model {
+func New(
+	ctx context.Context, cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string,
+) Model {
 	st, err := store.Load()
 	if err != nil {
 		slog.Default().Error("statestore: load failed, using defaults", "err", err)
@@ -215,6 +218,7 @@ func New(cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, ver
 		viewMode:    viewMode,
 		sortField:   sf,
 		sortDesc:    st.SortDesc,
+		baseCtx:     ctx,
 	}
 	if viewMode == ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -224,13 +228,13 @@ func New(cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, ver
 
 // Init starts the spinner, fires the first data fetch, and schedules the minute ticker.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Init(), makeFetchCmd(m.src), tickCmd())
+	return tea.Batch(m.sp.Init(), makeFetchCmd(m.baseCtx, m.src), tickCmd())
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
 // The cancel is also called via defer inside the goroutine once the fetch finishes.
-func makeFetchCmd(src mrsvc.MergeRequestSource) tea.Cmd {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource) tea.Cmd {
+	ctx, cancel := context.WithTimeout(base, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
 		mrs, errs := src.FetchAll(ctx)
@@ -241,7 +245,7 @@ func makeFetchCmd(src mrsvc.MergeRequestSource) tea.Cmd {
 // startFetch builds a fetch Cmd and stores its cancel func in the model so
 // that a subsequent 'q' press can abort an in-flight request.
 func (m *Model) startFetch() tea.Cmd {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	ctx, cancel := context.WithTimeout(m.baseCtx, fetchTimeout)
 	if m.fetchCancel != nil {
 		m.fetchCancel()
 	}
@@ -443,10 +447,11 @@ func (m *Model) resizeBoard() {
 
 func (m Model) fetchDetailCmd(mr *domain.MergeRequest) tea.Cmd {
 	src := m.src
+	base := m.baseCtx
 	projectID := int64(mr.ProjectID)
 	mrIID := int64(mr.IID)
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
 		defer cancel()
 		desc, threads, err := src.GetDetail(ctx, projectID, mrIID)
 		return DetailFetchResultMsg{
