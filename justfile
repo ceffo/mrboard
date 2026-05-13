@@ -24,21 +24,17 @@ fmt:
 check: fmt lint build test
 
 # run the tui
-run:
-  go run ./cmd/mrboard/...
+run: build
+  @./bin/mrboard
 
 # fetch calls the fetch command 
-fetch:
-  go run ./cmd/mrboard/... fetch
+fetch: build
+  @./bin/mrboard fetch
 
 
 # regenerates all mocks from .mockery.yml (requires mockery v3 and goimports)
 generate:
   mockery
-
-# installs the mrboard cli tool to the system
-install:
-  go install ./cmd/mrboard/...
 
 # bumps version, tags, and pushes to trigger a release (patch|minor|major)
 release bump="patch":
