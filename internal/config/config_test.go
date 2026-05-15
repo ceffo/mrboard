@@ -27,7 +27,7 @@ gitlab:
 
 sources:
   - type: group
-    id: my-team
+    ids: [my-team]
 `)
 	cfg, err := Load(path)
 	if err != nil {
@@ -50,7 +50,7 @@ gitlab:
 
 sources:
   - type: group
-    id: x
+    ids: [x]
 `)
 	cfg, err := Load(path)
 	if err != nil {
@@ -69,7 +69,7 @@ gitlab:
 
 sources:
   - type: group
-    id: x
+    ids: [x]
 `)
 	t.Setenv("GITLAB_TOKEN", "from-env")
 
@@ -94,7 +94,7 @@ excluded_authors:
 
 sources:
   - type: group
-    id: my-team
+    ids: [my-team]
 `)
 	cfg, err := Load(path)
 	if err != nil {
@@ -115,7 +115,7 @@ gitlab:
 
 sources:
   - type: group
-    id: x
+    ids: [x]
 `)
 	_, err := Load(path)
 	if err == nil {
@@ -130,7 +130,7 @@ gitlab:
 
 sources:
   - type: group
-    id: x
+    ids: [x]
 `)
 	os.Unsetenv("GITLAB_TOKEN")
 	_, err := Load(path)
@@ -159,7 +159,7 @@ gitlab:
 
 sources:
   - type: invalid
-    id: x
+    ids: [x]
 `)
 	_, err := Load(path)
 	if err == nil {
@@ -167,7 +167,7 @@ sources:
 	}
 }
 
-func TestValidationGroupSourceMissingID(t *testing.T) {
+func TestValidationGroupSourceMissingIDs(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:
   url: https://gitlab.example.com
@@ -178,11 +178,11 @@ sources:
 `)
 	_, err := Load(path)
 	if err == nil {
-		t.Fatal("expected error for group source missing id")
+		t.Fatal("expected error for group source missing ids")
 	}
 }
 
-func TestValidationUserSourceMissingUsername(t *testing.T) {
+func TestValidationSourceMissingIDs(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:
   url: https://gitlab.example.com
@@ -193,7 +193,7 @@ sources:
 `)
 	_, err := Load(path)
 	if err == nil {
-		t.Fatal("expected error for user source missing username")
+		t.Fatal("expected error for source missing ids")
 	}
 }
 
@@ -206,7 +206,7 @@ gitlab:
 
 sources:
   - type: group
-    id: x
+    ids: [x]
 `
 	if err := os.WriteFile(filepath.Join(dir, "mrboard.yaml"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -238,9 +238,9 @@ gitlab:
 
 sources:
   - type: group
-    id: my-team
+    ids: [my-team]
   - type: user
-    username: alice
+    ids: [alice]
 
 excluded_authors:
   - bot

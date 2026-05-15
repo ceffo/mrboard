@@ -15,10 +15,10 @@ import (
 )
 
 // Source describes a single source of MRs.
+// IDs holds group paths (type "group") or usernames (type "user").
 type Source struct {
-	Type     string `mapstructure:"type"`     // "group" or "user"
-	ID       string `mapstructure:"id"`       // used when type == "group"
-	Username string `mapstructure:"username"` // used when type == "user"
+	Type string   `mapstructure:"type"` // "group" or "user"
+	IDs  []string `mapstructure:"ids"`
 }
 
 // GitLab mirrors the [gitlab] YAML section for Viper unmarshalling.
@@ -201,10 +201,7 @@ func validateSources(sources []Source) error {
 func validateSource(src Source) error {
 	return validation.ValidateStruct(&src,
 		validation.Field(&src.Type, validation.Required, validation.In("group", "user")),
-		validation.Field(&src.ID,
-			validation.Required.When(src.Type == "group").Error("id is required for group sources")),
-		validation.Field(&src.Username,
-			validation.Required.When(src.Type == "user").Error("username is required for user sources")),
+		validation.Field(&src.IDs, validation.Required, validation.Length(1, 0).Error("ids must contain at least one entry")),
 	)
 }
 

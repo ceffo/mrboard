@@ -19,11 +19,20 @@ type MergeRequestSource interface {
 	GetDetail(ctx context.Context, projectID, mrIID int64) (description string, threads []domain.Thread, err error)
 }
 
-// Source describes a single source of MRs (group or user).
+// SourceType identifies the kind of GitLab entity a source represents.
+type SourceType string
+
+// Valid SourceType values.
+const (
+	SourceTypeGroup SourceType = "group"
+	SourceTypeUser  SourceType = "user"
+)
+
+// Source describes a single source of MRs.
+// IDs holds one or more group paths (for SourceTypeGroup) or usernames (for SourceTypeUser).
 type Source struct {
-	Type     string
-	ID       string
-	Username string
+	Type SourceType
+	IDs  []string
 }
 
 // Config is the service-level configuration for the MR fetching logic.

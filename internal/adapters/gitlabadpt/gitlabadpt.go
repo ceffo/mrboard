@@ -135,42 +135,46 @@ func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string)
 
 	for _, src := range a.cfg.Sources {
 		switch src.Type {
-		case "group":
-			allowedProjects, err := a.client.ListNonArchivedProjectIDs(ctx, src.ID)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
-				continue
-			}
-			mrs, err := a.client.ListGroupMRs(ctx, src.ID, primaryExclusion)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("source group=%q: %w", src.ID, err))
-				continue
-			}
-			logger := ilog.FromContext(ctx)
-			for _, mr := range mrs {
-				if allowedProjects[mr.ProjectID] {
-					all = append(all, mr)
-				} else {
-					logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
-				}
-			}
-		case "user":
-			mrs, err := a.client.ListUserMRs(ctx, src.Username)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("source user=%q: %w", src.Username, err))
-				continue
-			}
-			logger := ilog.FromContext(ctx)
-			for _, mr := range mrs {
-				archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+		case mrsvc.SourceTypeGroup:
+			for _, groupID := range src.IDs {
+				allowedProjects, err := a.client.ListNonArchivedProjectIDs(ctx, groupID)
 				if err != nil {
-					errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", src.Username, mr.IID, err))
+					errs = append(errs, fmt.Errorf("source group=%q: %w", groupID, err))
 					continue
 				}
-				if !archived {
-					all = append(all, mr)
-				} else {
-					logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
+				mrs, err := a.client.ListGroupMRs(ctx, groupID, primaryExclusion)
+				if err != nil {
+					errs = append(errs, fmt.Errorf("source group=%q: %w", groupID, err))
+					continue
+				}
+				logger := ilog.FromContext(ctx)
+				for _, mr := range mrs {
+					if allowedProjects[mr.ProjectID] {
+						all = append(all, mr)
+					} else {
+						logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
+					}
+				}
+			}
+		case mrsvc.SourceTypeUser:
+			for _, username := range src.IDs {
+				mrs, err := a.client.ListUserMRs(ctx, username)
+				if err != nil {
+					errs = append(errs, fmt.Errorf("source user=%q: %w", username, err))
+					continue
+				}
+				logger := ilog.FromContext(ctx)
+				for _, mr := range mrs {
+					archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+					if err != nil {
+						errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", username, mr.IID, err))
+						continue
+					}
+					if !archived {
+						all = append(all, mr)
+					} else {
+						logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
+					}
 				}
 			}
 		default:

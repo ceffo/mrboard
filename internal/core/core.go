@@ -52,9 +52,8 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 	sources := make([]mrsvc.Source, len(adptCfg.Sources))
 	for i, s := range adptCfg.Sources {
 		sources[i] = mrsvc.Source{
-			Type:     s.Type,
-			ID:       s.ID,
-			Username: s.Username,
+			Type: mrsvc.SourceType(s.Type),
+			IDs:  s.IDs,
 		}
 	}
 	adapter := gitlabadpt.New(client, gitlabadpt.Config{
