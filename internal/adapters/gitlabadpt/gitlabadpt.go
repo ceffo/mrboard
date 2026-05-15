@@ -38,7 +38,7 @@ func New(client *pkggitlab.Client, cfg Config) *GitLabAdapter {
 // FetchAll implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
-	logger.Debug("gitlab: fetch start", "excluded_authors", a.cfg.ExcludedAuthors)
+	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors)
 
 	var primaryExclusion string
 	if len(a.cfg.ExcludedAuthors) > 0 {
@@ -72,7 +72,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 		seen[k] = true
 		unique = append(unique, mr)
 	}
-	logger.Debug("gitlab: dedup summary", "raw", len(raw), "unique", len(unique), "dropped", len(raw)-len(unique))
+	logger.Info("gitlab: dedup summary", "raw", len(raw), "unique", len(unique), "source_errors", len(errs))
 
 	type result struct {
 		mr  domain.MergeRequest
@@ -99,13 +99,14 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 	var mrs []domain.MergeRequest
 	for _, r := range results {
 		if r.err != nil {
+			logger.Error("gitlab: enrich MR failed", "error", r.err)
 			errs = append(errs, r.err)
 			continue
 		}
 		mrs = append(mrs, r.mr)
 	}
 
-	logger.Debug("gitlab: fetch summary", "total_mrs", len(mrs), "errors", len(errs))
+	logger.Info("gitlab: fetch done", "mrs", len(mrs), "errors", len(errs))
 	return mrs, errs
 }
 
@@ -130,6 +131,7 @@ type mrKey struct {
 }
 
 func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string) ([]*gl.BasicMergeRequest, []error) {
+	logger := ilog.FromContext(ctx)
 	var all []*gl.BasicMergeRequest
 	var errs []error
 
@@ -139,15 +141,17 @@ func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string)
 			for _, groupID := range src.IDs {
 				allowedProjects, err := a.client.ListNonArchivedProjectIDs(ctx, groupID)
 				if err != nil {
+					logger.Error("gitlab: list group projects failed", "group", groupID, "error", err)
 					errs = append(errs, fmt.Errorf("source group=%q: %w", groupID, err))
 					continue
 				}
 				mrs, err := a.client.ListGroupMRs(ctx, groupID, primaryExclusion)
 				if err != nil {
+					logger.Error("gitlab: list group MRs failed", "group", groupID, "error", err)
 					errs = append(errs, fmt.Errorf("source group=%q: %w", groupID, err))
 					continue
 				}
-				logger := ilog.FromContext(ctx)
+				logger.Info("gitlab: group source fetched", "group", groupID, "count", len(mrs))
 				for _, mr := range mrs {
 					if allowedProjects[mr.ProjectID] {
 						all = append(all, mr)
@@ -160,13 +164,16 @@ func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string)
 			for _, username := range src.IDs {
 				mrs, err := a.client.ListUserMRs(ctx, username)
 				if err != nil {
+					logger.Error("gitlab: list user MRs failed", "username", username, "error", err)
 					errs = append(errs, fmt.Errorf("source user=%q: %w", username, err))
 					continue
 				}
-				logger := ilog.FromContext(ctx)
+				logger.Info("gitlab: user source fetched", "username", username, "count", len(mrs))
 				for _, mr := range mrs {
 					archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
 					if err != nil {
+						logger.Error("gitlab: check project archived failed",
+							"username", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
 						errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", username, mr.IID, err))
 						continue
 					}
@@ -178,6 +185,7 @@ func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string)
 				}
 			}
 		default:
+			logger.Error("gitlab: unknown source type", "type", src.Type)
 			errs = append(errs, fmt.Errorf("source: unknown type %q", src.Type))
 		}
 	}

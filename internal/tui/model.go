@@ -15,6 +15,7 @@ import (
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	ilog "github.com/ceffo/mrboard/internal/log"
 	"github.com/ceffo/mrboard/pkg/theme"
 )
 
@@ -185,6 +186,7 @@ type Model struct {
 	filterReviewers []string
 	fetchCancel     context.CancelFunc
 	baseCtx         context.Context
+	logger          *slog.Logger
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -197,9 +199,11 @@ func New(
 	version string,
 	opts Options,
 ) Model {
+	logger := ilog.FromContext(ctx)
+
 	st, err := store.Load()
 	if err != nil {
-		slog.Default().Error("statestore: load failed, using defaults", "err", err)
+		logger.Error("statestore: load failed, using defaults", "err", err)
 		st = DefaultState()
 	}
 
@@ -265,10 +269,12 @@ func New(
 		sortField:       sf,
 		sortDesc:        st.SortDesc,
 		baseCtx:         ctx,
+		logger:          logger,
 	}
 	if viewMode == ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
 	}
+	logger.Info("tui: starting", "version", version, "theme", themeName, "mode", themeMode, "view", int(viewMode))
 	return m
 }
 
@@ -326,6 +332,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateBoard
 		m.allMRs = msg.MRs
 		m.errors = msg.Errors
+		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
+		for _, e := range msg.Errors {
+			m.logger.Warn("tui: fetch partial error", "error", e)
+		}
 		m.applyMRFilter()
 		return m, nil
 
@@ -521,7 +531,7 @@ func (m *Model) closeDetail() {
 func (m *Model) openThemePicker() {
 	names, err := AllThemeNames()
 	if err != nil {
-		slog.Default().Error("theme: list theme names", "err", err)
+		m.logger.Error("theme: list theme names", "err", err)
 		names = []string{m.themeName}
 	}
 	m.themePicker = newThemePickerWidget(names, m.themeName, m.themeMode, m.styles, m.themePickerKeys)
@@ -699,7 +709,7 @@ func (m *Model) saveState() {
 		ThemeName: m.themeName,
 		ThemeMode: m.themeMode,
 	}); err != nil {
-		slog.Default().Error("statestore: save failed", "err", err)
+		m.logger.Error("statestore: save failed", "err", err)
 	}
 }
 

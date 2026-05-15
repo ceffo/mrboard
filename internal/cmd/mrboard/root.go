@@ -59,6 +59,14 @@ Environment:
 			ctx := ilog.WithLogger(cmd.Context(), c.Logger)
 			ctx = context.WithValue(ctx, coreKey{}, c)
 			cmd.SetContext(ctx)
+			c.Logger.Info("mrboard startup", "version", Version, "log_level", cfg.Log.Level, "current_user", cfg.CurrentUser)
+			return nil
+		},
+		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
+			if c != nil {
+				c.Logger.Info("mrboard shutdown")
+				return c.Close(context.Background())
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
