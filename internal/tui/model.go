@@ -138,42 +138,53 @@ type DetailFetchResultMsg struct {
 	Err         error
 }
 
+// Options are session-scoped overrides passed via CLI flags.
+// They are not persisted to the state file.
+type Options struct {
+	ThemeOverride string // --theme flag; "" means use state
+	ModeOverride  string // --mode flag; "" means use state
+}
+
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state          appState
-	header         headerWidget
-	board          boardWidget
-	footer         footerWidget
-	sp             spinnerWidget
-	detail         detailWidget
-	showDetail     bool
-	filterPopup    filterPopupWidget
-	showFilter     bool
-	keys           KeyMap
-	detailKeys     DetailKeyMap
-	filterKeys     FilterPopupKeyMap
-	styles         Styles
-	theme          theme.Theme[ColorKey]
-	themeMode      string // "auto", "dark", "light"
-	hasDarkBg      bool
-	width          int
-	height         int
-	errors         []error
-	errMsg         string
-	cfg            *config.Config
-	src            mrsvc.MergeRequestSource
-	store          StateStore
-	allMRs         []domain.MergeRequest
-	userMap        map[string]string
-	currentUser    string
-	viewMode       ViewMode
-	sortField      sortField
-	sortDesc       bool
-	filterPhases   map[domain.MRPhase]bool
-	filterAuthor   string
-	filterReviewer string
-	fetchCancel    context.CancelFunc
-	baseCtx        context.Context
+	state           appState
+	header          headerWidget
+	board           boardWidget
+	footer          footerWidget
+	sp              spinnerWidget
+	detail          detailWidget
+	showDetail      bool
+	filterPopup     filterPopupWidget
+	showFilter      bool
+	themePicker     themePickerWidget
+	showThemePicker bool
+	keys            KeyMap
+	detailKeys      DetailKeyMap
+	filterKeys      FilterPopupKeyMap
+	themePickerKeys ThemePickerKeyMap
+	styles          Styles
+	theme           theme.Theme[ColorKey]
+	themeName       string // currently active theme name
+	themeMode       string // "auto", "dark", "light"
+	hasDarkBg       bool
+	width           int
+	height          int
+	errors          []error
+	errMsg          string
+	cfg             *config.Config
+	src             mrsvc.MergeRequestSource
+	store           StateStore
+	allMRs          []domain.MergeRequest
+	userMap         map[string]string
+	currentUser     string
+	viewMode        ViewMode
+	sortField       sortField
+	sortDesc        bool
+	filterPhases    map[domain.MRPhase]bool
+	filterAuthor    string
+	filterReviewer  string
+	fetchCancel     context.CancelFunc
+	baseCtx         context.Context
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -184,6 +195,7 @@ func New(
 	src mrsvc.MergeRequestSource,
 	store StateStore,
 	version string,
+	opts Options,
 ) Model {
 	st, err := store.Load()
 	if err != nil {
@@ -191,10 +203,27 @@ func New(
 		st = DefaultState()
 	}
 
-	th := loadThemeFromConfig(cfg.ThemeConfig())
+	// Resolve theme name and mode: flag overrides > state > defaults.
+	themeName := st.ThemeName
+	if themeName == "" {
+		themeName = "default"
+	}
+	if opts.ThemeOverride != "" {
+		themeName = opts.ThemeOverride
+	}
 
-	// Default to dark mode; corrected by BackgroundColorMsg on first update.
-	initialDark := cfg.Theme.Mode == "dark" || cfg.Theme.Mode != "light"
+	themeMode := st.ThemeMode
+	if themeMode == "" {
+		themeMode = themeModeAuto
+	}
+	if opts.ModeOverride != "" {
+		themeMode = opts.ModeOverride
+	}
+
+	th := LoadThemeByName(themeName)
+
+	// Default to dark; corrected by BackgroundColorMsg on first update.
+	initialDark := themeMode == themeModeDark || themeMode != themeModeLight
 	styles := NewStyles(th, initialDark)
 	keys := DefaultKeyMap
 
@@ -213,27 +242,29 @@ func New(
 	}
 
 	m := Model{
-		state:       stateLoading,
-		header:      newHeaderWidget(styles),
-		board:       newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
-		footer:      newFooterWidget(keys, styles, version),
-		sp:          newSpinnerWidget(),
-		detail:      newDetailWidget(styles),
-		keys:        keys,
-		detailKeys:  DefaultDetailKeyMap,
-		filterKeys:  DefaultFilterPopupKeyMap,
-		styles:      styles,
-		theme:       th,
-		themeMode:   cfg.Theme.Mode,
-		hasDarkBg:   initialDark,
-		cfg:         cfg,
-		src:         src,
-		store:       store,
-		currentUser: cfg.CurrentUser,
-		viewMode:    viewMode,
-		sortField:   sf,
-		sortDesc:    st.SortDesc,
-		baseCtx:     ctx,
+		state:           stateLoading,
+		header:          newHeaderWidget(styles),
+		board:           newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		footer:          newFooterWidget(keys, styles, version),
+		sp:              newSpinnerWidget(),
+		detail:          newDetailWidget(styles),
+		keys:            keys,
+		detailKeys:      DefaultDetailKeyMap,
+		filterKeys:      DefaultFilterPopupKeyMap,
+		themePickerKeys: DefaultThemePickerKeyMap,
+		styles:          styles,
+		theme:           th,
+		themeName:       themeName,
+		themeMode:       themeMode,
+		hasDarkBg:       initialDark,
+		cfg:             cfg,
+		src:             src,
+		store:           store,
+		currentUser:     cfg.CurrentUser,
+		viewMode:        viewMode,
+		sortField:       sf,
+		sortDesc:        st.SortDesc,
+		baseCtx:         ctx,
 	}
 	if viewMode == ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -277,7 +308,7 @@ func (m *Model) startFetch() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
-		if m.themeMode == "auto" || m.themeMode == "" {
+		if m.themeMode == themeModeAuto || m.themeMode == "" {
 			m.hasDarkBg = msg.IsDark()
 			m.applyTheme()
 		}
@@ -326,6 +357,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showFilter = false
 		return m, nil
 
+	case ThemePickerClosedMsg:
+		m.showThemePicker = false
+		return m, nil
+
+	case ThemeChangedMsg:
+		m.themeName = msg.Name
+		m.themeMode = msg.Mode
+		switch msg.Mode {
+		case themeModeDark:
+			m.hasDarkBg = true
+		case themeModeLight:
+			m.hasDarkBg = false
+			// themeModeAuto or "": keep current hasDarkBg from last BackgroundColorMsg
+		}
+		m.theme = LoadThemeByName(msg.Name)
+		m.applyTheme()
+		m.saveState()
+		return m, nil
+
 	case tickMsg:
 		return m, tickCmd()
 
@@ -358,6 +408,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.filterPopup.Update(msg)
 		m.filterPopup = updated.(filterPopupWidget)
 		return m, cmd
+	}
+
+	if m.showThemePicker {
+		updated, cmd := m.themePicker.Update(msg)
+		m.themePicker = updated.(themePickerWidget)
+		return m, cmd
+	}
+
+	// 't' opens the theme picker from board or detail mode.
+	if key.Matches(msg, m.keys.Theme) {
+		m.openThemePicker()
+		return m, nil
 	}
 
 	if m.showDetail {
@@ -456,6 +518,16 @@ func (m *Model) closeDetail() {
 	m.resizeBoard()
 }
 
+func (m *Model) openThemePicker() {
+	names, err := AllThemeNames()
+	if err != nil {
+		slog.Default().Error("theme: list theme names", "err", err)
+		names = []string{m.themeName}
+	}
+	m.themePicker = newThemePickerWidget(names, m.themeName, m.themeMode, m.styles, m.themePickerKeys)
+	m.showThemePicker = true
+}
+
 func (m *Model) resizeBoard() {
 	if m.showDetail {
 		detailW := m.width * detailWidthRatio / detailWidthDivisor
@@ -506,51 +578,79 @@ func (m Model) renderContent() string {
 
 	case stateBoard:
 		if m.showFilter {
-			return m.renderWithPopup()
+			return m.renderWithFilterOverlay()
 		}
-		headerStr := m.header.render()
-		footerStr := m.footer.render()
-		boardH := m.height - chromeHeight
-
-		boardStr := m.board.render()
-		if boardH > 0 {
-			lines := strings.SplitN(boardStr, "\n", boardH+2) //nolint:mnd
-			if len(lines) > boardH {
-				lines = lines[:boardH]
-			}
-			boardStr = strings.Join(lines, "\n")
-			boardStr = lip.NewStyle().Height(boardH).Render(boardStr)
+		board := m.renderBoard()
+		if m.showThemePicker {
+			return m.renderWithThemePickerOverlay(board)
 		}
-
-		var contentStr string
-		if m.showDetail {
-			detailStr := m.detail.render()
-			if boardH > 0 {
-				dLines := strings.SplitN(detailStr, "\n", boardH+2) //nolint:mnd
-				if len(dLines) > boardH {
-					dLines = dLines[:boardH]
-				}
-				detailStr = strings.Join(dLines, "\n")
-				detailStr = lip.NewStyle().Height(boardH).Render(detailStr)
-			}
-			contentStr = joinHorizontalTop(boardStr, detailStr)
-		} else {
-			contentStr = boardStr
-		}
-
-		var errLines string
-		for _, e := range m.errors {
-			errLines += "\n" + m.styles.ErrorMsg.Render("⚠ "+e.Error())
-		}
-
-		return headerStr + "\n" + contentStr + errLines + "\n" + footerStr
+		return board
 	}
 	return ""
 }
 
-func (m Model) renderWithPopup() string {
+func (m Model) renderBoard() string {
+	headerStr := m.header.render()
+	footerStr := m.footer.render()
+	boardH := m.height - chromeHeight
+
+	boardStr := m.board.render()
+	if boardH > 0 {
+		lines := strings.SplitN(boardStr, "\n", boardH+2) //nolint:mnd
+		if len(lines) > boardH {
+			lines = lines[:boardH]
+		}
+		boardStr = strings.Join(lines, "\n")
+		boardStr = lip.NewStyle().Height(boardH).Render(boardStr)
+	}
+
+	var contentStr string
+	if m.showDetail {
+		detailStr := m.detail.render()
+		if boardH > 0 {
+			dLines := strings.SplitN(detailStr, "\n", boardH+2) //nolint:mnd
+			if len(dLines) > boardH {
+				dLines = dLines[:boardH]
+			}
+			detailStr = strings.Join(dLines, "\n")
+			detailStr = lip.NewStyle().Height(boardH).Render(detailStr)
+		}
+		contentStr = joinHorizontalTop(boardStr, detailStr)
+	} else {
+		contentStr = boardStr
+	}
+
+	var errLines string
+	for _, e := range m.errors {
+		errLines += "\n" + m.styles.ErrorMsg.Render("⚠ "+e.Error())
+	}
+
+	return headerStr + "\n" + contentStr + errLines + "\n" + footerStr
+}
+
+func (m Model) renderWithFilterOverlay() string {
 	popup := m.filterPopup.render()
 	return lip.Place(m.width, m.height, lip.Center, lip.Center, popup)
+}
+
+func (m Model) renderWithThemePickerOverlay(board string) string {
+	// Pad the board content to the full terminal dimensions before compositing.
+	bg := lip.Place(m.width, m.height, lip.Left, lip.Top, board)
+	popup := m.themePicker.render()
+	popupW := lip.Width(popup)
+	popupH := lip.Height(popup)
+	x := (m.width - popupW) / 2  //nolint:mnd
+	y := (m.height - popupH) / 2 //nolint:mnd
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	bgLayer := lip.NewLayer(bg)
+	popupLayer := lip.NewLayer(popup).X(x).Y(y).Z(1)
+	comp := lip.NewCompositor(bgLayer, popupLayer)
+	return comp.Render()
 }
 
 // applyMRFilter applies all active filters and sort, then pushes the result into the board.
@@ -589,6 +689,8 @@ func (m *Model) saveState() {
 		SortField: m.sortField.stateKey(),
 		SortDesc:  m.sortDesc,
 		ViewMode:  m.viewMode,
+		ThemeName: m.themeName,
+		ThemeMode: m.themeMode,
 	}); err != nil {
 		slog.Default().Error("statestore: save failed", "err", err)
 	}

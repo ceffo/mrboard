@@ -1,5 +1,12 @@
 package tui
 
+// Theme mode constants.
+const (
+	themeModeAuto  = "auto"
+	themeModeDark  = "dark"
+	themeModeLight = "light"
+)
+
 // ColorKey identifies a semantic color slot in a theme.
 // These keys follow a design-first hierarchy: surface, content, chrome, brand, signal.
 type ColorKey string

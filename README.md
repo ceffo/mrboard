@@ -61,7 +61,42 @@ The config file is searched in this order:
 - **s** — Sort
 - **tab** — Toggle view
 - **f** — Filter
+- **t** — Open theme picker
 - **q** — Quit
+
+## Theming
+
+mrboard ships five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`.
+
+### Live theme picker
+
+Press **`t`** to open the theme picker overlay. The board stays visible behind it so you see changes in real time as you navigate:
+
+- **↑/↓** — Select theme or mode
+- **Tab** — Switch between theme list and mode pane
+- **t / Esc** — Close
+
+The selected theme and mode are saved automatically on every navigation move — no confirmation step needed.
+
+### Mode
+
+The right pane of the picker lets you choose:
+
+- **auto** (default) — follows your terminal's background colour
+- **dark** — force dark palette
+- **light** — force light palette
+
+### CLI flags (session-only, not persisted)
+
+```bash
+mrboard --theme dracula          # override theme for this session
+mrboard --mode light             # override mode for this session
+mrboard --theme nord --mode dark
+```
+
+### Custom themes
+
+Drop any `.json` file into `~/.config/mrboard/themes/` and it appears in the picker automatically. Custom themes use the same format as built-in themes. A custom file with the same name as a built-in overrides it.
 
 ## Columns
 

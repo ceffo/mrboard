@@ -9,9 +9,9 @@ import (
 	"github.com/ceffo/mrboard/internal/tui"
 )
 
-func execBoard(ctx context.Context, c *core.Core, version string) error {
+func execBoard(ctx context.Context, c *core.Core, version string, opts tui.Options) error {
 	_, err := tea.NewProgram(
-		tui.New(ctx, c.Config, c.MRSource, c.StateStore, version),
+		tui.New(ctx, c.Config, c.MRSource, c.StateStore, version, opts),
 		tea.WithContext(ctx),
 	).Run()
 	return err

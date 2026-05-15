@@ -42,6 +42,7 @@ type Styles struct {
 	PillNotStarted              lip.Style
 	PillReReview                lip.Style
 	PopupBorder                 lip.Style
+	PopupDivider                lip.Style
 	PopupHint                   lip.Style
 	PopupItem                   lip.Style
 	PopupItemFocused            lip.Style
@@ -116,6 +117,7 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Border(lip.RoundedBorder()).
 			BorderForeground(c(Accent)).
 			Padding(0, 1),
+		PopupDivider:     lip.NewStyle().Foreground(c(Border)),
 		PopupTitle:       lip.NewStyle().Bold(true).Foreground(c(Accent)),
 		PopupSection:     lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
 		PopupItem:        lip.NewStyle().Foreground(c(FgHigh)),

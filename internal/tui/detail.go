@@ -333,7 +333,7 @@ func renderMarkdown(md string, width int) string {
 
 	style := os.Getenv("GLAMOUR_STYLE")
 	if style == "" {
-		style = "dark"
+		style = themeModeDark
 	}
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(style),

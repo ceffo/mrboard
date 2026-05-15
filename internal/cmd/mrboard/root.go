@@ -9,6 +9,7 @@ import (
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/core"
 	ilog "github.com/ceffo/mrboard/internal/log"
+	"github.com/ceffo/mrboard/internal/tui"
 )
 
 // Version is set at build time via -ldflags.
@@ -24,6 +25,8 @@ func Execute(ctx context.Context) error {
 func buildRootCmd() *cobra.Command {
 	var cfgPath string
 	var logLevel string
+	var themeOverride string
+	var modeOverride string
 	var c *core.Core
 
 	root := &cobra.Command{
@@ -59,12 +62,18 @@ Environment:
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return execBoard(cmd.Context(), c, Version)
+			opts := tui.Options{
+				ThemeOverride: themeOverride,
+				ModeOverride:  modeOverride,
+			}
+			return execBoard(cmd.Context(), c, Version, opts)
 		},
 	}
 
 	root.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "config file path (default: XDG search)")
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level override (debug|info|warn|error)")
+	root.Flags().StringVar(&themeOverride, "theme", "", "session theme (default, dracula, nord, tokyo-night, monokai)")
+	root.Flags().StringVar(&modeOverride, "mode", "", "colour mode for this session (auto, dark, light)")
 
 	root.AddCommand(buildFetchCmd())
 	root.AddCommand(buildVersionCmd())
