@@ -30,9 +30,9 @@ var phaseOrder = [4]domain.MRPhase{
 
 func newBoardWidget(styles Styles, width, height int) boardWidget {
 	b := boardWidget{styles: styles, width: width, height: height}
-	colWidth := max(width/numColumns, minColWidth)
+	widths := columnWidths(width)
 	for i, phase := range phaseOrder {
-		b.columns[i] = newColumnWidget(phase, styles, colWidth, height)
+		b.columns[i] = newColumnWidget(phase, styles, widths[i], height)
 		b.columns[i].SetActive(true)
 	}
 	b.columns[0].SetFocused(true)
@@ -58,11 +58,27 @@ func (b *boardWidget) SetActive(v bool) {
 func (b *boardWidget) SetSize(width, height int) {
 	b.width = width
 	b.height = height
-	colWidth := max(width/numColumns, minColWidth)
+	widths := columnWidths(width)
 	for i := range b.columns {
-		b.columns[i].SetWidth(colWidth)
+		b.columns[i].SetWidth(widths[i])
 		b.columns[i].SetHeight(height)
 	}
+}
+
+// columnWidths distributes totalWidth across numColumns evenly, giving the
+// remainder pixels to the last column so no space is wasted on the right edge.
+func columnWidths(totalWidth int) [numColumns]int {
+	base := max(totalWidth/numColumns, minColWidth)
+	remainder := totalWidth - base*numColumns
+	if remainder < 0 {
+		remainder = 0
+	}
+	var w [numColumns]int
+	for i := range w {
+		w[i] = base
+	}
+	w[numColumns-1] += remainder
+	return w
 }
 
 func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {

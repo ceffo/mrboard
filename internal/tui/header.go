@@ -40,29 +40,32 @@ func (h headerWidget) render() string {
 		}
 	}
 
-	title := h.styles.HeaderTitle.Render(h.title)
-	stats := h.styles.HeaderStats.Render(fmt.Sprintf(
+	// Inherit propagates the background color to each segment so the full
+	// header line carries a uniform background without a wrapping Render call
+	// (which would be broken by inner ANSI resets from nested renders).
+	bg := h.styles.Header
+	title := h.styles.HeaderTitle.Inherit(bg).Render(h.title)
+	stats := h.styles.HeaderStats.Inherit(bg).Render(fmt.Sprintf(
 		"Draft:%d  Review:%d  Author:%d  Ready:%d  Total:%d",
 		counts[0], counts[1], counts[2], counts[3], len(h.mrs),
 	))
 	if h.filterActive {
-		stats += "  " + h.styles.FilterActive.Render("[filtered]")
+		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[filtered]")
 	}
 
 	titleW := lip.Width(title)
 	statsW := lip.Width(stats)
 
-	// Build the row as plain text with inline fg-only ANSI codes; the outer
-	// Header style applies the background uniformly to the whole line.
-	// No Width() used — avoids lipgloss word-wrap bug.
 	if h.width <= titleW+statsW+1 {
-		return h.styles.Header.Render(title + " " + stats)
+		return title + bg.Render(" ") + stats
 	}
 	leftPad := (h.width - titleW) / 2 //nolint:mnd
 	gap := h.width - leftPad - titleW - statsW
 	if gap < 1 {
 		gap = 1
 	}
-	row := strings.Repeat(" ", leftPad) + title + strings.Repeat(" ", gap) + stats
-	return h.styles.Header.Render(row)
+	return bg.Render(strings.Repeat(" ", leftPad)) +
+		title +
+		bg.Render(strings.Repeat(" ", gap)) +
+		stats
 }
