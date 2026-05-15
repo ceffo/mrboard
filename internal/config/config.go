@@ -37,16 +37,27 @@ type logSection struct {
 	Level string `mapstructure:"level"`
 }
 
+// ThemeSection mirrors the [theme] YAML section.
+type ThemeSection struct {
+	// Name selects a built-in theme: default, dracula, nord, tokyo-night, monokai.
+	Name string `mapstructure:"name"`
+	// Mode forces light/dark or lets the terminal decide: auto, dark, light.
+	Mode string `mapstructure:"mode"`
+	// File is an optional path to a custom JSON theme file; takes precedence over Name.
+	File string `mapstructure:"file"`
+}
+
 // AppConfig is the top-level application configuration.
 // Field access patterns (e.g. cfg.GitLab.URL, cfg.Sources) are intentionally
 // preserved from the previous Config type so existing call-sites keep working
 // while the architecture migrates.
 type AppConfig struct {
-	GitLab          GitLab     `mapstructure:"gitlab"`
-	Sources         []Source   `mapstructure:"sources"`
-	ExcludedAuthors []string   `mapstructure:"excluded_authors"`
-	CurrentUser     string     `mapstructure:"current_user"`
-	Log             logSection `mapstructure:"log"`
+	GitLab          GitLab       `mapstructure:"gitlab"`
+	Sources         []Source     `mapstructure:"sources"`
+	ExcludedAuthors []string     `mapstructure:"excluded_authors"`
+	CurrentUser     string       `mapstructure:"current_user"`
+	Log             logSection   `mapstructure:"log"`
+	Theme           ThemeSection `mapstructure:"theme"`
 }
 
 // Config is a backward-compatible alias for AppConfig.
@@ -83,6 +94,13 @@ type LogConfig struct {
 	Level string
 }
 
+// ThemeConfig is the configuration consumed by the TUI theme loader.
+type ThemeConfig struct {
+	Name string
+	Mode string
+	File string
+}
+
 // --- Accessors --------------------------------------------------------------
 
 // GitLabClientConfig extracts the configuration slice consumed by pkg/gitlab.Client.
@@ -117,6 +135,11 @@ func (c *AppConfig) LogConfig() LogConfig {
 	return LogConfig{Path: c.Log.Path, Level: c.Log.Level}
 }
 
+// ThemeConfig extracts the configuration slice consumed by the TUI theme loader.
+func (c *AppConfig) ThemeConfig() ThemeConfig {
+	return ThemeConfig{Name: c.Theme.Name, Mode: c.Theme.Mode, File: c.Theme.File}
+}
+
 // --- Loading ----------------------------------------------------------------
 
 const defaultRequiredApprovals = 2
@@ -134,6 +157,8 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("gitlab.timeout", "30s")
 	v.SetDefault("gitlab.required_approvals", defaultRequiredApprovals)
 	v.SetDefault("log.level", "info")
+	v.SetDefault("theme.name", "default")
+	v.SetDefault("theme.mode", "auto")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {

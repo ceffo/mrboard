@@ -22,6 +22,7 @@ func newHeaderWidget(styles Styles) headerWidget {
 	return headerWidget{styles: styles, title: "mrboard"}
 }
 
+func (h *headerWidget) SetStyles(s Styles)               { h.styles = s }
 func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }

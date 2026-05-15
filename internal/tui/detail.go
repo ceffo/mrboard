@@ -46,6 +46,9 @@ func newDetailWidget(styles Styles) detailWidget {
 	return detailWidget{styles: styles, descExpanded: true}
 }
 
+// SetStyles updates the detail panel's style set.
+func (d *detailWidget) SetStyles(s Styles) { d.styles = s }
+
 func (d *detailWidget) SetMR(mr *domain.MergeRequest) {
 	d.mr = mr
 	d.threads = nil

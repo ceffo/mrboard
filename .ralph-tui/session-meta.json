@@ -1,8 +1,8 @@
 {
   "id": "765b4394-4ba8-4fe7-aa4b-caa5a195621d",
-  "status": "running",
+  "status": "completed",
   "startedAt": "2026-05-13T03:40:44.479Z",
-  "updatedAt": "2026-05-13T04:01:19.700Z",
+  "updatedAt": "2026-05-13T14:23:23.442Z",
   "agentPlugin": "claude",
   "trackerPlugin": "beads-rust",
   "epicId": "mrr-l7g",
@@ -10,5 +10,6 @@
   "maxIterations": 10,
   "totalTasks": 0,
   "tasksCompleted": 3,
-  "cwd": "/Users/moncefnaji/code/github.com/mrboard"
+  "cwd": "/Users/moncefnaji/code/github.com/mrboard",
+  "endedAt": "2026-05-13T14:23:23.441Z"
 }

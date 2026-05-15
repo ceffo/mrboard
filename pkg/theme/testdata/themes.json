@@ -1,0 +1,18 @@
+{
+  "styles": {
+    "primary": {
+      "dark": "#1E90FF",
+      "light": "#005BB5"
+    },
+    "secondary": {
+      "dark": "#FF6347",
+      "light": "#C0392B"
+    },
+    "dark-only": {
+      "dark": "#AAAAAA"
+    },
+    "light-only": {
+      "light": "#333333"
+    }
+  }
+}

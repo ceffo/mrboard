@@ -18,7 +18,6 @@ const nbsp rune = 0x00A0
 const (
 	cardBorderAndPad = 4 // 1 border + 1 padding on each side
 	minInnerWidth    = 8
-	minLeftW         = 2
 	minEllipsisWidth = 3
 )
 
@@ -43,10 +42,7 @@ func (c cardWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
 func (c cardWidget) View() tea.View                        { return tea.NewView(c.render()) }
 
 func (c cardWidget) render() string {
-	innerWidth := c.width - cardBorderAndPad
-	if innerWidth < minInnerWidth {
-		innerWidth = minInnerWidth
-	}
+	innerWidth := max(c.width-cardBorderAndPad, minInnerWidth)
 
 	now := time.Now()
 
@@ -117,10 +113,7 @@ func (c cardWidget) renderLine1(authorLabel, openLabel string, width int) string
 		rightW = lip.Width(rightRendered)
 	}
 
-	availAuthorW := width - mrRefW - rightW
-	if availAuthorW < 0 {
-		availAuthorW = 0
-	}
+	availAuthorW := max(width-mrRefW-rightW, 0)
 	authorTrunc := truncateWidth(authorLabel, availAuthorW)
 	authorStyled := c.styles.CardAuthor.Render(authorTrunc)
 	authorW := lip.Width(authorStyled)
@@ -142,33 +135,50 @@ func (c cardWidget) renderPills(now time.Time) []string {
 		if r.State == domain.ReviewerNotStarted {
 			continue
 		}
-		icon := reviewerIcon(r.State)
-		displayName := r.Name
-		if displayName == "" {
-			displayName = r.Username
-		}
-		pill := "[" + displayName + "·" + icon
-		if !r.WaitingSince.IsZero() {
-			pill += " " + withNBSP(domain.FormatDuration(now.Sub(r.WaitingSince)))
-		}
-		pill += "]"
-
-		var rendered string
-		switch r.State {
-		case domain.ReviewerNotStarted:
-			rendered = c.styles.PillNotStarted.Render(pill)
-		case domain.ReviewerCommented:
-			rendered = c.styles.PillCommented.Render(pill)
-		case domain.ReviewerReReviewRequested:
-			rendered = c.styles.PillReReview.Render(pill)
-		case domain.ReviewerApproved:
-			rendered = c.styles.PillApproved.Render(pill)
-		default:
-			rendered = c.styles.CardMeta.Render(pill)
-		}
+		rendered := c.renderPill(r, now)
 		parts = append(parts, rendered)
 	}
 	return parts
+}
+
+func (c cardWidget) renderPill(r domain.ReviewerInfo, now time.Time) string {
+	icon := reviewerIcon(r.State)
+	displayName := c.renderUsername(r.Username)
+	pillStyle := pillStyle(r.State, c.styles)
+	var rendered strings.Builder
+	rendered.WriteString(pillStyle.Render("["))
+	rendered.WriteString(displayName)
+	rendered.WriteString(pillStyle.Render("."))
+	rendered.WriteString(pillStyle.Render(icon))
+	if !r.WaitingSince.IsZero() {
+		duration := withNBSP(domain.FormatDuration(now.Sub(r.WaitingSince)))
+		rendered.WriteString(" ")
+		rendered.WriteString(pillStyle.Render(duration))
+	}
+	rendered.WriteString(pillStyle.Render("]"))
+	return rendered.String()
+}
+
+func pillStyle(state domain.ReviewerState, styles Styles) lip.Style {
+	switch state {
+	case domain.ReviewerNotStarted:
+		return styles.PillNotStarted
+	case domain.ReviewerCommented:
+		return styles.PillCommented
+	case domain.ReviewerReReviewRequested:
+		return styles.PillReReview
+	case domain.ReviewerApproved:
+		return styles.PillApproved
+	default:
+		return styles.CardMeta
+	}
+}
+
+func (c cardWidget) renderUsername(username string) string {
+	if username == "" {
+		return c.styles.ErrorMsg.Render("<unknown>")
+	}
+	return c.styles.UsernameAtSign.Render("@") + c.styles.CardAuthor.Render(username)
 }
 
 // wrapPills lays out reviewer pills into lines that each fit within width columns.
@@ -275,17 +285,17 @@ func truncateWidth(s string, maxWidth int) string {
 		return s
 	}
 	if maxWidth <= minEllipsisWidth {
-		result := ""
+		var result strings.Builder
 		w := 0
 		for _, r := range s {
 			rw := lip.Width(string(r))
 			if w+rw > maxWidth {
 				break
 			}
-			result += string(r)
+			result.WriteString(string(r))
 			w += rw
 		}
-		return result
+		return result.String()
 	}
 	runes := []rune(s)
 	for i := len(runes) - 1; i >= 0; i-- {

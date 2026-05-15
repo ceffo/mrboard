@@ -20,6 +20,9 @@ func newFooterWidget(keys KeyMap, styles Styles, version string) footerWidget {
 	return footerWidget{help: help.New(), keyMap: keys, styles: styles, version: version}
 }
 
+// SetStyles updates the footer's style set.
+func (f *footerWidget) SetStyles(s Styles) { f.styles = s }
+
 // SetKeyMap swaps the active key map; the footer renders the new bindings on the next View.
 func (f *footerWidget) SetKeyMap(km help.KeyMap) { f.keyMap = km }
 

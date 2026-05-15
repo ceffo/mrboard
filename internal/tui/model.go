@@ -15,6 +15,7 @@ import (
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	"github.com/ceffo/mrboard/pkg/theme"
 )
 
 // sortField identifies which MR attribute to sort by.
@@ -152,6 +153,9 @@ type Model struct {
 	detailKeys     DetailKeyMap
 	filterKeys     FilterPopupKeyMap
 	styles         Styles
+	theme          theme.Theme[ColorKey]
+	themeMode      string // "auto", "dark", "light"
+	hasDarkBg      bool
 	width          int
 	height         int
 	errors         []error
@@ -175,7 +179,11 @@ type Model struct {
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
 // store; on error it logs and falls back to DefaultState().
 func New(
-	ctx context.Context, cfg *config.Config, src mrsvc.MergeRequestSource, store StateStore, version string,
+	ctx context.Context,
+	cfg *config.Config,
+	src mrsvc.MergeRequestSource,
+	store StateStore,
+	version string,
 ) Model {
 	st, err := store.Load()
 	if err != nil {
@@ -183,7 +191,11 @@ func New(
 		st = DefaultState()
 	}
 
-	styles := NewStyles()
+	th := loadThemeFromConfig(cfg.ThemeConfig())
+
+	// Default to dark mode; corrected by BackgroundColorMsg on first update.
+	initialDark := cfg.Theme.Mode == "dark" || cfg.Theme.Mode != "light"
+	styles := NewStyles(th, initialDark)
 	keys := DefaultKeyMap
 
 	sf := sortFieldFromState(st.SortField)
@@ -211,6 +223,9 @@ func New(
 		detailKeys:  DefaultDetailKeyMap,
 		filterKeys:  DefaultFilterPopupKeyMap,
 		styles:      styles,
+		theme:       th,
+		themeMode:   cfg.Theme.Mode,
+		hasDarkBg:   initialDark,
 		cfg:         cfg,
 		src:         src,
 		store:       store,
@@ -261,6 +276,13 @@ func (m *Model) startFetch() tea.Cmd {
 // Update handles all incoming messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		if m.themeMode == "auto" || m.themeMode == "" {
+			m.hasDarkBg = msg.IsDark()
+			m.applyTheme()
+		}
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -532,6 +554,16 @@ func (m Model) renderWithPopup() string {
 }
 
 // applyMRFilter applies all active filters and sort, then pushes the result into the board.
+// applyTheme regenerates all styles from the current theme and dark-mode flag,
+// then propagates them to all widgets.
+func (m *Model) applyTheme() {
+	m.styles = NewStyles(m.theme, m.hasDarkBg)
+	m.header.SetStyles(m.styles)
+	m.board.SetStyles(m.styles)
+	m.footer.SetStyles(m.styles)
+	m.detail.SetStyles(m.styles)
+}
+
 func (m *Model) applyMRFilter() {
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
 	mrs := mrsvc.FilterAndSort(m.allMRs, mrsvc.FilterOptions{

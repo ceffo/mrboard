@@ -1,0 +1,17 @@
+{
+  "styles": {
+    "bg-base":     { "dark": "#1a1b26" },
+    "bg-elevated": { "dark": "#24283b" },
+    "bg-overlay":  { "dark": "#292e42" },
+    "fg-high":     { "dark": "#c0caf5" },
+    "fg-medium":   { "dark": "#a9b1d6" },
+    "fg-low":      { "dark": "#565f89" },
+    "border":      { "dark": "#3b4261" },
+    "border-focus":{ "dark": "#7aa2f7" },
+    "accent":      { "dark": "#7aa2f7" },
+    "success":     { "dark": "#9ece6a" },
+    "warning":     { "dark": "#e0af68" },
+    "danger":      { "dark": "#f7768e" },
+    "info":        { "dark": "#7dcfff" }
+  }
+}

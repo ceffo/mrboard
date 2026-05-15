@@ -1,114 +1,127 @@
 package tui
 
-import "charm.land/lipgloss/v2"
+import (
+	"image/color"
+
+	lip "charm.land/lipgloss/v2"
+
+	"github.com/ceffo/mrboard/pkg/theme"
+)
 
 // Styles holds all lipgloss styles used by mrboard widgets.
 type Styles struct {
-	Header                      lipgloss.Style
-	HeaderTitle                 lipgloss.Style
-	HeaderStats                 lipgloss.Style
-	Footer                      lipgloss.Style
-	ColumnHeader                lipgloss.Style
-	ColumnBorder                lipgloss.Style
-	ColumnBorderFocused         lipgloss.Style
-	ColumnBorderFocusedInactive lipgloss.Style
-	Card                        lipgloss.Style
-	CardFocused                 lipgloss.Style
-	CardFocusedInactive         lipgloss.Style
-	CardTitle                   lipgloss.Style
-	CardAuthor                  lipgloss.Style
-	CardMeta                    lipgloss.Style
-	PillNotStarted              lipgloss.Style
-	PillCommented               lipgloss.Style
-	PillReReview                lipgloss.Style
-	PillApproved                lipgloss.Style
-	DurationUrgent              lipgloss.Style
-	DurationWarning             lipgloss.Style
-	DurationOk                  lipgloss.Style
-	EmptyColumn                 lipgloss.Style
-	ErrorMsg                    lipgloss.Style
-	ScrollIndicator             lipgloss.Style
-	DetailPanel                 lipgloss.Style
-	DetailTitle                 lipgloss.Style
-	DetailSectionHeader         lipgloss.Style
-	DetailBody                  lipgloss.Style
-	DetailMeta                  lipgloss.Style
-	MRNumberBang                lipgloss.Style // colored "!" sigil in !IID refs
-	PopupBorder                 lipgloss.Style
-	PopupTitle                  lipgloss.Style
-	PopupSection                lipgloss.Style
-	PopupItem                   lipgloss.Style
-	PopupItemFocused            lipgloss.Style
-	PopupHint                   lipgloss.Style
-	FilterActive                lipgloss.Style
-	FooterVersion               lipgloss.Style
+	Card                        lip.Style
+	CardAuthor                  lip.Style
+	CardFocused                 lip.Style
+	CardFocusedInactive         lip.Style
+	CardMeta                    lip.Style
+	CardTitle                   lip.Style
+	ColumnBorder                lip.Style
+	ColumnBorderFocused         lip.Style
+	ColumnBorderFocusedInactive lip.Style
+	ColumnHeader                lip.Style
+	DetailBody                  lip.Style
+	DetailMeta                  lip.Style
+	DetailPanel                 lip.Style
+	DetailSectionHeader         lip.Style
+	DetailTitle                 lip.Style
+	DurationOk                  lip.Style
+	DurationUrgent              lip.Style
+	DurationWarning             lip.Style
+	EmptyColumn                 lip.Style
+	ErrorMsg                    lip.Style
+	FilterActive                lip.Style
+	Footer                      lip.Style
+	FooterVersion               lip.Style
+	Header                      lip.Style
+	HeaderStats                 lip.Style
+	HeaderTitle                 lip.Style
+	MRNumberBang                lip.Style
+	PillApproved                lip.Style
+	PillCommented               lip.Style
+	PillNotStarted              lip.Style
+	PillReReview                lip.Style
+	PopupBorder                 lip.Style
+	PopupHint                   lip.Style
+	PopupItem                   lip.Style
+	PopupItemFocused            lip.Style
+	PopupSection                lip.Style
+	PopupTitle                  lip.Style
+	ScrollIndicator             lip.Style
+	UsernameAtSign              lip.Style
 }
 
-// NewStyles creates and returns the default mrboard styles.
-func NewStyles() Styles {
+// NewStyles builds the full style set from the given theme and dark-mode flag.
+func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
+	c := func(key ColorKey) color.Color {
+		return lip.Color(string(th.Resolve(key, isDark)))
+	}
+
 	return Styles{
-		Header: lipgloss.NewStyle().
-			Background(lipgloss.Color("235")),
-		HeaderTitle: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("99")).
+		Header: lip.NewStyle().
+			Background(c(BgBase)),
+		HeaderTitle: lip.NewStyle().
+			Foreground(c(Accent)).
 			Bold(true),
-		HeaderStats: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")),
-		Footer: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")),
-		ColumnHeader: lipgloss.NewStyle().Bold(true).Padding(0, 1),
-		ColumnBorder: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")),
-		ColumnBorderFocused: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99")),
-		ColumnBorderFocusedInactive: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("60")),
-		Card: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
+		HeaderStats: lip.NewStyle().
+			Foreground(c(FgMedium)),
+		Footer: lip.NewStyle().
+			Foreground(c(FgLow)),
+		FooterVersion: lip.NewStyle().
+			Foreground(c(FgLow)),
+		ColumnHeader: lip.NewStyle().Bold(true).Padding(0, 1),
+		ColumnBorder: lip.NewStyle().
+			Border(lip.RoundedBorder()).BorderForeground(c(Border)),
+		ColumnBorderFocused: lip.NewStyle().
+			Border(lip.RoundedBorder()).BorderForeground(c(BorderFocus)),
+		ColumnBorderFocusedInactive: lip.NewStyle().
+			Border(lip.RoundedBorder()).BorderForeground(c(Border)),
+		Card: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(Border)).
 			Padding(0, 1),
-		CardFocused: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("99")).
-			Background(lipgloss.Color("236")).
+		CardFocused: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(BorderFocus)).
+			Background(c(BgElevated)).
 			Padding(0, 1),
-		CardFocusedInactive: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("60")).
-			Background(lipgloss.Color("235")).
+		CardFocusedInactive: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(Border)).
+			Background(c(BgBase)).
 			Padding(0, 1),
-		CardTitle:       lipgloss.NewStyle().Bold(true),
-		CardAuthor:      lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true),
-		CardMeta:        lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
-		PillNotStarted:  lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		PillCommented:   lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
-		PillReReview:    lipgloss.NewStyle().Foreground(lipgloss.Color("99")),
-		PillApproved:    lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-		DurationUrgent:  lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
-		DurationWarning: lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		DurationOk:      lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
-		EmptyColumn:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true),
-		ErrorMsg:        lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
-		ScrollIndicator: lipgloss.NewStyle().Foreground(lipgloss.Color("99")),
-		DetailPanel: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("99")).
+		CardTitle:       lip.NewStyle().Bold(true),
+		CardAuthor:      lip.NewStyle().Foreground(c(Info)).Bold(true),
+		CardMeta:        lip.NewStyle().Foreground(c(FgMedium)),
+		PillNotStarted:  lip.NewStyle().Foreground(c(Warning)),
+		PillCommented:   lip.NewStyle().Foreground(c(Info)),
+		PillReReview:    lip.NewStyle().Foreground(c(Accent)),
+		PillApproved:    lip.NewStyle().Foreground(c(Success)),
+		DurationUrgent:  lip.NewStyle().Foreground(c(Danger)).Bold(true),
+		DurationWarning: lip.NewStyle().Foreground(c(Warning)),
+		DurationOk:      lip.NewStyle().Foreground(c(FgMedium)),
+		EmptyColumn:     lip.NewStyle().Foreground(c(FgLow)).Italic(true),
+		ErrorMsg:        lip.NewStyle().Foreground(c(Danger)).Bold(true),
+		ScrollIndicator: lip.NewStyle().Foreground(c(Accent)),
+		DetailPanel: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(Accent)).
 			Padding(0, 1),
-		DetailTitle:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255")),
-		DetailSectionHeader: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")),
-		DetailBody:          lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
-		DetailMeta:          lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		MRNumberBang:        lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Bold(true),
-		PopupBorder: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("99")).
+		DetailTitle:         lip.NewStyle().Bold(true).Foreground(c(FgHigh)),
+		DetailSectionHeader: lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		DetailBody:          lip.NewStyle().Foreground(c(FgHigh)),
+		DetailMeta:          lip.NewStyle().Foreground(c(FgMedium)),
+		MRNumberBang:        lip.NewStyle().Foreground(c(Accent)).Bold(true),
+		PopupBorder: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(Accent)).
 			Padding(0, 1),
-		PopupTitle:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")),
-		PopupSection:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245")),
-		PopupItem:        lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
-		PopupItemFocused: lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("236")).Bold(true),
-		PopupHint:        lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		FilterActive:     lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
-		FooterVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color("238")),
+		PopupTitle:       lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		PopupSection:     lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
+		PopupItem:        lip.NewStyle().Foreground(c(FgHigh)),
+		PopupItemFocused: lip.NewStyle().Foreground(c(FgHigh)).Background(c(BgElevated)).Bold(true),
+		PopupHint:        lip.NewStyle().Foreground(c(FgLow)),
+		FilterActive:     lip.NewStyle().Foreground(c(Warning)).Bold(true),
+		UsernameAtSign:   lip.NewStyle().Foreground(c(Accent)).Bold(true),
 	}
 }

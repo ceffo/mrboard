@@ -1,0 +1,17 @@
+{
+  "styles": {
+    "bg-base":     { "dark": "#2e3440", "light": "#eceff4" },
+    "bg-elevated": { "dark": "#3b4252", "light": "#e5e9f0" },
+    "bg-overlay":  { "dark": "#434c5e", "light": "#d8dee9" },
+    "fg-high":     { "dark": "#eceff4", "light": "#2e3440" },
+    "fg-medium":   { "dark": "#d8dee9", "light": "#4c566a" },
+    "fg-low":      { "dark": "#4c566a", "light": "#9099aa" },
+    "border":      { "dark": "#4c566a", "light": "#d8dee9" },
+    "border-focus":{ "dark": "#88c0d0", "light": "#5e81ac" },
+    "accent":      { "dark": "#88c0d0", "light": "#5e81ac" },
+    "success":     { "dark": "#a3be8c", "light": "#a3be8c" },
+    "warning":     { "dark": "#ebcb8b", "light": "#d08770" },
+    "danger":      { "dark": "#bf616a", "light": "#bf616a" },
+    "info":        { "dark": "#8fbcbb", "light": "#81a1c1" }
+  }
+}

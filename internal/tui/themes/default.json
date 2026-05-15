@@ -1,0 +1,17 @@
+{
+  "styles": {
+    "bg-base":     { "dark": "235", "light": "255" },
+    "bg-elevated": { "dark": "236", "light": "253" },
+    "bg-overlay":  { "dark": "237", "light": "252" },
+    "fg-high":     { "dark": "255", "light": "234" },
+    "fg-medium":   { "dark": "245", "light": "240" },
+    "fg-low":      { "dark": "240", "light": "247" },
+    "border":      { "dark": "240", "light": "248" },
+    "border-focus":{ "dark": "99",  "light": "99"  },
+    "accent":      { "dark": "99",  "light": "99"  },
+    "success":     { "dark": "42",  "light": "28"  },
+    "warning":     { "dark": "214", "light": "172" },
+    "danger":      { "dark": "196", "light": "160" },
+    "info":        { "dark": "39",  "light": "27"  }
+  }
+}

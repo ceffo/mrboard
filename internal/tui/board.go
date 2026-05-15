@@ -39,6 +39,14 @@ func newBoardWidget(styles Styles, width, height int) boardWidget {
 	return b
 }
 
+// SetStyles updates styles on the board and all its columns.
+func (b *boardWidget) SetStyles(s Styles) {
+	b.styles = s
+	for i := range b.columns {
+		b.columns[i].styles = s
+	}
+}
+
 // SetActive marks the board as owning keyboard focus (true) or yielding it to
 // a panel (false). The focused column's card renders a dimmed highlight when inactive.
 func (b *boardWidget) SetActive(v bool) {
