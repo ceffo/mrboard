@@ -147,11 +147,8 @@ func MapMR(
 		RoundTripCount:    countRoundTrips(discussions),
 	}
 	if mr.Author != nil {
-		if mr.Author.Name != "" {
-			domainMR.Author = mr.Author.Name
-		} else {
-			domainMR.Author = mr.Author.Username
-		}
+		domainMR.Author = mr.Author.Username
+		domainMR.AuthorName = mr.Author.Name
 	}
 
 	domainMR.Phase = domain.ClassifyPhase(

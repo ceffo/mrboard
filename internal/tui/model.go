@@ -181,8 +181,8 @@ type Model struct {
 	sortField       sortField
 	sortDesc        bool
 	filterPhases    map[domain.MRPhase]bool
-	filterAuthor    string
-	filterReviewer  string
+	filterAuthors   []string
+	filterReviewers []string
 	fetchCancel     context.CancelFunc
 	baseCtx         context.Context
 }
@@ -348,8 +348,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case FilterAppliedMsg:
 		m.filterPhases = msg.Phases
-		m.filterAuthor = msg.Author
-		m.filterReviewer = msg.Reviewer
+		m.filterAuthors = msg.Authors
+		m.filterReviewers = msg.Reviewers
 		m.applyMRFilter()
 		return m, nil
 
@@ -495,7 +495,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		authors, reviewers := uniqueAuthorsReviewers(m.allMRs)
 		m.filterPopup = newFilterPopupWidget(
 			m.styles, m.filterKeys, authors, reviewers, m.userMap,
-			m.filterPhases, m.filterAuthor, m.filterReviewer,
+			m.filterPhases, m.currentUser, m.filterAuthors, m.filterReviewers,
 		)
 		m.showFilter = true
 		return m, nil
@@ -577,12 +577,12 @@ func (m Model) renderContent() string {
 		return lip.Place(m.width, m.height, lip.Center, lip.Center, body)
 
 	case stateBoard:
-		if m.showFilter {
-			return m.renderWithFilterOverlay()
-		}
 		board := m.renderBoard()
+		if m.showFilter {
+			return m.renderWithOverlay(board, m.filterPopup.render())
+		}
 		if m.showThemePicker {
-			return m.renderWithThemePickerOverlay(board)
+			return m.renderWithOverlay(board, m.themePicker.render())
 		}
 		return board
 	}
@@ -628,15 +628,9 @@ func (m Model) renderBoard() string {
 	return headerStr + "\n" + contentStr + errLines + "\n" + footerStr
 }
 
-func (m Model) renderWithFilterOverlay() string {
-	popup := m.filterPopup.render()
-	return lip.Place(m.width, m.height, lip.Center, lip.Center, popup)
-}
-
-func (m Model) renderWithThemePickerOverlay(board string) string {
-	// Pad the board content to the full terminal dimensions before compositing.
+// renderWithOverlay composites popup centered over the board background.
+func (m Model) renderWithOverlay(board, popup string) string {
 	bg := lip.Place(m.width, m.height, lip.Left, lip.Top, board)
-	popup := m.themePicker.render()
 	popupW := lip.Width(popup)
 	popupH := lip.Height(popup)
 	x := (m.width - popupW) / 2  //nolint:mnd
@@ -649,8 +643,7 @@ func (m Model) renderWithThemePickerOverlay(board string) string {
 	}
 	bgLayer := lip.NewLayer(bg)
 	popupLayer := lip.NewLayer(popup).X(x).Y(y).Z(1)
-	comp := lip.NewCompositor(bgLayer, popupLayer)
-	return comp.Render()
+	return lip.NewCompositor(bgLayer, popupLayer).Render()
 }
 
 // applyMRFilter applies all active filters and sort, then pushes the result into the board.
@@ -672,16 +665,17 @@ func (m *Model) applyMRFilter() {
 		SortField:   m.sortField.stateKey(),
 		SortDesc:    m.sortDesc,
 		Phases:      m.filterPhases,
-		Author:      m.filterAuthor,
-		Reviewer:    m.filterReviewer,
+		Authors:     m.filterAuthors,
+		Reviewers:   m.filterReviewers,
 	})
+	m.board.SetCurrentUser(m.currentUser)
 	m.board.SetMRs(mrs)
 	m.header.SetMRs(mrs)
 	m.header.SetFilterActive(m.isFilterActive())
 }
 
 func (m *Model) isFilterActive() bool {
-	return len(m.filterPhases) > 0 || m.filterAuthor != "" || m.filterReviewer != ""
+	return len(m.filterPhases) > 0 || len(m.filterAuthors) > 0 || len(m.filterReviewers) > 0
 }
 
 func (m *Model) saveState() {

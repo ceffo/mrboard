@@ -95,7 +95,8 @@ type MergeRequest struct {
 	IID         int
 	ProjectID   int
 	Title       string
-	Author      string
+	Author      string // GitLab username — canonical ID
+	AuthorName  string // display name; falls back to Author if empty
 	WebURL      string
 	ProjectPath string // namespace/project without domain, e.g. "group/repo"
 	Description string
@@ -111,6 +112,14 @@ type MergeRequest struct {
 	RequiredApprovals int
 	OpenThreads       int
 	RoundTripCount    int
+}
+
+// DisplayAuthor returns the human-readable author name, falling back to the username.
+func (mr MergeRequest) DisplayAuthor() string {
+	if mr.AuthorName != "" {
+		return mr.AuthorName
+	}
+	return mr.Author
 }
 
 // ClassifyPhase determines the MRPhase from the MR's fields.

@@ -16,10 +16,12 @@ type FilterOptions struct {
 	// Phases restricts visible MRs to those whose Phase is true in the map.
 	// nil or empty map means all phases are shown.
 	Phases map[domain.MRPhase]bool
-	// Author restricts visible MRs to the given author username. "" = all.
-	Author string
-	// Reviewer restricts visible MRs to those that include the given reviewer username. "" = all.
-	Reviewer string
+	// Authors restricts visible MRs to those whose author is in the set.
+	// nil or empty slice means all authors are shown.
+	Authors []string
+	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
+	// nil or empty slice means all reviewers are shown.
+	Reviewers []string
 }
 
 // FilterAndSort applies all active filters and then sorts the slice.
@@ -43,20 +45,32 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 		}
 		mrs = filtered
 	}
-	if opts.Author != "" {
+	if len(opts.Authors) > 0 {
+		authorSet := make(map[string]bool, len(opts.Authors))
+		for _, a := range opts.Authors {
+			authorSet[a] = true
+		}
+		// Current user's MRs always pass the author filter regardless of selection.
+		if opts.CurrentUser != "" {
+			authorSet[opts.CurrentUser] = true
+		}
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
-			if mr.Author == opts.Author {
+			if authorSet[mr.Author] {
 				filtered = append(filtered, mr)
 			}
 		}
 		mrs = filtered
 	}
-	if opts.Reviewer != "" {
+	if len(opts.Reviewers) > 0 {
+		reviewerSet := make(map[string]bool, len(opts.Reviewers))
+		for _, r := range opts.Reviewers {
+			reviewerSet[r] = true
+		}
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
 			for _, r := range mr.Reviewers {
-				if r.Username == opts.Reviewer {
+				if reviewerSet[r.Username] {
 					filtered = append(filtered, mr)
 					break
 				}
@@ -81,10 +95,13 @@ func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
 	return false
 }
 
-// BuildUserMap creates a username → full-name lookup table from reviewer info in the MR list.
+// BuildUserMap creates a username → full-name lookup table from all author and reviewer info in the MR list.
 func BuildUserMap(mrs []domain.MergeRequest) map[string]string {
 	m := make(map[string]string)
 	for _, mr := range mrs {
+		if mr.Author != "" && mr.AuthorName != "" {
+			m[mr.Author] = mr.AuthorName
+		}
 		for _, r := range mr.Reviewers {
 			if r.Username != "" && r.Name != "" {
 				m[r.Username] = r.Name

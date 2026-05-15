@@ -46,7 +46,10 @@ type Styles struct {
 	PopupHint                   lip.Style
 	PopupItem                   lip.Style
 	PopupItemFocused            lip.Style
+	PopupItemMarkerOff          lip.Style
+	PopupItemMarkerOn           lip.Style
 	PopupSection                lip.Style
+	PopupSectionFocused         lip.Style
 	PopupTitle                  lip.Style
 	ScrollIndicator             lip.Style
 	UsernameAtSign              lip.Style
@@ -117,13 +120,16 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Border(lip.RoundedBorder()).
 			BorderForeground(c(Accent)).
 			Padding(0, 1),
-		PopupDivider:     lip.NewStyle().Foreground(c(Border)),
-		PopupTitle:       lip.NewStyle().Bold(true).Foreground(c(Accent)),
-		PopupSection:     lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
-		PopupItem:        lip.NewStyle().Foreground(c(FgHigh)),
-		PopupItemFocused: lip.NewStyle().Foreground(c(FgHigh)).Background(c(BgElevated)).Bold(true),
-		PopupHint:        lip.NewStyle().Foreground(c(FgLow)),
-		FilterActive:     lip.NewStyle().Foreground(c(Warning)).Bold(true),
-		UsernameAtSign:   lip.NewStyle().Foreground(c(Accent)).Bold(true),
+		PopupDivider:        lip.NewStyle().Foreground(c(Border)),
+		PopupTitle:          lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		PopupSection:        lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
+		PopupSectionFocused: lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		PopupItem:           lip.NewStyle().Foreground(c(FgHigh)),
+		PopupItemFocused:    lip.NewStyle().Foreground(c(FgHigh)).Background(c(BgElevated)).Bold(true),
+		PopupItemMarkerOn:   lip.NewStyle().Foreground(c(Success)).Bold(true),
+		PopupItemMarkerOff:  lip.NewStyle().Foreground(c(FgLow)),
+		PopupHint:           lip.NewStyle().Foreground(c(FgLow)),
+		FilterActive:        lip.NewStyle().Foreground(c(Warning)).Bold(true),
+		UsernameAtSign:      lip.NewStyle().Foreground(c(Accent)).Bold(true),
 	}
 }

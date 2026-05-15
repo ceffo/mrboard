@@ -158,7 +158,7 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 	phaseLbl := mrPhaseLabel(d.mr.Phase)
 	approvals := fmt.Sprintf("%d/%d approvals", d.mr.ApprovalCount, d.mr.RequiredApprovals)
 	add(d.styles.DetailMeta.Render(
-		fmt.Sprintf("%s  ·  %s  ·  %s", d.mr.Author, phaseLbl, approvals)))
+		fmt.Sprintf("%s  ·  %s  ·  %s", d.mr.DisplayAuthor(), phaseLbl, approvals)))
 
 	if len(d.mr.Reviewers) > 0 {
 		add(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))

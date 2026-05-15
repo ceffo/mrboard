@@ -203,6 +203,79 @@ func TestFilterAndSort_SortAge_Descending(t *testing.T) {
 	}
 }
 
+// FilterAndSort — multi-select Authors
+
+func TestFilterAndSort_Authors_SingleMatch(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0),
+		mr(2, userBob, "repo/b", 2, t0),
+		mr(3, userCarol, "repo/c", 3, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: []string{userAlice}})
+	if len(got) != 1 || got[0].Author != userAlice {
+		t.Fatalf("expected only alice, got %v", got)
+	}
+}
+
+func TestFilterAndSort_Authors_MultiMatch(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0),
+		mr(2, userBob, "repo/b", 2, t0),
+		mr(3, userCarol, "repo/c", 3, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: []string{userAlice, userBob}})
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d", len(got))
+	}
+}
+
+func TestFilterAndSort_Authors_EmptyShowsAll(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0),
+		mr(2, userBob, "repo/b", 2, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: nil})
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d", len(got))
+	}
+}
+
+// FilterAndSort — multi-select Reviewers
+
+func TestFilterAndSort_Reviewers_SingleMatch(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
+		mr(2, userCarol, "repo/b", 2, t0, domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted}),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: []string{userAlice}})
+	if len(got) != 1 || got[0].IID != 1 {
+		t.Fatalf("expected only MR with alice as reviewer, got %v", got)
+	}
+}
+
+func TestFilterAndSort_Reviewers_MultiMatch(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
+		mr(2, userCarol, "repo/b", 2, t0, domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted}),
+		mr(3, userAlice, "repo/c", 3, t0, domain.ReviewerInfo{Username: userCarol, State: domain.ReviewerNotStarted}),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: []string{userAlice, userBob}})
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d", len(got))
+	}
+}
+
+func TestFilterAndSort_Reviewers_EmptyShowsAll(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
+		mr(2, userCarol, "repo/b", 2, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: nil})
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d", len(got))
+	}
+}
+
 // FilterAndSort — does not mutate input
 
 func TestFilterAndSort_DoesNotMutateInput(t *testing.T) {

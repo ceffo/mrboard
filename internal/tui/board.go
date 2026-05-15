@@ -14,11 +14,12 @@ const (
 )
 
 type boardWidget struct {
-	columns    [4]columnWidget
-	focusedCol int
-	styles     Styles
-	width      int
-	height     int
+	columns     [4]columnWidget
+	focusedCol  int
+	styles      Styles
+	width       int
+	height      int
+	currentUser string
 }
 
 var phaseOrder = [4]domain.MRPhase{
@@ -65,10 +66,13 @@ func (b *boardWidget) SetSize(width, height int) {
 	}
 }
 
+// SetCurrentUser sets the username used to bypass the reviewer-required filter for own MRs.
+func (b *boardWidget) SetCurrentUser(u string) { b.currentUser = u }
+
 func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
 	var byPhase [numColumns][]domain.MergeRequest
 	for _, mr := range mrs {
-		if !hasAssignedReviewer(mr) {
+		if !hasAssignedReviewer(mr) && mr.Author != b.currentUser {
 			continue
 		}
 		idx := int(mr.Phase)

@@ -67,15 +67,17 @@ var DefaultKeyMap = KeyMap{
 
 // FilterPopupKeyMap holds keybindings used inside the filter popup.
 type FilterPopupKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Toggle key.Binding
-	Close  key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Toggle    key.Binding
+	FocusNext key.Binding
+	FocusPrev key.Binding
+	Close     key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
 func (k FilterPopupKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.Close}
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.FocusNext, k.Close}
 }
 
 // FullHelp implements help.KeyMap.
@@ -83,10 +85,12 @@ func (k FilterPopupKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k
 
 // DefaultFilterPopupKeyMap is the default keybinding set for the filter popup.
 var DefaultFilterPopupKeyMap = FilterPopupKeyMap{
-	Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
-	Close:  key.NewBinding(key.WithKeys("f", "esc"), key.WithHelp("f/esc", "close")),
+	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Toggle:    key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+	FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next section")),
+	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev section")),
+	Close:     key.NewBinding(key.WithKeys("f", "esc"), key.WithHelp("f/esc", "close")),
 }
 
 // ThemePickerKeyMap holds keybindings for the theme picker popup.
