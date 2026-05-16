@@ -16,8 +16,11 @@ const perPage = 100
 // Client wraps the go-gitlab API client and exposes the methods needed to
 // retrieve raw MR data.
 type Client struct {
-	gl     *gl.Client
-	logger *slog.Logger
+	gl         *gl.Client
+	logger     *slog.Logger
+	token      string
+	apiURL     string
+	httpClient *http.Client
 
 	// projectArchivedCache caches archival status keyed by project ID to avoid
 	// redundant API calls when filtering MRs from user sources.
@@ -37,7 +40,14 @@ func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: create client: %w", err)
 	}
-	return &Client{gl: c, logger: logger, projectArchivedCache: make(map[int64]bool)}, nil
+	return &Client{
+		gl:                   c,
+		logger:               logger,
+		token:                cfg.Token,
+		apiURL:               cfg.URL,
+		httpClient:           httpClient,
+		projectArchivedCache: make(map[int64]bool),
+	}, nil
 }
 
 // ListGroupMRs returns all open merge requests for the given group ID.

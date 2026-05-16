@@ -16,6 +16,7 @@ type headerWidget struct {
 	width        int
 	title        string
 	filterActive bool
+	refreshing   bool
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -27,6 +28,7 @@ func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetFilterActive(v bool)           { h.filterActive = v }
+func (h *headerWidget) SetRefreshing(v bool)             { h.refreshing = v }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
 func (h headerWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return h, nil }
@@ -51,6 +53,9 @@ func (h headerWidget) render() string {
 	))
 	if h.filterActive {
 		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[filtered]")
+	}
+	if h.refreshing {
+		stats += bg.Render("  ") + h.styles.HeaderStats.Inherit(bg).Render("↻")
 	}
 
 	titleW := lip.Width(title)

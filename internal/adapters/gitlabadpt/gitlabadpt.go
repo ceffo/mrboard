@@ -48,38 +48,58 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 		primaryExclusion = a.cfg.ExcludedAuthors[0]
 	}
 
-	listStart := time.Now()
-	raw, errs := a.listAllMRs(ctx, primaryExclusion)
-	logger.Info("gitlab: source listing done",
-		"raw", len(raw), "source_errors", len(errs),
-		"duration", time.Since(listStart).Round(time.Millisecond))
-
 	excluded := make(map[string]bool, len(a.cfg.ExcludedAuthors))
 	for _, u := range a.cfg.ExcludedAuthors {
 		excluded[u] = true
 	}
 
-	seen := make(map[mrKey]bool, len(raw))
-	unique := make([]*gl.BasicMergeRequest, 0, len(raw))
-	for _, mr := range raw {
+	listStart := time.Now()
+	rawMRs, mappedMRs, errs := a.listAllMRs(ctx, primaryExclusion)
+	logger.Info("gitlab: source listing done",
+		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
+		"duration", time.Since(listStart).Round(time.Millisecond))
+
+	// Build seen set from GraphQL-mapped MRs (already enriched).
+	// This also deduplicates cross-source: group REST results that duplicate a
+	// user GraphQL result are dropped before enrichment.
+	seen := make(map[mrKey]bool, len(mappedMRs)+len(rawMRs))
+	var finalMRs []domain.MergeRequest
+	for _, mr := range mappedMRs {
+		if excluded[mr.Author] {
+			logger.Debug("gitlab: excluding mapped MR", "iid", mr.IID, "author", mr.Author)
+			continue
+		}
+		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		if seen[k] {
+			logger.Debug("gitlab: dedup drop mapped MR", "iid", mr.IID, "project", mr.ProjectID)
+			continue
+		}
+		seen[k] = true
+		finalMRs = append(finalMRs, mr)
+	}
+
+	unique := make([]*gl.BasicMergeRequest, 0, len(rawMRs))
+	for _, mr := range rawMRs {
 		authorUsername := ""
 		if mr.Author != nil {
 			authorUsername = mr.Author.Username
 		}
 		logger.Debug("gitlab: raw MR", "iid", mr.IID, "title", mr.Title, "author", authorUsername)
 		if authorUsername != "" && excluded[authorUsername] {
-			logger.Debug("gitlab: excluding MR", "iid", mr.IID, "author", authorUsername)
+			logger.Debug("gitlab: excluding raw MR", "iid", mr.IID, "author", authorUsername)
 			continue
 		}
-		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		k := mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}
 		if seen[k] {
-			logger.Debug("gitlab: dedup drop", "iid", mr.IID, "project", mr.ProjectID)
+			logger.Debug("gitlab: dedup drop raw MR", "iid", mr.IID, "project", mr.ProjectID)
 			continue
 		}
 		seen[k] = true
 		unique = append(unique, mr)
 	}
-	logger.Info("gitlab: dedup summary", "raw", len(raw), "unique", len(unique))
+	logger.Info("gitlab: dedup summary",
+		"raw", len(rawMRs), "mapped", len(mappedMRs),
+		"unique_to_enrich", len(unique), "already_mapped", len(finalMRs))
 
 	type result struct {
 		mr  domain.MergeRequest
@@ -104,7 +124,6 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 	}
 	wg.Wait()
 
-	var mrs []domain.MergeRequest
 	var enrichErrs int
 	for _, r := range results {
 		if r.err != nil {
@@ -113,16 +132,16 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 			enrichErrs++
 			continue
 		}
-		mrs = append(mrs, r.mr)
+		finalMRs = append(finalMRs, r.mr)
 	}
 
 	logger.Info("gitlab: enrichment done",
-		"mrs", len(mrs), "enrich_errors", enrichErrs,
+		"enriched", len(unique)-enrichErrs, "enrich_errors", enrichErrs,
 		"duration", time.Since(enrichStart).Round(time.Millisecond))
 	logger.Info("gitlab: fetch done",
-		"mrs", len(mrs), "errors", len(errs),
+		"mrs", len(finalMRs), "errors", len(errs),
 		"total_duration", time.Since(fetchStart).Round(time.Millisecond))
-	return mrs, errs
+	return finalMRs, errs
 }
 
 // GetDetail implements mrsvc.MergeRequestSource.
@@ -141,18 +160,23 @@ func (a *GitLabAdapter) GetDetail(ctx context.Context, projectID, mrIID int64) (
 
 // mrKey uniquely identifies an MR across all sources.
 type mrKey struct {
-	projectID int64
-	iid       int64
+	projectID int
+	iid       int
 }
 
 // sourceResult is the output of fetching a single source ID.
+// raw holds MRs from group sources that still need enrichment.
+// mapped holds fully-mapped MRs from GraphQL user sources.
 type sourceResult struct {
-	mrs  []*gl.BasicMergeRequest
-	errs []error
+	raw    []*gl.BasicMergeRequest
+	mapped []domain.MergeRequest
+	errs   []error
 }
 
 // listAllMRs fetches every source ID in parallel and merges the results.
-func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string) ([]*gl.BasicMergeRequest, []error) {
+func (a *GitLabAdapter) listAllMRs(
+	ctx context.Context, primaryExclusion string,
+) ([]*gl.BasicMergeRequest, []domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 
 	type task struct {
@@ -178,13 +202,15 @@ func (a *GitLabAdapter) listAllMRs(ctx context.Context, primaryExclusion string)
 	}
 	wg.Wait()
 
-	var all []*gl.BasicMergeRequest
+	var allRaw []*gl.BasicMergeRequest
+	var allMapped []domain.MergeRequest
 	var errs []error
 	for _, r := range results {
-		all = append(all, r.mrs...)
+		allRaw = append(allRaw, r.raw...)
+		allMapped = append(allMapped, r.mapped...)
 		errs = append(errs, r.errs...)
 	}
-	return all, errs
+	return allRaw, allMapped, errs
 }
 
 func (a *GitLabAdapter) fetchSourceID(
@@ -217,39 +243,81 @@ func (a *GitLabAdapter) fetchSourceID(
 		logger.Info("gitlab: group source fetched",
 			"group", id, "total", len(mrs), "active", len(active),
 			"duration", time.Since(start).Round(time.Millisecond))
-		return sourceResult{mrs: active}
+		return sourceResult{raw: active}
 
 	case mrsvc.SourceTypeUser:
-		mrs, err := a.client.ListUserMRs(ctx, id)
-		if err != nil {
-			logger.Error("gitlab: list user MRs failed", "username", id, "error", err)
-			return sourceResult{errs: []error{fmt.Errorf("source user=%q: %w", id, err)}}
-		}
-		var active []*gl.BasicMergeRequest
-		var errs []error
-		for _, mr := range mrs {
-			archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
-			if err != nil {
-				logger.Error("gitlab: check project archived failed",
-					"username", id, "mr", mr.IID, "project", mr.ProjectID, "error", err)
-				errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", id, mr.IID, err))
-				continue
-			}
-			if !archived {
-				active = append(active, mr)
-			} else {
-				logger.Debug("gitlab: skipping MR from archived project", "iid", mr.IID, "project", mr.ProjectID)
-			}
-		}
-		logger.Info("gitlab: user source fetched",
-			"username", id, "total", len(mrs), "active", len(active),
-			"duration", time.Since(start).Round(time.Millisecond))
-		return sourceResult{mrs: active, errs: errs}
+		return a.fetchUserSourceGraphQL(ctx, id, logger, start)
 
 	default:
 		logger.Error("gitlab: unknown source type", "type", srcType)
 		return sourceResult{errs: []error{fmt.Errorf("source: unknown type %q", srcType)}}
 	}
+}
+
+// fetchUserSourceGraphQL fetches a user source via GraphQL (single query, no enrichment phase).
+// Falls back to REST on error.
+func (a *GitLabAdapter) fetchUserSourceGraphQL(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	gqlMRs, err := a.client.FetchUserMRsGraphQL(ctx, username)
+	if err != nil {
+		logger.Warn("gitlab: graphql user fetch failed, falling back to REST", "username", username, "error", err)
+		return a.fetchUserSourceREST(ctx, username, logger, start)
+	}
+
+	var mapped []domain.MergeRequest
+	for _, mr := range gqlMRs {
+		if mr.Project.Archived {
+			logger.Debug("gitlab: skipping MR from archived project (graphql)", "iid", mr.IID, "project", mr.Project.FullPath)
+			continue
+		}
+		if mr.Discussions.PageInfo.HasNextPage {
+			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
+				"username", username, "mr_iid", mr.IID)
+		}
+		mapped = append(mapped, MapMRFromGraphQL(mr, a.cfg.RequiredApprovals))
+	}
+	logger.Info("gitlab: user source fetched (graphql)",
+		"username", username, "total", len(gqlMRs), "active", len(mapped),
+		"duration", time.Since(start).Round(time.Millisecond))
+	return sourceResult{mapped: mapped}
+}
+
+// fetchUserSourceREST is the legacy REST fallback for user sources.
+func (a *GitLabAdapter) fetchUserSourceREST(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	mrs, err := a.client.ListUserMRs(ctx, username)
+	if err != nil {
+		logger.Error("gitlab: list user MRs failed (REST)", "username", username, "error", err)
+		return sourceResult{errs: []error{fmt.Errorf("source user=%q: %w", username, err)}}
+	}
+	var active []*gl.BasicMergeRequest
+	var errs []error
+	for _, mr := range mrs {
+		archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+		if err != nil {
+			logger.Error("gitlab: check project archived failed",
+				"username", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
+			errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", username, mr.IID, err))
+			continue
+		}
+		if !archived {
+			active = append(active, mr)
+		} else {
+			logger.Debug("gitlab: skipping MR from archived project (REST)", "iid", mr.IID, "project", mr.ProjectID)
+		}
+	}
+	logger.Info("gitlab: user source fetched (REST fallback)",
+		"username", username, "total", len(mrs), "active", len(active),
+		"duration", time.Since(start).Round(time.Millisecond))
+	return sourceResult{raw: active, errs: errs}
 }
 
 func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) (domain.MergeRequest, error) {

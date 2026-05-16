@@ -187,6 +187,7 @@ type Model struct {
 	fetchCancel     context.CancelFunc
 	baseCtx         context.Context
 	logger          *slog.Logger
+	isRefreshing    bool
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -330,6 +331,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case FetchResultMsg:
 		m.state = stateBoard
+		m.isRefreshing = false
+		m.header.SetRefreshing(false)
 		m.allMRs = msg.MRs
 		m.errors = msg.Errors
 		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
@@ -340,6 +343,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FetchErrMsg:
+		m.isRefreshing = false
+		m.header.SetRefreshing(false)
 		m.state = stateError
 		m.errMsg = msg.Err.Error()
 		return m, nil
@@ -470,6 +475,11 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Refresh):
 		if m.showDetail {
 			m.closeDetail()
+		}
+		if len(m.allMRs) > 0 {
+			m.isRefreshing = true
+			m.header.SetRefreshing(true)
+			return m, m.startFetch()
 		}
 		m.state = stateLoading
 		return m, tea.Batch(m.sp.Init(), m.startFetch())

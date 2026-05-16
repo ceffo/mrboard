@@ -1,12 +1,14 @@
 package gitlabadpt
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 )
 
 // reReviewPrefix is the system note body prefix GitLab emits when an author
@@ -257,4 +259,171 @@ func projectPathFromRef(refs *gl.IssueReferences) string {
 		return full[:i]
 	}
 	return ""
+}
+
+// MapMRFromGraphQL converts a GitLab GraphQL MR response into a domain.MergeRequest.
+// If the MR's discussions overflowed (hasNextPage=true) the caller should have already
+// logged a warning; this function uses whatever data was returned.
+func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domain.MergeRequest {
+	reviewers := DeriveReviewerStatesFromGQL(mr)
+	openThreads := countOpenThreadsGQL(mr)
+
+	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
+
+	domainMR := domain.MergeRequest{
+		ID:                parseGIDNumericSafe(mr.ID),
+		IID:               parseIIDSafe(mr.IID),
+		ProjectID:         parseGIDNumericSafe(mr.Project.ID),
+		Title:             mr.Title,
+		WebURL:            mr.WebURL,
+		Author:            mr.Author.Username,
+		AuthorName:        mr.Author.Name,
+		ProjectPath:       mr.Project.FullPath,
+		Reviewers:         reviewers,
+		CreatedAt:         createdAt,
+		ApprovalCount:     countApprovals(reviewers),
+		RequiredApprovals: requiredApprovals,
+		OpenThreads:       openThreads,
+		RoundTripCount:    countRoundTripsGQL(mr),
+	}
+
+	domainMR.Phase = domain.ClassifyPhase(
+		mr.Draft,
+		openThreads,
+		domainMR.ApprovalCount,
+		requiredApprovals,
+		reviewers,
+	)
+
+	switch domainMR.Phase {
+	case domain.PhaseNeedsAuthorAction:
+		for _, r := range reviewers {
+			if r.State == domain.ReviewerCommented && r.WaitingSince.After(domainMR.WaitingSince) {
+				domainMR.WaitingSince = r.WaitingSince
+			}
+		}
+	case domain.PhaseNeedsReview:
+		domainMR.WaitingSince = createdAt
+		for _, r := range reviewers {
+			if r.State == domain.ReviewerReReviewRequested && r.WaitingSince.After(domainMR.WaitingSince) {
+				domainMR.WaitingSince = r.WaitingSince
+			}
+		}
+	}
+
+	return domainMR
+}
+
+// DeriveReviewerStatesFromGQL is the GraphQL equivalent of DeriveReviewerStates.
+func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.ReviewerInfo {
+	if len(mr.Reviewers.Nodes) == 0 {
+		return nil
+	}
+
+	approvedBy := make(map[string]bool, len(mr.ApprovedBy.Nodes))
+	for _, u := range mr.ApprovedBy.Nodes {
+		approvedBy[u.Username] = true
+	}
+
+	type reviewerTimestamps struct {
+		lastComment  time.Time
+		lastReReview time.Time
+	}
+	ts := make(map[string]*reviewerTimestamps, len(mr.Reviewers.Nodes))
+	for _, r := range mr.Reviewers.Nodes {
+		ts[r.Username] = &reviewerTimestamps{}
+	}
+
+	for _, d := range mr.Discussions.Nodes {
+		for _, note := range d.Notes.Nodes {
+			if note.CreatedAt == "" {
+				continue
+			}
+			t, err := time.Parse(time.RFC3339, note.CreatedAt)
+			if err != nil {
+				continue
+			}
+			if note.System {
+				username := extractReReviewUsername(note.Body)
+				if username == "" {
+					continue
+				}
+				if rts, ok := ts[username]; ok && t.After(rts.lastReReview) {
+					rts.lastReReview = t
+				}
+				continue
+			}
+			if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastComment) {
+				rts.lastComment = t
+			}
+		}
+	}
+
+	mrCreatedAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
+
+	result := make([]domain.ReviewerInfo, 0, len(mr.Reviewers.Nodes))
+	for _, r := range mr.Reviewers.Nodes {
+		rts := ts[r.Username]
+		state := deriveState(approvedBy[r.Username], rts.lastComment, rts.lastReReview)
+		var waitingSince time.Time
+		switch state {
+		case domain.ReviewerReReviewRequested:
+			waitingSince = rts.lastReReview
+			if waitingSince.IsZero() {
+				waitingSince = mrCreatedAt
+			}
+		case domain.ReviewerCommented:
+			waitingSince = rts.lastComment
+		}
+		result = append(result, domain.ReviewerInfo{
+			Username:     r.Username,
+			Name:         r.Name,
+			State:        state,
+			WaitingSince: waitingSince,
+		})
+	}
+	return result
+}
+
+func countOpenThreadsGQL(mr pkggitlab.GQLMergeRequest) int {
+	count := 0
+	for _, d := range mr.Discussions.Nodes {
+		if len(d.Notes.Nodes) == 0 {
+			continue
+		}
+		first := d.Notes.Nodes[0]
+		if first.Resolvable && !first.Resolved {
+			count++
+		}
+	}
+	return count
+}
+
+func countRoundTripsGQL(mr pkggitlab.GQLMergeRequest) int {
+	count := 0
+	for _, d := range mr.Discussions.Nodes {
+		for _, note := range d.Notes.Nodes {
+			if note.System && extractReReviewUsername(note.Body) != "" {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// parseGIDNumericSafe extracts the trailing numeric ID from a GitLab global ID
+// like "gid://gitlab/MergeRequest/456". Returns 0 on failure.
+func parseGIDNumericSafe(gid string) int {
+	i := strings.LastIndex(gid, "/")
+	if i < 0 {
+		return 0
+	}
+	n, _ := strconv.Atoi(gid[i+1:]) //nolint:errcheck
+	return n
+}
+
+// parseIIDSafe converts a GitLab GraphQL IID string (e.g. "42") to int.
+func parseIIDSafe(iid string) int {
+	n, _ := strconv.Atoi(iid) //nolint:errcheck
+	return n
 }
