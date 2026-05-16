@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
@@ -20,6 +21,8 @@ type Client struct {
 
 	// projectArchivedCache caches archival status keyed by project ID to avoid
 	// redundant API calls when filtering MRs from user sources.
+	// cacheMu guards concurrent access when sources are fetched in parallel.
+	cacheMu              sync.RWMutex
 	projectArchivedCache map[int64]bool
 }
 
@@ -181,14 +184,22 @@ func (c *Client) ListNonArchivedProjectIDs(ctx context.Context, groupID string) 
 }
 
 // IsProjectArchived reports whether the given project is archived. Results are cached.
+// Safe for concurrent use.
 func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, error) {
-	if archived, ok := c.projectArchivedCache[projectID]; ok {
+	c.cacheMu.RLock()
+	archived, ok := c.projectArchivedCache[projectID]
+	c.cacheMu.RUnlock()
+	if ok {
 		return archived, nil
 	}
+
 	project, _, err := c.gl.Projects.GetProject(projectID, nil, gl.WithContext(ctx))
 	if err != nil {
 		return false, fmt.Errorf("gitlab: get project %d: %w", projectID, err)
 	}
+
+	c.cacheMu.Lock()
 	c.projectArchivedCache[projectID] = project.Archived
+	c.cacheMu.Unlock()
 	return project.Archived, nil
 }
