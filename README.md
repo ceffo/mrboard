@@ -19,17 +19,24 @@ gitlab:
   url: https://gitlab.example.com
   token: glpat-xxx        # or set $GITLAB_TOKEN env var
   required_approvals: 2   # default: 2
+  timeout: 30s            # default: 30s
 
 sources:
   - type: group
-    id: my-team           # GitLab group path or numeric ID
+    ids: [my-team]        # one or more GitLab group paths or numeric IDs
 
   - type: user
-    username: alice       # GitLab username
+    ids: [alice, bob]     # one or more GitLab usernames
 
 excluded_authors:
   - renovate-bot
   - dependabot
+
+current_user: alice       # your GitLab username — highlights your MRs in the board
+
+log:
+  path: /tmp/mrboard.log  # optional; omit to disable file logging
+  level: info             # debug | info | warn | error
 ```
 
 You can mix as many `group` and `user` sources as you need. MRs from all sources are merged
@@ -89,7 +96,12 @@ MRBOARD_TIMEOUT=60s mrboard
 
 **Debug logging**
 
-```bash
-MRBOARD_DEBUG=/tmp/mrboard.log mrboard
-cat /tmp/mrboard.log
+Add to your config:
+
+```yaml
+log:
+  path: /tmp/mrboard.log
+  level: debug
 ```
+
+Then: `cat /tmp/mrboard.log`

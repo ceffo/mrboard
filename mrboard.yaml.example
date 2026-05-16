@@ -2,14 +2,21 @@ gitlab:
   url: https://gitlab.example.com
   token: glpat-xxx        # or set $GITLAB_TOKEN env var
   required_approvals: 2   # default: 2
+  timeout: 30s            # default: 30s
+
+sources:
+  - type: group
+    ids: [my-team]        # one or more GitLab group paths or numeric IDs
+
+  - type: user
+    ids: [alice, bob]     # one or more GitLab usernames
 
 excluded_authors:
   - renovate-bot
   - dependabot
 
-sources:
-  - type: group
-    id: my-team
+current_user: alice       # your GitLab username — highlights your MRs in the board
 
-  - type: user
-    username: alice
+log:
+  path: /tmp/mrboard.log  # optional; omit to disable file logging
+  level: info             # debug | info | warn | error
