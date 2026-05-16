@@ -1,157 +1,93 @@
 # mrboard
 
-A terminal-based GitLab merge request board — displays your team's MRs organized by review phase.
+A terminal board for your team's GitLab merge requests — built for daily standups.
 
-## Quick Start
+## Install
 
-Create a config file at `~/.config/mrboard/mrboard.yaml`:
+```bash
+brew tap ceffo/tap
+brew install mrboard
+```
+
+## Configuration
+
+Create a config file at `~/.config/mrboard/mrboard.yaml` (or set `$MRBOARD_CONFIG` to point
+anywhere you like):
 
 ```yaml
 gitlab:
   url: https://gitlab.example.com
-  token: glpat-xxx              # or set $GITLAB_TOKEN env var
-  required_approvals: 2         # default: 2
+  token: glpat-xxx        # or set $GITLAB_TOKEN env var
+  required_approvals: 2   # default: 2
 
 sources:
   - type: group
-    id: my-team
+    id: my-team           # GitLab group path or numeric ID
 
   - type: user
-    username: alice
+    username: alice       # GitLab username
 
 excluded_authors:
   - renovate-bot
   - dependabot
 ```
 
-Then run:
-
-```bash
-mrboard
-```
-
-## Configuration
-
-The config file is searched in this order:
-
-- `$MRBOARD_CONFIG` (environment variable)
-- `~/.config/mrboard/mrboard.yaml`
-- `./mrboard.yaml` (current directory)
-
-### Required Fields
-
-- **`gitlab.url`** — Your GitLab instance URL
-- **`gitlab.token`** — GitLab personal access token (or set `$GITLAB_TOKEN`)
-- **`sources`** — Where to fetch MRs from:
-  - `type: group` + `id: <group-id>` — all MRs in a GitLab group
-  - `type: user` + `username: <username>` — all MRs authored by a user
-
-### Optional Fields
-
-- **`gitlab.required_approvals`** — Approval threshold (default: 2)
-- **`excluded_authors`** — List of usernames to ignore (e.g., bots)
-
-## Keyboard Shortcuts
-
-- **↑/k, ↓/j, ←/h, →/l** — Navigate cards
-- **Enter** — View MR details
-- **Esc** — Close details
-- **o** — Open MR in GitLab
-- **r** — Refresh
-- **s** — Sort
-- **tab** — Toggle view
-- **f** — Filter
-- **t** — Open theme picker
-- **q** — Quit
-
-## Theming
-
-mrboard ships five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`.
-
-### Live theme picker
-
-Press **`t`** to open the theme picker overlay. The board stays visible behind it so you see changes in real time as you navigate:
-
-- **↑/↓** — Select theme or mode
-- **Tab** — Switch between theme list and mode pane
-- **t / Esc** — Close
-
-The selected theme and mode are saved automatically on every navigation move — no confirmation step needed.
-
-### Mode
-
-The right pane of the picker lets you choose:
-
-- **auto** (default) — follows your terminal's background colour
-- **dark** — force dark palette
-- **light** — force light palette
-
-### CLI flags (session-only, not persisted)
-
-```bash
-mrboard --theme dracula          # override theme for this session
-mrboard --mode light             # override mode for this session
-mrboard --theme nord --mode dark
-```
-
-### Custom themes
-
-Drop any `.json` file into `~/.config/mrboard/themes/` and it appears in the picker automatically. Custom themes use the same format as built-in themes. A custom file with the same name as a built-in overrides it.
+You can mix as many `group` and `user` sources as you need. MRs from all sources are merged
+and deduplicated.
 
 ## Columns
 
-- **Draft** — MRs in draft mode
-- **Needs Review** — Waiting for reviewer feedback
-- **Needs Author Action** — Reviewer comments; awaiting author response
-- **Ready to Merge** — Meets approval threshold
+| Column | What's in it |
+| --- | --- |
+| **Draft** | MRs marked as draft |
+| **Needs Review** | Waiting for reviewer feedback |
+| **Needs Author Action** | Reviewer left comments; author needs to respond |
+| **Ready to Merge** | Has the required number of approvals |
 
-## Environment Variables
+## Theming
 
-- `GITLAB_TOKEN` — Override config token
-- `MRBOARD_CONFIG` — Config file path
-- `MRBOARD_TIMEOUT` — HTTP timeout (default: 30s)
-- `MRBOARD_DEBUG` — Debug log file path
+Five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`.
 
-## Commands
+Press **`t`** to open the live theme picker — the board stays visible behind it so you see
+changes in real time. You can also switch between **auto** (follows your terminal's background),
+**dark**, and **light** mode from within the picker. Your selection is saved automatically.
+
+To override for a single session without saving:
 
 ```bash
-mrboard                               # Launch TUI
-mrboard fetch                         # Export MRs as JSON
-mrboard fetch --debug /tmp/debug.log  # Save debug info
+mrboard --theme dracula
+mrboard --mode light
+mrboard --theme nord --mode dark
 ```
+
+**Custom themes:** drop any `.json` file into `~/.config/mrboard/themes/` and it appears in
+the picker automatically. A file with the same name as a built-in overrides it. See
+[docs/theme-format.md](docs/theme-format.md) for the format.
 
 ## Troubleshooting
 
-**Config file not found:**
+**Authentication failed**
 
-```bash
-echo $MRBOARD_CONFIG
-cat ~/.config/mrboard/mrboard.yaml
-cat ./mrboard.yaml
-```
+- Make sure your token has `api` and `read_api` scopes
+- Check it hasn't expired: `echo $GITLAB_TOKEN`
 
-**Authentication failed:**
+**No MRs showing**
 
-- Verify `GITLAB_TOKEN` is set and not expired
-- Check token has `api` and `read_api` scopes
-
-**No MRs showing:**
-
-- Verify group IDs and usernames exist
-- Test the API manually:
+- Verify the group ID or username is correct
+- Test the API directly:
 
 ```bash
 curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   "https://gitlab.example.com/api/v4/groups/my-team/merge_requests"
 ```
 
-**Slow or timeout:**
+**Slow or timing out**
 
 ```bash
 MRBOARD_TIMEOUT=60s mrboard
 ```
 
-Enable debug logging:
+**Debug logging**
 
 ```bash
 MRBOARD_DEBUG=/tmp/mrboard.log mrboard
