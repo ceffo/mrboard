@@ -16,7 +16,6 @@ type headerWidget struct {
 	width        int
 	title        string
 	filterActive bool
-	refreshing   bool
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -28,34 +27,17 @@ func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetFilterActive(v bool)           { h.filterActive = v }
-func (h *headerWidget) SetRefreshing(v bool)             { h.refreshing = v }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
 func (h headerWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return h, nil }
 func (h headerWidget) View() tea.View                        { return tea.NewView(h.render()) }
 
 func (h headerWidget) render() string {
-	counts := [4]int{}
-	for _, mr := range h.mrs {
-		if idx := int(mr.Phase); idx >= 0 && idx < 4 {
-			counts[idx]++
-		}
-	}
-
-	// Inherit propagates the background color to each segment so the full
-	// header line carries a uniform background without a wrapping Render call
-	// (which would be broken by inner ANSI resets from nested renders).
 	bg := h.styles.Header
 	title := h.styles.HeaderTitle.Inherit(bg).Render(h.title)
-	stats := h.styles.HeaderStats.Inherit(bg).Render(fmt.Sprintf(
-		"Draft:%d  Review:%d  Author:%d  Ready:%d  Total:%d",
-		counts[0], counts[1], counts[2], counts[3], len(h.mrs),
-	))
+	stats := h.styles.HeaderStats.Inherit(bg).Render(fmt.Sprintf("Total:%d", len(h.mrs)))
 	if h.filterActive {
 		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[filtered]")
-	}
-	if h.refreshing {
-		stats += bg.Render("  ") + h.styles.HeaderStats.Inherit(bg).Render("↻")
 	}
 
 	titleW := lip.Width(title)

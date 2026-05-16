@@ -332,7 +332,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FetchResultMsg:
 		m.state = stateBoard
 		m.isRefreshing = false
-		m.header.SetRefreshing(false)
 		m.allMRs = msg.MRs
 		m.errors = msg.Errors
 		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
@@ -344,7 +343,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case FetchErrMsg:
 		m.isRefreshing = false
-		m.header.SetRefreshing(false)
 		m.state = stateError
 		m.errMsg = msg.Err.Error()
 		return m, nil
@@ -398,7 +396,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	default:
-		if m.state == stateLoading {
+		if m.state == stateLoading || m.isRefreshing {
 			updated, cmd := m.sp.Update(msg)
 			m.sp = updated.(spinnerWidget)
 			return m, cmd
@@ -415,7 +413,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	if m.state != stateBoard {
+	if m.state != stateBoard || m.isRefreshing {
 		return m, nil
 	}
 
@@ -478,8 +476,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
-			m.header.SetRefreshing(true)
-			return m, m.startFetch()
+			return m, tea.Batch(m.sp.Init(), m.startFetch())
 		}
 		m.state = stateLoading
 		return m, tea.Batch(m.sp.Init(), m.startFetch())
@@ -598,6 +595,10 @@ func (m Model) renderContent() string {
 
 	case stateBoard:
 		board := m.renderBoard()
+		if m.isRefreshing {
+			overlay := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
+			return m.renderWithOverlay(board, overlay)
+		}
 		if m.showFilter {
 			return m.renderWithOverlay(board, m.filterPopup.render())
 		}
