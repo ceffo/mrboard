@@ -69,8 +69,14 @@ func (d *detailWidget) SetSize(width, height int) {
 	d.height = height
 }
 
-func (d *detailWidget) ScrollUp()   { d.vp.scrollUp() }
-func (d *detailWidget) ScrollDown() { d.vp.scrollDown() }
+func (d *detailWidget) ScrollUp() { d.vp.scrollUp() }
+func (d *detailWidget) ScrollDown() {
+	innerWidth := d.width - detailBorderWidth - detailPadWidth
+	if innerWidth < detailMinInnerWidth {
+		innerWidth = detailMinInnerWidth
+	}
+	d.vp.scrollDown(len(d.buildLines(innerWidth)), d.bodyLines())
+}
 
 // bodyLines returns the number of lines available for the scrollable body
 // (total height minus border rows and the fixed header line).

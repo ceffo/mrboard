@@ -15,8 +15,12 @@ func (v *scrollViewport) scrollUp() {
 	}
 }
 
-// scrollDown increments unconditionally; callers must use clampedOffset.
-func (v *scrollViewport) scrollDown() { v.offset++ }
+// scrollDown increments the offset up to the last scrollable position.
+func (v *scrollViewport) scrollDown(total, visible int) {
+	if maxOff := total - visible; maxOff > 0 && v.offset < maxOff {
+		v.offset++
+	}
+}
 
 // clampedOffset returns v.offset clamped to [0, total-visible].
 func (v scrollViewport) clampedOffset(total, visible int) int {

@@ -82,7 +82,7 @@ func (c cardWidget) render() string {
 			w = lip.Width(l)
 		}
 		if w < innerWidth {
-			l += strings.Repeat(" ", innerWidth-w)
+			l += c.bgSpaces(innerWidth - w)
 		}
 		padded[i] = l
 	}
@@ -123,7 +123,20 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 	if pad < 0 {
 		pad = 0
 	}
-	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
+	return mrRef + authorStyled + c.bgSpaces(pad) + rightRendered
+}
+
+// bgSpaces returns n spaces painted with the focused-card background color.
+// Plain spaces are returned when the card is not focused (no inner background needed).
+func (c cardWidget) bgSpaces(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	sp := strings.Repeat(" ", n)
+	if c.focused && !c.focusInactive {
+		return c.styles.CardFocusedBg.Render(sp)
+	}
+	return sp
 }
 
 // durationStyle picks the appropriate style based on how old the MR is.
@@ -209,7 +222,7 @@ func (c cardWidget) wrapPills(now time.Time, width int) []string {
 			line = p
 			lineW = pW
 		} else if lineW+1+pW <= width {
-			line += " " + p
+			line += c.bgSpaces(1) + p
 			lineW += 1 + pW
 		} else {
 			lines = append(lines, line)

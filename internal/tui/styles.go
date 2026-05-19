@@ -54,6 +54,7 @@ type Styles struct {
 	PopupTitle                  lip.Style
 	ScrollIndicator             lip.Style
 	UsernameAtSign              lip.Style
+	CardFocusedBg               lip.Style     // background-only style for filling focused card spaces
 	LifetimeWarn                time.Duration // open-duration warning threshold
 	LifetimeError               time.Duration // open-duration error threshold
 }
@@ -134,6 +135,7 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		PopupHint:           lip.NewStyle().Foreground(c(FgLow)),
 		FilterActive:        lip.NewStyle().Foreground(c(Warning)).Bold(true),
 		UsernameAtSign:      lip.NewStyle().Foreground(c(Accent)).Bold(true),
+		CardFocusedBg:       lip.NewStyle().Background(c(BgElevated)),
 		LifetimeWarn:        3 * 24 * time.Hour,
 		LifetimeError:       5 * 24 * time.Hour,
 	}
