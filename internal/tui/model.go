@@ -188,6 +188,7 @@ type Model struct {
 	baseCtx         context.Context
 	logger          *slog.Logger
 	isRefreshing    bool
+	prevFocusMR     *domain.MergeRequest // saved before refresh for focus restoration
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -230,6 +231,12 @@ func New(
 	// Default to dark; corrected by BackgroundColorMsg on first update.
 	initialDark := themeMode == themeModeDark || themeMode != themeModeLight
 	styles := NewStyles(th, initialDark)
+	if cfg.LifetimeWarnAfter > 0 {
+		styles.LifetimeWarn = cfg.LifetimeWarnAfter
+	}
+	if cfg.LifetimeErrorAfter > 0 {
+		styles.LifetimeError = cfg.LifetimeErrorAfter
+	}
 	keys := DefaultKeyMap
 
 	sf := sortFieldFromState(st.SortField)
@@ -338,7 +345,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, e := range msg.Errors {
 			m.logger.Warn("tui: fetch partial error", "error", e)
 		}
+		m.applyTheme()
 		m.applyMRFilter()
+		if m.prevFocusMR != nil {
+			m.board.TryRestoreFocus(int(m.prevFocusMR.Phase), m.prevFocusMR.IID)
+			m.prevFocusMR = nil
+		}
 		return m, nil
 
 	case FetchErrMsg:
@@ -474,6 +486,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showDetail {
 			m.closeDetail()
 		}
+		m.prevFocusMR = m.board.FocusedMR()
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
 			return m, tea.Batch(m.sp.Init(), m.startFetch())
@@ -667,15 +680,22 @@ func (m Model) renderWithOverlay(board, popup string) string {
 	return lip.NewCompositor(bgLayer, popupLayer).Render()
 }
 
-// applyMRFilter applies all active filters and sort, then pushes the result into the board.
 // applyTheme regenerates all styles from the current theme and dark-mode flag,
-// then propagates them to all widgets.
+// then propagates them to all widgets including open overlays.
 func (m *Model) applyTheme() {
 	m.styles = NewStyles(m.theme, m.hasDarkBg)
+	if m.cfg.LifetimeWarnAfter > 0 {
+		m.styles.LifetimeWarn = m.cfg.LifetimeWarnAfter
+	}
+	if m.cfg.LifetimeErrorAfter > 0 {
+		m.styles.LifetimeError = m.cfg.LifetimeErrorAfter
+	}
 	m.header.SetStyles(m.styles)
 	m.board.SetStyles(m.styles)
 	m.footer.SetStyles(m.styles)
 	m.detail.SetStyles(m.styles)
+	m.filterPopup.styles = m.styles
+	m.themePicker.styles = m.styles
 }
 
 func (m *Model) applyMRFilter() {

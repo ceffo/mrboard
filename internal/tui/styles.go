@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image/color"
+	"time"
 
 	lip "charm.land/lipgloss/v2"
 
@@ -53,6 +54,8 @@ type Styles struct {
 	PopupTitle                  lip.Style
 	ScrollIndicator             lip.Style
 	UsernameAtSign              lip.Style
+	LifetimeWarn                time.Duration // open-duration warning threshold
+	LifetimeError               time.Duration // open-duration error threshold
 }
 
 // NewStyles builds the full style set from the given theme and dark-mode flag.
@@ -131,5 +134,7 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		PopupHint:           lip.NewStyle().Foreground(c(FgLow)),
 		FilterActive:        lip.NewStyle().Foreground(c(Warning)).Bold(true),
 		UsernameAtSign:      lip.NewStyle().Foreground(c(Accent)).Bold(true),
+		LifetimeWarn:        3 * 24 * time.Hour,
+		LifetimeError:       5 * 24 * time.Hour,
 	}
 }

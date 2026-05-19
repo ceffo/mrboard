@@ -54,16 +54,16 @@ func (c cardWidget) render() string {
 		authorLabel += " ⏳ " + withNBSP(domain.FormatDuration(waitDur))
 	}
 
-	var openLabel string
+	var openDur time.Duration
 	base := c.mr.NonDraftSince
 	if base.IsZero() {
 		base = c.mr.CreatedAt
 	}
 	if !base.IsZero() {
-		openLabel = withNBSP(domain.FormatDuration(now.Sub(base)))
+		openDur = now.Sub(base)
 	}
 
-	rawLines := []string{c.renderLine1(authorLabel, openLabel, innerWidth)}
+	rawLines := []string{c.renderLine1(authorLabel, openDur, innerWidth)}
 	for _, tl := range wrapTitleLines(c.mr.Title, innerWidth) {
 		rawLines = append(rawLines, c.styles.CardTitle.Render(tl))
 	}
@@ -101,15 +101,16 @@ func (c cardWidget) render() string {
 
 // renderLine1 builds the first card line: !IID + author left, duration right.
 // The MR ref prefix has its own style so it can't go through renderHeaderLine.
-func (c cardWidget) renderLine1(authorLabel, openLabel string, width int) string {
+func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width int) string {
 	mrRef := c.styles.MRNumberBang.Render("!") +
 		c.styles.CardMeta.Render(fmt.Sprintf("%d ", c.mr.IID))
 	mrRefW := lip.Width(mrRef)
 
 	rightRendered := ""
 	rightW := 0
-	if openLabel != "" {
-		rightRendered = c.styles.CardMeta.Render(openLabel)
+	if openDur > 0 {
+		openLabel := withNBSP(domain.FormatDuration(openDur))
+		rightRendered = c.durationStyle(openDur).Render(openLabel)
 		rightW = lip.Width(rightRendered)
 	}
 
@@ -123,6 +124,18 @@ func (c cardWidget) renderLine1(authorLabel, openLabel string, width int) string
 		pad = 0
 	}
 	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
+}
+
+// durationStyle picks the appropriate style based on how old the MR is.
+func (c cardWidget) durationStyle(dur time.Duration) lip.Style {
+	switch {
+	case c.styles.LifetimeError > 0 && dur >= c.styles.LifetimeError:
+		return c.styles.DurationUrgent
+	case c.styles.LifetimeWarn > 0 && dur >= c.styles.LifetimeWarn:
+		return c.styles.DurationWarning
+	default:
+		return c.styles.DurationOk
+	}
 }
 
 // renderPills returns each reviewer pill as a separately styled string.

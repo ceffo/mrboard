@@ -39,12 +39,34 @@ func newBoardWidget(styles Styles, width, height int) boardWidget {
 	return b
 }
 
-// SetStyles updates styles on the board and all its columns.
+// SetStyles updates styles on the board, all its columns, and all existing cards.
 func (b *boardWidget) SetStyles(s Styles) {
 	b.styles = s
 	for i := range b.columns {
 		b.columns[i].styles = s
+		for j := range b.columns[i].cards {
+			b.columns[i].cards[j].styles = s
+		}
 	}
+}
+
+// TryRestoreFocus attempts to focus the MR identified by colIdx+mrIID.
+// If the MR has moved or been removed, it stays on the same column when possible.
+func (b *boardWidget) TryRestoreFocus(colIdx int, mrIID int) {
+	if colIdx >= 0 && colIdx < numColumns {
+		for i, card := range b.columns[colIdx].cards {
+			if card.mr.IID == mrIID {
+				b.setFocusedCol(colIdx)
+				b.columns[colIdx].ClampFocusTo(i)
+				return
+			}
+		}
+		if len(b.columns[colIdx].cards) > 0 {
+			b.setFocusedCol(colIdx)
+			return
+		}
+	}
+	b.setInitialFocus()
 }
 
 // SetActive marks the board as owning keyboard focus (true) or yielding it to

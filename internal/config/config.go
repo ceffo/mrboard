@@ -42,11 +42,13 @@ type logSection struct {
 // preserved from the previous Config type so existing call-sites keep working
 // while the architecture migrates.
 type AppConfig struct {
-	GitLab          GitLab     `mapstructure:"gitlab"`
-	Sources         []Source   `mapstructure:"sources"`
-	ExcludedAuthors []string   `mapstructure:"excluded_authors"`
-	CurrentUser     string     `mapstructure:"current_user"`
-	Log             logSection `mapstructure:"log"`
+	GitLab             GitLab        `mapstructure:"gitlab"`
+	Sources            []Source      `mapstructure:"sources"`
+	ExcludedAuthors    []string      `mapstructure:"excluded_authors"`
+	CurrentUser        string        `mapstructure:"current_user"`
+	Log                logSection    `mapstructure:"log"`
+	LifetimeWarnAfter  time.Duration `mapstructure:"lifetime_warn_after"`
+	LifetimeErrorAfter time.Duration `mapstructure:"lifetime_error_after"`
 }
 
 // Config is a backward-compatible alias for AppConfig.
@@ -134,6 +136,8 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("gitlab.timeout", "30s")
 	v.SetDefault("gitlab.required_approvals", defaultRequiredApprovals)
 	v.SetDefault("log.level", "info")
+	v.SetDefault("lifetime_warn_after", "72h")
+	v.SetDefault("lifetime_error_after", "120h")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {
