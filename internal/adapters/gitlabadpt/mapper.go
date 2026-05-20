@@ -44,6 +44,12 @@ func DeriveReviewerStates(
 	}
 
 	for _, d := range discussions {
+		// Resolved threads are no longer the author's ball — skip them when
+		// computing lastComment so a resolved reviewer comment doesn't keep
+		// the MR in NeedsAuthorAction.
+		if len(d.Notes) > 0 && d.Notes[0].Resolvable && d.Notes[0].Resolved {
+			continue
+		}
 		for _, note := range d.Notes {
 			if note.CreatedAt == nil {
 				continue
@@ -335,6 +341,12 @@ func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.Reviewer
 	}
 
 	for _, d := range mr.Discussions.Nodes {
+		// Resolved threads are no longer the author's ball — skip them when
+		// computing lastComment so a resolved reviewer comment doesn't keep
+		// the MR in NeedsAuthorAction.
+		if len(d.Notes.Nodes) > 0 && d.Notes.Nodes[0].Resolvable && d.Notes.Nodes[0].Resolved {
+			continue
+		}
 		for _, note := range d.Notes.Nodes {
 			if note.CreatedAt == "" {
 				continue

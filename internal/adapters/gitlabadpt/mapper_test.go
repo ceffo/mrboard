@@ -45,6 +45,14 @@ func discussion(notes ...*gl.Note) *gl.Discussion {
 	return &gl.Discussion{Notes: notes}
 }
 
+func resolvedDiscussion(notes ...*gl.Note) *gl.Discussion {
+	if len(notes) > 0 {
+		notes[0].Resolvable = true
+		notes[0].Resolved = true
+	}
+	return &gl.Discussion{Notes: notes}
+}
+
 func approvals(usernames ...string) *gl.MergeRequestApprovals {
 	var approved []*gl.MergeRequestApproverUser
 	for _, u := range usernames {
@@ -166,6 +174,37 @@ func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
 	}
 	if result[0].State != domain.ReviewerNotStarted {
 		t.Errorf("want ReviewerNotStarted, got %v", result[0].State)
+	}
+}
+
+func TestDeriveReviewerStates_ResolvedThreadNotCommented(t *testing.T) {
+	// Reviewer left a comment, but the thread was resolved by the author.
+	// Should NOT stay in ReviewerCommented — that would wrongly put the MR
+	// in NeedsAuthorAction even though there's nothing left to address.
+	m := mr(basicUser("alice", "Alice"))
+	discussions := []*gl.Discussion{
+		resolvedDiscussion(userNote("alice", t1)),
+	}
+
+	result := DeriveReviewerStates(m, discussions, approvals())
+
+	if result[0].State != domain.ReviewerNotStarted {
+		t.Errorf("want NotStarted (thread resolved), got %v", result[0].State)
+	}
+}
+
+func TestDeriveReviewerStates_UnresolvedThreadStillCommented(t *testing.T) {
+	// Reviewer has one resolved thread and one open thread — still Commented.
+	m := mr(basicUser("alice", "Alice"))
+	discussions := []*gl.Discussion{
+		resolvedDiscussion(userNote("alice", t1)),
+		discussion(userNote("alice", t2)), // unresolved
+	}
+
+	result := DeriveReviewerStates(m, discussions, approvals())
+
+	if result[0].State != domain.ReviewerCommented {
+		t.Errorf("want Commented (unresolved thread remains), got %v", result[0].State)
 	}
 }
 
