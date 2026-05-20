@@ -64,10 +64,20 @@ func (c cardWidget) render() string {
 	}
 
 	rawLines := []string{c.renderLine1(authorLabel, openDur, innerWidth)}
-	for _, tl := range wrapTitleLines(c.mr.Title, innerWidth) {
-		rawLines = append(rawLines, c.styles.CardTitle.Render(tl))
+	rawLines = append(rawLines, "") // blank line before title
+	titleWidth := max(innerWidth-1, 0)
+	for _, tl := range wrapTitleLines(c.mr.Title, titleWidth) {
+		tl = " " + tl
+		if w := lip.Width(tl); w < innerWidth {
+			tl += strings.Repeat(" ", innerWidth-w)
+		}
+		rendered := c.styles.CardTitle.Render(tl)
+		if c.focused && !c.focusInactive {
+			rendered = c.styles.CardFocusedBg.Render(rendered)
+		}
+		rawLines = append(rawLines, rendered)
 	}
-	rawLines = append(rawLines, "")
+	rawLines = append(rawLines, "") // blank line after title
 
 	rawLines = append(rawLines, c.wrapPills(now, innerWidth)...)
 
@@ -82,7 +92,7 @@ func (c cardWidget) render() string {
 			w = lip.Width(l)
 		}
 		if w < innerWidth {
-			l += c.bgSpaces(innerWidth - w)
+			l += strings.Repeat(" ", innerWidth-w)
 		}
 		padded[i] = l
 	}
@@ -123,20 +133,7 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 	if pad < 0 {
 		pad = 0
 	}
-	return mrRef + authorStyled + c.bgSpaces(pad) + rightRendered
-}
-
-// bgSpaces returns n spaces painted with the focused-card background color.
-// Plain spaces are returned when the card is not focused (no inner background needed).
-func (c cardWidget) bgSpaces(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	sp := strings.Repeat(" ", n)
-	if c.focused && !c.focusInactive {
-		return c.styles.CardFocusedBg.Render(sp)
-	}
-	return sp
+	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
 }
 
 // durationStyle picks the appropriate style based on how old the MR is.
@@ -222,7 +219,7 @@ func (c cardWidget) wrapPills(now time.Time, width int) []string {
 			line = p
 			lineW = pW
 		} else if lineW+1+pW <= width {
-			line += c.bgSpaces(1) + p
+			line += " " + p
 			lineW += 1 + pW
 		} else {
 			lines = append(lines, line)

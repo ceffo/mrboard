@@ -91,12 +91,10 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		CardFocused: lip.NewStyle().
 			Border(lip.RoundedBorder()).
 			BorderForeground(c(BorderFocus)).
-			Background(c(BgElevated)).
 			Padding(0, 1),
 		CardFocusedInactive: lip.NewStyle().
 			Border(lip.RoundedBorder()).
 			BorderForeground(c(Border)).
-			Background(c(BgBase)).
 			Padding(0, 1),
 		CardTitle:       lip.NewStyle().Bold(true),
 		CardAuthor:      lip.NewStyle().Foreground(c(Info)).Bold(true),

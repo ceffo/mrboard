@@ -32,6 +32,10 @@ fetch: build
   @./bin/mrboard fetch
 
 
+# render sample cards to stdout for visual style verification (pipe to a colour-capable terminal)
+preview-card:
+  go test ./internal/tui/ -run TestCardPreview -v 2>/dev/null
+
 # regenerates all mocks from .mockery.yml (requires mockery v3 and goimports)
 generate:
   mockery
