@@ -46,12 +46,16 @@ func (c cardWidget) render() string {
 
 	now := time.Now()
 
-	// Line 1: author (+ waiting if NeedsAuthorAction) left · open duration right.
+	// Line 1: author (+ waiting/ready indicator) left · open duration right.
 	// Duration spaces are replaced with NBSP so lipgloss won't word-wrap within them.
 	authorLabel := c.mr.DisplayAuthor()
-	if c.mr.Phase == domain.PhaseNeedsAuthorAction && !c.mr.WaitingSince.IsZero() {
+	switch {
+	case c.mr.Phase == domain.PhaseNeedsAuthorAction && !c.mr.WaitingSince.IsZero():
 		waitDur := now.Sub(c.mr.WaitingSince)
 		authorLabel += " ⏳ " + withNBSP(domain.FormatDuration(waitDur))
+	case c.mr.Phase == domain.PhaseReadyToMerge && !c.mr.ReadyToMergeSince.IsZero():
+		readyDur := now.Sub(c.mr.ReadyToMergeSince)
+		authorLabel += " ✅ " + withNBSP(domain.FormatDuration(readyDur))
 	}
 
 	var openDur time.Duration

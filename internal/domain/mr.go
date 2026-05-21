@@ -87,6 +87,7 @@ type ReviewerInfo struct {
 	Name         string
 	State        ReviewerState
 	WaitingSince time.Time
+	ApprovedAt   time.Time // zero unless State == ReviewerApproved
 }
 
 // MergeRequest is the core domain type representing a GitLab merge request.
@@ -104,9 +105,10 @@ type MergeRequest struct {
 	Phase     MRPhase
 	Reviewers []ReviewerInfo
 
-	CreatedAt     time.Time
-	NonDraftSince time.Time
-	WaitingSince  time.Time
+	CreatedAt         time.Time
+	NonDraftSince     time.Time
+	WaitingSince      time.Time
+	ReadyToMergeSince time.Time
 
 	ApprovalCount     int
 	RequiredApprovals int

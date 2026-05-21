@@ -15,6 +15,9 @@ import (
 // re-requests review from a specific reviewer.
 const reReviewPrefix = "requested review from @"
 
+// approvedBody is the GitLab system note body emitted when a reviewer approves.
+const approvedBody = "approved this merge request"
+
 // DeriveReviewerStates processes GitLab discussions chronologically and returns
 // a ReviewerInfo slice for the active reviewers listed on the MR.
 func DeriveReviewerStates(
@@ -36,6 +39,7 @@ func DeriveReviewerStates(
 	type reviewerTimestamps struct {
 		lastComment  time.Time
 		lastReReview time.Time
+		lastApproval time.Time
 	}
 
 	ts := make(map[string]*reviewerTimestamps, len(mr.Reviewers))
@@ -57,6 +61,12 @@ func DeriveReviewerStates(
 			t := *note.CreatedAt
 
 			if note.System {
+				if note.Body == approvedBody {
+					if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastApproval) {
+						rts.lastApproval = t
+					}
+					continue
+				}
 				username := extractReReviewUsername(note.Body)
 				if username == "" {
 					continue
@@ -93,11 +103,17 @@ func DeriveReviewerStates(
 			waitingSince = rts.lastComment
 		}
 
+		var approvedAt time.Time
+		if state == domain.ReviewerApproved {
+			approvedAt = rts.lastApproval
+		}
+
 		result = append(result, domain.ReviewerInfo{
 			Username:     r.Username,
 			Name:         r.Name,
 			State:        state,
 			WaitingSince: waitingSince,
+			ApprovedAt:   approvedAt,
 		})
 	}
 	return result
@@ -181,6 +197,8 @@ func MapMR(
 				domainMR.WaitingSince = r.WaitingSince
 			}
 		}
+	case domain.PhaseReadyToMerge:
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers, requiredApprovals)
 	}
 
 	return domainMR
@@ -315,6 +333,8 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domai
 				domainMR.WaitingSince = r.WaitingSince
 			}
 		}
+	case domain.PhaseReadyToMerge:
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers, requiredApprovals)
 	}
 
 	return domainMR
@@ -334,6 +354,7 @@ func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.Reviewer
 	type reviewerTimestamps struct {
 		lastComment  time.Time
 		lastReReview time.Time
+		lastApproval time.Time
 	}
 	ts := make(map[string]*reviewerTimestamps, len(mr.Reviewers.Nodes))
 	for _, r := range mr.Reviewers.Nodes {
@@ -356,6 +377,12 @@ func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.Reviewer
 				continue
 			}
 			if note.System {
+				if note.Body == approvedBody {
+					if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastApproval) {
+						rts.lastApproval = t
+					}
+					continue
+				}
 				username := extractReReviewUsername(note.Body)
 				if username == "" {
 					continue
@@ -387,11 +414,16 @@ func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.Reviewer
 		case domain.ReviewerCommented:
 			waitingSince = rts.lastComment
 		}
+		var approvedAt time.Time
+		if state == domain.ReviewerApproved {
+			approvedAt = rts.lastApproval
+		}
 		result = append(result, domain.ReviewerInfo{
 			Username:     r.Username,
 			Name:         r.Name,
 			State:        state,
 			WaitingSince: waitingSince,
+			ApprovedAt:   approvedAt,
 		})
 	}
 	return result
@@ -421,6 +453,31 @@ func countRoundTripsGQL(mr pkggitlab.GQLMergeRequest) int {
 		}
 	}
 	return count
+}
+
+// deriveReadyToMergeSince returns when the MR last reached the required approval
+// count by finding the requiredApprovals-th oldest ApprovedAt timestamp.
+// Returns zero time if timestamps are unavailable (e.g. zero required approvals).
+func deriveReadyToMergeSince(reviewers []domain.ReviewerInfo, requiredApprovals int) time.Time {
+	if requiredApprovals <= 0 {
+		return time.Time{}
+	}
+	var times []time.Time
+	for _, r := range reviewers {
+		if r.State == domain.ReviewerApproved && !r.ApprovedAt.IsZero() {
+			times = append(times, r.ApprovedAt)
+		}
+	}
+	if len(times) < requiredApprovals {
+		return time.Time{}
+	}
+	// Sort ascending; the requiredApprovals-th entry is when the count hit the threshold.
+	for i := 1; i < len(times); i++ {
+		for j := i; j > 0 && times[j].Before(times[j-1]); j-- {
+			times[j], times[j-1] = times[j-1], times[j]
+		}
+	}
+	return times[requiredApprovals-1]
 }
 
 // parseGIDNumericSafe extracts the trailing numeric ID from a GitLab global ID
