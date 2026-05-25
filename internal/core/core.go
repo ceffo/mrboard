@@ -11,16 +11,16 @@ import (
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
 	"github.com/ceffo/mrboard/internal/adapters/statestore"
 	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
-	"github.com/ceffo/mrboard/internal/tui"
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 )
 
 // Core holds every dependency a binary needs, fully wired.
 type Core struct {
 	MRSource   mrsvc.MergeRequestSource
-	StateStore tui.StateStore
+	StateStore domain.StateStore
 	Config     *config.AppConfig
 	Logger     *slog.Logger
 	logCloser  io.Closer

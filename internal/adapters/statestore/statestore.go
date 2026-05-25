@@ -1,4 +1,4 @@
-// Package statestore provides a YAML-backed implementation of tui.StateStore.
+// Package statestore provides a YAML-backed implementation of domain.StateStore.
 package statestore
 
 import (
@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ceffo/mrboard/internal/tui"
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 const (
@@ -22,7 +22,7 @@ type Config struct {
 	Dir string // XDG data dir: ~/.local/share/mrboard/
 }
 
-// YAMLStore persists tui.State to {Dir}/state.yaml.
+// YAMLStore persists domain.AppState to {Dir}/state.yaml.
 type YAMLStore struct {
 	path string
 }
@@ -35,24 +35,24 @@ func New(cfg Config) (*YAMLStore, error) {
 	return &YAMLStore{path: filepath.Join(cfg.Dir, "state.yaml")}, nil
 }
 
-// Load reads persisted state. Returns tui.DefaultState() if the file is absent.
-func (s *YAMLStore) Load() (tui.State, error) {
+// Load reads persisted state. Returns domain.DefaultAppState() if the file is absent.
+func (s *YAMLStore) Load() (domain.AppState, error) {
 	data, err := os.ReadFile(filepath.Clean(s.path))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return tui.DefaultState(), nil
+			return domain.DefaultAppState(), nil
 		}
-		return tui.DefaultState(), fmt.Errorf("statestore: read %q: %w", s.path, err)
+		return domain.DefaultAppState(), fmt.Errorf("statestore: read %q: %w", s.path, err)
 	}
-	var st tui.State
+	var st domain.AppState
 	if err := yaml.Unmarshal(data, &st); err != nil {
-		return tui.DefaultState(), fmt.Errorf("statestore: parse %q: %w", s.path, err)
+		return domain.DefaultAppState(), fmt.Errorf("statestore: parse %q: %w", s.path, err)
 	}
 	return st, nil
 }
 
 // Save writes state to disk with mode 0600.
-func (s *YAMLStore) Save(st tui.State) error {
+func (s *YAMLStore) Save(st domain.AppState) error {
 	data, err := yaml.Marshal(st)
 	if err != nil {
 		return fmt.Errorf("statestore: marshal: %w", err)

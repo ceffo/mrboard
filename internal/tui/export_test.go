@@ -5,7 +5,7 @@ package tui
 import "github.com/ceffo/mrboard/internal/domain"
 
 func (m Model) AllMRs() []domain.MergeRequest { return m.allMRs }
-func (m Model) MyView() bool                  { return m.viewMode == ViewMine }
+func (m Model) MyView() bool                  { return m.viewMode == domain.ViewMine }
 func (m Model) SortFieldKey() string          { return m.sortField.stateKey() }
 func (m Model) SortDesc() bool                { return m.sortDesc }
 func (m Model) ShowDetail() bool              { return m.showDetail }

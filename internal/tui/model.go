@@ -174,16 +174,14 @@ type Model struct {
 	errMsg          string
 	cfg             *config.Config
 	src             mrsvc.MergeRequestSource
-	store           StateStore
+	store           domain.StateStore
 	allMRs          []domain.MergeRequest
 	userMap         map[string]string
 	currentUser     string
-	viewMode        ViewMode
+	viewMode        domain.ViewMode
 	sortField       sortField
 	sortDesc        bool
-	filterPhases    map[domain.MRPhase]bool
-	filterAuthors   []string
-	filterReviewers []string
+	filter          FilterCriteria
 	fetchCancel     context.CancelFunc
 	baseCtx         context.Context
 	logger          *slog.Logger
@@ -197,7 +195,7 @@ func New(
 	ctx context.Context,
 	cfg *config.Config,
 	src mrsvc.MergeRequestSource,
-	store StateStore,
+	store domain.StateStore,
 	version string,
 	opts Options,
 ) Model {
@@ -206,7 +204,7 @@ func New(
 	st, err := store.Load()
 	if err != nil {
 		logger.Error("statestore: load failed, using defaults", "err", err)
-		st = DefaultState()
+		st = domain.DefaultAppState()
 	}
 
 	// Resolve theme name and mode: flag overrides > state > defaults.
@@ -243,10 +241,10 @@ func New(
 	keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(sf, st.SortDesc)))
 
 	viewMode := st.ViewMode
-	if viewMode == ViewMine && cfg.CurrentUser == "" {
-		viewMode = ViewAll
+	if viewMode == domain.ViewMine && cfg.CurrentUser == "" {
+		viewMode = domain.ViewAll
 	}
-	if viewMode == ViewMine {
+	if viewMode == domain.ViewMine {
 		keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
 	}
 	if cfg.CurrentUser == "" {
@@ -279,7 +277,7 @@ func New(
 		baseCtx:         ctx,
 		logger:          logger,
 	}
-	if viewMode == ViewMine {
+	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
 	}
 	logger.Info("tui: starting", "version", version, "theme", themeName, "mode", themeMode, "view", int(viewMode))
@@ -372,9 +370,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FilterAppliedMsg:
-		m.filterPhases = msg.Phases
-		m.filterAuthors = msg.Authors
-		m.filterReviewers = msg.Reviewers
+		m.filter = msg.Criteria
 		m.applyMRFilter()
 		return m, nil
 
@@ -500,12 +496,12 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.applyMRFilter()
 		m.saveState()
 	case key.Matches(msg, m.keys.ToggleView):
-		if m.viewMode == ViewMine {
-			m.viewMode = ViewAll
+		if m.viewMode == domain.ViewMine {
+			m.viewMode = domain.ViewAll
 			m.header.SetTitle("mrboard")
 			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view"))
 		} else {
-			m.viewMode = ViewMine
+			m.viewMode = domain.ViewMine
 			m.header.SetTitle("mrboard — @" + m.currentUser)
 			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
 		}
@@ -525,7 +521,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		authors, reviewers := uniqueAuthorsReviewers(m.allMRs)
 		m.filterPopup = newFilterPopupWidget(
 			m.styles, m.filterKeys, authors, reviewers, m.userMap,
-			m.filterPhases, m.currentUser, m.filterAuthors, m.filterReviewers,
+			m.filter, m.currentUser,
 		)
 		m.showFilter = true
 		return m, nil
@@ -701,13 +697,13 @@ func (m *Model) applyTheme() {
 func (m *Model) applyMRFilter() {
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
 	mrs := mrsvc.FilterAndSort(m.allMRs, mrsvc.FilterOptions{
-		MyView:      m.viewMode == ViewMine,
+		MyView:      m.viewMode == domain.ViewMine,
 		CurrentUser: m.currentUser,
 		SortField:   m.sortField.stateKey(),
 		SortDesc:    m.sortDesc,
-		Phases:      m.filterPhases,
-		Authors:     m.filterAuthors,
-		Reviewers:   m.filterReviewers,
+		Phases:      m.filter.Phases,
+		Authors:     m.filter.Authors,
+		Reviewers:   m.filter.Reviewers,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.board.SetMRs(displayMRs)
@@ -729,11 +725,11 @@ func visibleMRs(mrs []domain.MergeRequest, currentUser string) []domain.MergeReq
 }
 
 func (m *Model) isFilterActive() bool {
-	return len(m.filterPhases) > 0 || len(m.filterAuthors) > 0 || len(m.filterReviewers) > 0
+	return len(m.filter.Phases) > 0 || len(m.filter.Authors) > 0 || len(m.filter.Reviewers) > 0
 }
 
 func (m *Model) saveState() {
-	if err := m.store.Save(State{
+	if err := m.store.Save(domain.AppState{
 		SortField: m.sortField.stateKey(),
 		SortDesc:  m.sortDesc,
 		ViewMode:  m.viewMode,

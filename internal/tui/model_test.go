@@ -13,11 +13,11 @@ import (
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc/mocks"
 )
 
-// noopStore is a StateStore that always returns DefaultState and discards saves.
+// noopStore is a StateStore that always returns DefaultAppState and discards saves.
 type noopStore struct{}
 
-func (noopStore) Load() (State, error) { return DefaultState(), nil }
-func (noopStore) Save(State) error     { return nil }
+func (noopStore) Load() (domain.AppState, error) { return domain.DefaultAppState(), nil }
+func (noopStore) Save(domain.AppState) error     { return nil }
 
 // makeModel creates a Model wired to a mock source and transitions it to
 // stateBoard by delivering initialMRs via FetchResultMsg.
