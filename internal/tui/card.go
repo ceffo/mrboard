@@ -41,6 +41,21 @@ func (c cardWidget) Init() tea.Cmd                         { return nil }
 func (c cardWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return c, nil }
 func (c cardWidget) View() tea.View                        { return tea.NewView(c.render()) }
 
+// measureHeight returns the number of lines this card would occupy at width w
+// without constructing the full styled string. Mirrors the line-counting logic
+// in render() — kept in sync whenever render() adds/removes rawLines entries.
+func (c cardWidget) measureHeight(w int) int {
+	innerWidth := max(w-cardBorderAndPad, minInnerWidth)
+	now := time.Now()
+
+	titleWidth := max(innerWidth-1, 0)
+	nTitle := len(wrapTitleLines(c.mr.Title, titleWidth))
+	nPills := len(c.wrapPills(now, innerWidth))
+
+	// line1(1) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
+	return 5 + nTitle + nPills
+}
+
 func (c cardWidget) render() string {
 	innerWidth := max(c.width-cardBorderAndPad, minInnerWidth)
 

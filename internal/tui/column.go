@@ -68,7 +68,7 @@ func (c *columnWidget) SetWidth(w int) {
 	c.width = w
 	for i := range c.cards {
 		c.cards[i].SetWidth(w - colBorderWidth)
-		c.cardHeights[i] = lineCount(c.cards[i].render())
+		c.cardHeights[i] = c.cards[i].measureHeight(w - colBorderWidth)
 	}
 }
 
@@ -82,7 +82,7 @@ func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
 	c.cardHeights = make([]int, len(mrs))
 	for i, mr := range mrs {
 		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth)
-		c.cardHeights[i] = lineCount(c.cards[i].render())
+		c.cardHeights[i] = c.cards[i].measureHeight(c.width - colBorderWidth)
 	}
 	c.scrollOffset = 0
 	if len(c.cards) == 0 {
@@ -257,9 +257,4 @@ func scrollIndicator(hasAbove, hasBelow bool) string {
 	default:
 		return "  "
 	}
-}
-
-// lineCount returns the number of rendered lines in s.
-func lineCount(s string) int {
-	return strings.Count(s, "\n") + 1
 }
