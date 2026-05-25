@@ -48,54 +48,52 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 		primaryExclusion = a.cfg.ExcludedAuthors[0]
 	}
 
-	excluded := make(map[string]bool, len(a.cfg.ExcludedAuthors))
-	for _, u := range a.cfg.ExcludedAuthors {
-		excluded[u] = true
-	}
-
+	// Phase 1: fetch all sources in parallel.
 	listStart := time.Now()
 	rawMRs, mappedMRs, errs := a.listAllMRs(ctx, primaryExclusion)
 	logger.Info("gitlab: source listing done",
 		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
 		"duration", time.Since(listStart).Round(time.Millisecond))
 
-	// Build seen set from GraphQL-mapped MRs (already enriched).
-	// This also deduplicates cross-source: group REST results that duplicate a
-	// user GraphQL result are dropped before enrichment.
-	seen := make(map[mrKey]bool, len(mappedMRs)+len(rawMRs))
-	var finalMRs []domain.MergeRequest
-	for _, mr := range mappedMRs {
-		if excluded[mr.Author] {
-			logger.Debug("gitlab: excluding mapped MR", "iid", mr.IID, "author", mr.Author)
-			continue
-		}
-		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
-		if seen[k] {
-			logger.Debug("gitlab: dedup drop mapped MR", "iid", mr.IID, "project", mr.ProjectID)
-			continue
-		}
-		seen[k] = true
-		finalMRs = append(finalMRs, mr)
-	}
+	// Phase 2: deduplicate — build a combined slice (mapped first so they win
+	// on collision, then raw stubs with just key fields), run a single
+	// dedup+exclusion pass, then separate survivors by source.
+	deduper := MRDeduplicator{ExcludedAuthors: a.cfg.ExcludedAuthors}
 
-	unique := make([]*gl.BasicMergeRequest, 0, len(rawMRs))
+	rawByKey := make(map[mrKey]*gl.BasicMergeRequest, len(rawMRs))
+	combined := make([]domain.MergeRequest, 0, len(mappedMRs)+len(rawMRs))
+	combined = append(combined, mappedMRs...)
 	for _, mr := range rawMRs {
+		k := mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}
+		rawByKey[k] = mr
 		authorUsername := ""
 		if mr.Author != nil {
 			authorUsername = mr.Author.Username
 		}
 		logger.Debug("gitlab: raw MR", "iid", mr.IID, "title", mr.Title, "author", authorUsername)
-		if authorUsername != "" && excluded[authorUsername] {
-			logger.Debug("gitlab: excluding raw MR", "iid", mr.IID, "author", authorUsername)
-			continue
+		combined = append(combined, domain.MergeRequest{
+			ProjectID: int(mr.ProjectID),
+			IID:       int(mr.IID),
+			Author:    authorUsername,
+		})
+	}
+
+	deduped := deduper.Deduplicate(combined)
+
+	mappedKeys := make(map[mrKey]bool, len(mappedMRs))
+	for _, mr := range mappedMRs {
+		mappedKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
+	}
+
+	var finalMRs []domain.MergeRequest
+	var unique []*gl.BasicMergeRequest
+	for _, mr := range deduped {
+		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		if mappedKeys[k] {
+			finalMRs = append(finalMRs, mr)
+		} else if raw, ok := rawByKey[k]; ok {
+			unique = append(unique, raw)
 		}
-		k := mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}
-		if seen[k] {
-			logger.Debug("gitlab: dedup drop raw MR", "iid", mr.IID, "project", mr.ProjectID)
-			continue
-		}
-		seen[k] = true
-		unique = append(unique, mr)
 	}
 	logger.Info("gitlab: dedup summary",
 		"raw", len(rawMRs), "mapped", len(mappedMRs),
@@ -156,12 +154,6 @@ func (a *GitLabAdapter) GetDetail(ctx context.Context, projectID, mrIID int64) (
 	}
 	threads := MapDiscussionsToThreads(discussions)
 	return desc, threads, nil
-}
-
-// mrKey uniquely identifies an MR across all sources.
-type mrKey struct {
-	projectID int
-	iid       int
 }
 
 // sourceResult is the output of fetching a single source ID.
