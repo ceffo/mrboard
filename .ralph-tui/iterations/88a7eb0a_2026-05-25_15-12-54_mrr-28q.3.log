@@ -1,0 +1,110 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-28q.3
+- **Task Title**: Extract MRDeduplicator seam from FetchAll orchestration
+- **Description**: ## Context
+internal/adapters/gitlabadpt/gitlabadpt.go FetchAll() (lines 41-145) mixes five concerns: source parallelization, dedup, exclusion filtering (at 3 separate points: ~lines 47-54, 69, 88-90),...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-25T19:12:54.886Z
+- **Ended At**: 2026-05-25T19:17:35.329Z
+- **Duration**: 4m 40s
+- **Input Tokens**: 84
+- **Output Tokens**: 17608
+- **Total Tokens**: 17692
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-28q
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+Loading context and reading the target file in parallel.
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me check the domain.MergeRequest type to understand what fields are available.
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/domain/*.go[0m
+[94m[Bash][0m Check domain/mr.go size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Now I have everything I need. Let me implement the `MRDeduplicator` type and refactor `FetchAll`.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup.go[0m "package gitlabadpt
+
+import "github.com/ceffo/mrboard/internal/domain"
+
+// mrKey uniquely identifies an MR across all sources.
+type mrKey struct {
+	projectID int
+	iid       int
+}
+
+// MRDeduplicator ded... (997 chars)"
+Now refactor `FetchAll` to use the three phases and remove the scattered dedup/exclusion logic:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// FetchAll implements mrsvc.MergeRequestSource.
+f..." → "// FetchAll implements mrsvc.MergeRequestSource.
+f..."
+Now remove the `mrKey` type from `gitlabadpt.go` since it's now in `dedup.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// mrKey uniquely identifies an MR across all sour..." → "// sourceResult is the output of fetching a single..."
+Now write the tests:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m "package gitlabadpt
+
+import (
+	"testing"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+func TestMRDeduplicator_Deduplicate(t *testing.T) {
+	mr := func(projectID, iid int, author string) domain.MergeR... (2996 chars)"
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/adapters/gitlabadpt/dedup_test.go:42:23: string `bot` has 3 occurrences, make it a constant (goconst)
+			excluded: []string{"bot"},
+			                   ^
+1 issues:
+* goconst: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m edit: "import (
+	"testing"
+
+	"github.com/ceffo/mrboard/in..." → "import (
+	"testing"
+
+	"github.com/ceffo/mrboard/in..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m edit: ""bot"" → "testBotUser"
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/adapters/gitlabadpt/dedup.go:1: : # github.com/ceffo/mrboard/internal/adapters/gitlabadpt [github.com/ceffo/mrboard/internal/adapters/gitlabadpt.test]
+internal/adapters/gitlabadpt/dedup_test.go:9:7: initialization cycle: testBotUser refers to itself (typecheck)
+package gitlabadpt
+1 issues:
+* typecheck: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m
+The `replace_all` also replaced the RHS of the const declaration. Fix it:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m edit: "const testBotUser = testBotUser" → "const testBotUser = "bot""
+[94m[Bash][0m Run quality gates $ just check 2>&1
+All 9 dedup tests pass and the full suite is green. Now close the bead and update progress:
+[94m[Bash][0m Close bead and sync $ 9 table-driven tests added" 2>&1 && br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-25 - mrr-28q.2" → "## 2026-05-25 - mrr-28q.3
+- Extracted `MRDeduplica..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Extracted `MRDeduplicator{ExcludedAuthors []string}` to `internal/adapters/gitlabadpt/dedup.go`. `Deduplicate([]domain.MergeRequest) []domain.MergeRequest` is a pure function: excludes by au... (1218 chars)"
+Memory saved. All 3 candidates have low similarity scores (unrelated architecture observations), so resolving silently.
+
+`just check` passes — 9 dedup tests green, full suite green. Done.
+
+**What changed:** Extracted `MRDeduplicator` to `dedup.go` with a pure `Deduplicate([]domain.MergeRequest) []domain.MergeRequest` method. `FetchAll` now has three clearly labelled phases (fetch → deduplicate → enrich); scattered exclusion checks and the inline `mrKey` struct are gone. 9 table-driven tests cover all the acceptance criteria cases.
+
+<promise>COMPLETE</promise>

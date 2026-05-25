@@ -1,0 +1,151 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-28q.2
+- **Task Title**: Invert StateStore dependency: domain.AppState replaces tui.State in persistence
+- **Description**: ## Context
+internal/adapters/statestore/statestore.go imports internal/tui and stores/loads tui.State directly. This means an infrastructure adapter (persistence) depends on the presentation layer — t...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-25T19:08:46.909Z
+- **Ended At**: 2026-05-25T19:12:53.375Z
+- **Duration**: 4m 6s
+- **Input Tokens**: 137
+- **Output Tokens**: 14504
+- **Total Tokens**: 14641
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-28q
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/statestore.go[0m
+[94m[Bash][0m Check file sizes $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go /Users/moncefnaji/code/github....
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/state.go[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96msaveState|loadState|StateStore|AppState|tui\.State[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me check the core wiring and any other references to `tui.State`:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m pattern: [96mtui\.State|StateStore|statestore[0m
+[94m[Glob][0m pattern: [96m/Users/moncefnaji/code/github.com/mrboard/internal/domain/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Let me check all usages of ViewMode and tui.State across the codebase:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal[0m pattern: [96mViewMode|ViewAll|ViewMine|tui\.State[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Glob][0m pattern: [96m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/*[0m
+Good, no tests to worry about. Now I have everything I need. Let me implement all the changes:
+
+**Step 1: Create `internal/domain/state.go`**
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m "package domain
+
+// ViewMode controls whether the board shows all MRs or only the current user's.
+type ViewMode int
+
+// ViewMode values.
+const (
+	ViewAll  ViewMode = iota
+	ViewMine // filters to curren... (928 chars)"
+**Step 2: Update `statestore.go` to use `domain.AppState`**
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/statestore.go[0m "// Package statestore provides a YAML-backed implementation of domain.StateStore.
+package statestore
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/ceffo/mrboard/... (1746 chars)"
+**Step 3: Update `tui/state.go` — remove what moved to domain, keep the file minimal**
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/state.go[0m "package tui
+
+// ViewMode and StateStore have moved to internal/domain.
+// This file is intentionally empty — retained for package continuity.
+"
+**Step 4: Update `core/core.go` — use `domain.StateStore`, remove `tui` import**
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	"github.com/ceffo/mrboard/internal/adapters/gitla..." → "	"github.com/ceffo/mrboard/internal/adapters/gitla..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	StateStore tui.StateStore" → "	StateStore domain.StateStore"
+**Step 5: Update `tui/model.go`** — replace all `tui.ViewMode`/`ViewAll`/`ViewMine`/`StateStore`/`State{`/`DefaultState()` references with domain equivalents
+
+First, let me see the full relevant sections of model.go:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Good — `domain` is already imported. Now let me update the model.go references. I need to:
+
+1. Change `store StateStore` → `store domain.StateStore`
+2. Change `viewMode ViewMode` → `viewMode domain.ViewMode`
+3. Change `ViewAll` / `ViewMine` → `domain.ViewAll` / `domain.ViewMine`
+4. Change `State{...}` in `saveState()` → `domain.AppState{...}`
+5. Change `DefaultState()` → `domain.DefaultAppState()`
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	store           StateStore" → "	store           domain.StateStore"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	viewMode        ViewMode" → "	viewMode        domain.ViewMode"
+Now let me read the area around line 245 to update ViewMine/ViewAll references in `New()`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		st = DefaultState()" → "		st = domain.DefaultAppState()"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if viewMode == ViewMine && cfg.CurrentUser == "" ..." → "	if viewMode == domain.ViewMine && cfg.CurrentUser..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if viewMode == ViewMine {
+		m.header.SetTitle("mr..." → "	if viewMode == domain.ViewMine {
+		m.header.SetTi..."
+Now let me check lines around 503 and 704 for the remaining ViewMine/ViewAll references:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		if m.viewMode == ViewMine {
+			m.viewMode = View..." → "		if m.viewMode == domain.ViewMine {
+			m.viewMode..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		MyView:      m.viewMode == ViewMine," → "		MyView:      m.viewMode == domain.ViewMine,"
+Now update `saveState()` to use `domain.AppState`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) saveState() {
+	if err := m.store.S..." → "func (m *Model) saveState() {
+	if err := m.store.S..."
+**Step 6: Update `export_test.go`** — `ViewMine` is now `domain.ViewMine`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m edit: "func (m Model) MyView() bool                  { re..." → "func (m Model) MyView() bool                  { re..."
+Now let me check if there are any remaining references to the old tui types that need updating, and then run `just check`:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96mtui\.State|tui\.ViewMode|tui\.ViewAll|tui\.ViewMine|tui\.DefaultState|tui\.StateStore[0m
+Good — no Go source files reference the old types. Now let me run `just check`:
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/board.go:1: : # github.com/ceffo/mrboard/internal/tui [github.com/ceffo/mrboard/internal/tui.test]
+internal/tui/model.go:200:8: undefined: StateStore
+internal/tui/model_test.go:19:26: undefined: State
+internal/tui/model_test.go:19:49: undefined: DefaultState
+internal/tui/model_test.go:20:23: undefined: State (typecheck)
+// Package tui provides the Bubble Tea TUI for mrboard.
+1 issues:
+* typecheck: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Three more fixes needed: `model.go` line 200 has another `StateStore` reference, and `model_test.go` uses `State`/`DefaultState`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	store StateStore," → "	store domain.StateStore,"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "// noopStore is a StateStore that always returns D..." → "// noopStore is a StateStore that always returns D..."
+[94m[Bash][0m Run quality gates $ just check 2>&1
+All tests pass. `just check` passed cleanly — 0 issues, all tests green. Now let me close the bead and update progress:
+[94m[Bash][0m Close the bead $ br close mrr-28q.2 --reason "Inverted StateStore dependency: domain.AppState and domain.StateStore e...
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+" → "---
+
+## 2026-05-25 - mrr-28q.2
+- Created `internal..."
+
+[91m[Error: <tool_use_error>Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - Pre-filtering events per reviewer is not neede..." → "  - Pre-filtering events per reviewer is not neede..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Extracted `domain.AppState` + `domain.StateStore` interface + `domain.ViewMode` from `internal/tui` into `internal/domain/state.go`. The `statestore` adapter now depends on `domain`, not `tu... (1444 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-28q.2: invert the StateStore dependency so the persistence adapter depends on domain, not tui.
+
+## Discoveries
+- `tui.State` was already a pure DTO for persistence — the model us... (1435 chars)"
+<promise>COMPLETE</promise>

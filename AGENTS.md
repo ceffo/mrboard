@@ -65,6 +65,12 @@ Key facts for testing:
 4. The generated file lands in `internal/service/mocks/mock_<InterfaceName>.go`.
 5. Commit the generated file alongside the interface change.
 
+### Commit message rules
+
+- Use conventional commits format: `<type>(<scope>): <description>`
+- Do not reference beads task ids anywhere, those are internal
+- The description should be a concise summary of the change, ideally no more than 50 characters
+
 ### Using a mock in tests
 
 ```go
@@ -260,7 +266,6 @@ git status              # Check what changed
 git add <files>         # Stage code changes
 br sync --flush-only    # Export beads changes to JSONL
 git commit -m "..."     # Commit everything
-git push                # Push to remote
 ```
 
 <!-- end-bv-agent-instructions -->

@@ -1,0 +1,97 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-28q.1
+- **Task Title**: Extract ReviewerStateDeriver interface from dual REST/GQL mapper paths
+- **Description**: ## Context
+internal/adapters/gitlabadpt/mapper.go (498 lines) has two parallel mapping pipelines: MapMR() for REST and MapMRFromGraphQL() for GQL. Both implement the same reviewer-state derivation alg...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-25T18:59:34.512Z
+- **Ended At**: 2026-05-25T19:08:45.462Z
+- **Duration**: 9m 10s
+- **Input Tokens**: 66
+- **Output Tokens**: 36996
+- **Total Tokens**: 37062
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-28q
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+Now I can see the mapper.go clearly. Let me also check the existing test file and the GQL types.
+[94m[Glob][0m pattern: [96minternal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Glob][0m pattern: [96mpkg/gitlab/graphql.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+Let me check where `DeriveReviewerStatesFromGQL` and `countOpenThreadsGQL` are used:
+[94m[Grep][0m pattern: [96mDeriveReviewerStatesFromGQL|countOpenThreadsGQL|countRoundTripsGQL[0m
+Good. Let me check the GQL types:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m pattern: [96mtype GQLDiscussion|type GQLNote|GQLMergeRequest struct[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+I have a complete picture. The plan is:
+1. Add `DiscussionEvent` normalized type + `KindComment/ReReviewRequest/Approval` kinds
+2. Add `normalizeDiscussionEventsREST` + `normalizeDiscussionEventsGQL` 
+3. Add pure `deriveReviewerState(approved bool, events []DiscussionEvent) ReviewerState`
+4. Add shared `buildReviewerInfos` + `countRoundTripsFromEvents`
+5. Unify `countOpenThreads` via a shared `threadState` slice
+6. Remove `DeriveReviewerStatesFromGQL`, `countOpenThreadsGQL`, `countRoundTripsGQL`
+7. Update tests
+
+Let me write the new mapper.go:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m "package gitlabadpt
+
+import (
+	"strconv"
+	"strings"
+	"time"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
+)
+
+/... (16054 chars)"
+Now update the test file to remove the `TestCountRoundTrips` (which used the old `countRoundTrips`) and add table-driven tests for `deriveReviewerState`:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m "package gitlabadpt
+
+import (
+	"testing"
+	"time"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+func ptr[T any](v T) *T { return &v }
+
+var (
+	t0 = time.Date(... (10545 chars)"
+Now run `just check` to verify:
+[94m[Bash][0m $ just check 2>&1
+All 9 new `TestDeriveReviewerState` cases pass, all existing tests pass, and `just check` is clean. Now close the bead and update progress:
+[94m[Bash][0m $ added 9 table-driven tests" 2>&1 && br sync --flush-only 2>&1
+[94m[Bash][0m $ updated `TestCountRoundTripsFromEvents` to use new event-based API - **Files changed**: `internal/ad...
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Extracted `DiscussionEvent{AuthorUsername, Timestamp, Kind}` normalized type + shared classifier to eliminate duplicate REST/GQL reviewer state derivation code in `internal/adapters/gitlabad... (1951 chars)"
+All done. Here's a summary of what was implemented:
+
+**mrr-28q.1 complete.** Changes in `mapper.go` and `mapper_test.go`:
+
+- **`DiscussionEvent{AuthorUsername, Timestamp, Kind}`** — new normalized type with `KindComment`, `KindReReviewRequest`, `KindApproval`
+- **`normalizeDiscussionEventsREST`** / **`normalizeDiscussionEventsGQL`** — convert API-specific types to the normalized form, both skip resolved threads
+- **`deriveReviewerState(approved bool, events []DiscussionEvent) ReviewerState`** — pure classifier, directly testable with 9 table-driven tests
+- **`buildReviewerInfos`** — shared O(N+M) accumulator replacing the duplicated timestamp-accumulation loops
+- **`countRoundTripsFromEvents`** / **`threadState` + `countOpenThreads`** — unified ancillary counters
+- **Removed**: `DeriveReviewerStatesFromGQL`, `countOpenThreadsGQL`, `countRoundTripsGQL`
+
+`just check` passes clean — fmt, lint, build, all tests.
+
+<promise>COMPLETE</promise>

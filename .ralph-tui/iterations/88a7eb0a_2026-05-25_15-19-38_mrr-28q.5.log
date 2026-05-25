@@ -1,0 +1,65 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-28q.5
+- **Task Title**: Separate card height measurement from card rendering in column layout
+- **Description**: ## Context
+internal/tui/column.go SetWidth() (lines 67-73) calls card.render() on every card just to count lines (lineCount(c.cards[i].render())). This means every window resize triggers a full re-ren...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-25T19:19:38.696Z
+- **Ended At**: 2026-05-25T19:22:06.795Z
+- **Duration**: 2m 28s
+- **Input Tokens**: 65
+- **Output Tokens**: 7479
+- **Total Tokens**: 7544
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-28q
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+Reading the card and column files to understand the current implementation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m
+I can see the issue clearly. `SetWidth()` (line 71) and `SetCards()` (line 85) both call `render()` just to count lines. Let me implement `measureHeight` on `cardWidget` and update both callers.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "func (c cardWidget) render() string {" → "// measureHeight returns the number of lines this ..."
+Now update `SetWidth` and `SetCards` in column.go to call `measureHeight` instead of `render()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m edit: "func (c *columnWidget) SetWidth(w int) {
+	c.width ..." → "func (c *columnWidget) SetWidth(w int) {
+	c.width ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m edit: "		c.cardHeights[i] = lineCount(c.cards[i].render()..." → "		c.cardHeights[i] = c.cards[i].measureHeight(c.wi..."
+Now run quality checks:
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/column.go:263:6: func lineCount is unused (unused)
+func lineCount(s string) int {
+     ^
+1 issues:
+* unused: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+`lineCount` is now unused since both callers were replaced. But it's also used in column's `render()` — let me check:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui[0m pattern: [96mlineCount[0m
+`lineCount` is truly unused now. Remove it:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m
+[94m[Bash][0m $ just check 2>&1
+All tests pass. Now verify the TUI visually with agent-tui:
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh --cols 200 2>&1
+[94m[Bash][0m $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Layout looks correct. Let me clean up and close out:
+[94m[Bash][0m $ agent-tui kill 2>&1
+[94m[Bash][0m $ removed lineCount helper." 2>&1 && br sync --flush-only 2>&1
+Now append to the progress file:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `core.go` was incorrectly importing `tui` just..." → "  - `core.go` was incorrectly importing `tui` just..."
+`just check` passes, TUI renders correctly. `measureHeight` computes `5 + nTitleLines + nPillLines` without constructing the full styled string, and both `SetWidth`/`SetCards` now use it instead of calling `render()`.
+
+<promise>COMPLETE</promise>

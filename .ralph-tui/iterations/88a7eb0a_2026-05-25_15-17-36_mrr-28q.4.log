@@ -1,0 +1,85 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-28q.4
+- **Task Title**: Define FilterCriteria value type as single source of truth for filter state
+- **Description**: ## Context
+Filter state lives in two places simultaneously: Model.filterPhases/filterAuthors/filterReviewers (model.go:184-186) AND filterPopupWidget's internal checked-state (filter_popup.go:49-52, 9...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-25T19:17:36.797Z
+- **Ended At**: 2026-05-25T19:19:37.204Z
+- **Duration**: 2m 0s
+- **Input Tokens**: 79
+- **Output Tokens**: 6303
+- **Total Tokens**: 6382
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-28q
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me read the relevant filter files to understand the current implementation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui[0m pattern: [96mfilterPhases|filterAuthors|filterReviewers|FilterAppliedMsg|applyMRFilter[0m
+Now let me read the relevant sections of model.go.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me check for an existing `filter.go` file:
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/tui/filter*.go[0m
+Good — no `filter.go` yet. I have everything I need. Let me implement the changes:
+
+1. Create `filter.go` with `FilterCriteria` struct
+2. Update `FilterAppliedMsg` in `filter_popup.go` to carry a `FilterCriteria`
+3. Update `newFilterPopupWidget` to accept `FilterCriteria`
+4. Update `model.go` to use single `filter FilterCriteria` field
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter.go[0m "package tui
+
+import "github.com/ceffo/mrboard/internal/domain"
+
+// FilterCriteria is the single source of truth for all active filter state.
+// An empty/zero value means no filtering (show everything)... (480 chars)"
+Now update `filter_popup.go` — change `FilterAppliedMsg` to carry a `FilterCriteria`, update `newFilterPopupWidget` signature, and update `buildApplied`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// FilterAppliedMsg is sent on every toggle to imm..." → "// FilterAppliedMsg is sent on every toggle to imm..."
+Now update `newFilterPopupWidget` to accept `FilterCriteria` instead of separate `phases`, `filterAuthors`, `filterReviewers` params:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// newFilterPopupWidget builds a popup pre-populat..." → "// newFilterPopupWidget builds a popup pre-populat..."
+Now update the author/reviewer checked initialization to use `current.Authors` and `current.Reviewers`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	var authorChecked map[string]bool
+	if len(filterA..." → "	var authorChecked map[string]bool
+	if len(current..."
+Now update `buildApplied` to return a `FilterAppliedMsg` with `FilterCriteria`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "func (p filterPopupWidget) buildApplied() FilterAp..." → "func (p filterPopupWidget) buildApplied() FilterAp..."
+Now update `model.go` — replace the three separate filter fields with a single `filter FilterCriteria`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filterPhases    map[domain.MRPhase]bool
+	filterAu..." → "	filter          FilterCriteria"
+Now update the `FilterAppliedMsg` handler in model.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FilterAppliedMsg:
+		m.filterPhases = msg.Pha..." → "	case FilterAppliedMsg:
+		m.filter = msg.Criteria
+..."
+Now update the `newFilterPopupWidget` call site in model.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		m.filterPopup = newFilterPopupWidget(
+			m.style..." → "		m.filterPopup = newFilterPopupWidget(
+			m.style..."
+Now update `applyMRFilter` and `isFilterActive`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) applyMRFilter() {
+	m.userMap = mrs..." → "func (m *Model) applyMRFilter() {
+	m.userMap = mrs..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) isFilterActive() bool {
+	return le..." → "func (m *Model) isFilterActive() bool {
+	return le..."
+Now check if `domain` is still needed in `filter_popup.go` (it uses `domain.MRPhase`):
+[94m[Bash][0m Run quality checks $ just check 2>&1
+All checks pass. Now let me close the bead, update progress.md, and flush state:
+[94m[Bash][0m Close bead mrr-28q.4 $ applyMRFilter reads from single field"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-25 - mrr-28q.2" → "## 2026-05-25 - mrr-28q.4
+- Created `internal/tui/..."
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+<promise>COMPLETE</promise>
