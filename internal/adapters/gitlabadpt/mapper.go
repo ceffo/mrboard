@@ -18,6 +18,254 @@ const reReviewPrefix = "requested review from @"
 // approvedBody is the GitLab system note body emitted when a reviewer approves.
 const approvedBody = "approved this merge request"
 
+// DiscussionEventKind classifies the action recorded in a DiscussionEvent.
+type DiscussionEventKind int
+
+const (
+	// KindComment is a non-system note left by a reviewer.
+	KindComment DiscussionEventKind = iota
+	// KindReReviewRequest is a re-review system note; AuthorUsername is the targeted reviewer.
+	KindReReviewRequest
+	// KindApproval is the approval system note; AuthorUsername is the approving reviewer.
+	KindApproval
+)
+
+// DiscussionEvent is a normalized, source-agnostic representation of a single
+// action in a merge request discussion thread.
+type DiscussionEvent struct {
+	// AuthorUsername is who acted (KindComment/KindApproval) or who was targeted (KindReReviewRequest).
+	AuthorUsername string
+	Timestamp      time.Time
+	Kind           DiscussionEventKind
+}
+
+// normalizeDiscussionEventsREST converts REST discussions to DiscussionEvents.
+// Resolved threads are skipped so a resolved reviewer comment does not keep the
+// MR in NeedsAuthorAction.
+func normalizeDiscussionEventsREST(discussions []*gl.Discussion) []DiscussionEvent {
+	var events []DiscussionEvent
+	for _, d := range discussions {
+		if len(d.Notes) > 0 && d.Notes[0].Resolvable && d.Notes[0].Resolved {
+			continue
+		}
+		for _, note := range d.Notes {
+			if note.CreatedAt == nil {
+				continue
+			}
+			t := *note.CreatedAt
+			if note.System {
+				if note.Body == approvedBody {
+					events = append(events, DiscussionEvent{
+						AuthorUsername: note.Author.Username,
+						Timestamp:      t,
+						Kind:           KindApproval,
+					})
+					continue
+				}
+				if username := extractReReviewUsername(note.Body); username != "" {
+					events = append(events, DiscussionEvent{
+						AuthorUsername: username,
+						Timestamp:      t,
+						Kind:           KindReReviewRequest,
+					})
+				}
+				continue
+			}
+			events = append(events, DiscussionEvent{
+				AuthorUsername: note.Author.Username,
+				Timestamp:      t,
+				Kind:           KindComment,
+			})
+		}
+	}
+	return events
+}
+
+// normalizeDiscussionEventsGQL converts GQL discussions to DiscussionEvents.
+// Resolved threads are skipped for the same reason as the REST version.
+func normalizeDiscussionEventsGQL(discussions []pkggitlab.GQLDiscussion) []DiscussionEvent {
+	var events []DiscussionEvent
+	for _, d := range discussions {
+		if len(d.Notes.Nodes) > 0 && d.Notes.Nodes[0].Resolvable && d.Notes.Nodes[0].Resolved {
+			continue
+		}
+		for _, note := range d.Notes.Nodes {
+			if note.CreatedAt == "" {
+				continue
+			}
+			t, err := time.Parse(time.RFC3339, note.CreatedAt)
+			if err != nil {
+				continue
+			}
+			if note.System {
+				if note.Body == approvedBody {
+					events = append(events, DiscussionEvent{
+						AuthorUsername: note.Author.Username,
+						Timestamp:      t,
+						Kind:           KindApproval,
+					})
+					continue
+				}
+				if username := extractReReviewUsername(note.Body); username != "" {
+					events = append(events, DiscussionEvent{
+						AuthorUsername: username,
+						Timestamp:      t,
+						Kind:           KindReReviewRequest,
+					})
+				}
+				continue
+			}
+			events = append(events, DiscussionEvent{
+				AuthorUsername: note.Author.Username,
+				Timestamp:      t,
+				Kind:           KindComment,
+			})
+		}
+	}
+	return events
+}
+
+// deriveReviewerState is a pure classifier for a single reviewer's state.
+// events must be pre-filtered to this reviewer's events only.
+// approved is sourced from the authoritative approvals API/field, not from events.
+func deriveReviewerState(approved bool, events []DiscussionEvent) domain.ReviewerState {
+	var lastComment, lastReReview time.Time
+	for _, e := range events {
+		switch e.Kind {
+		case KindComment:
+			if e.Timestamp.After(lastComment) {
+				lastComment = e.Timestamp
+			}
+		case KindReReviewRequest:
+			if e.Timestamp.After(lastReReview) {
+				lastReReview = e.Timestamp
+			}
+		}
+	}
+	return deriveState(approved, lastComment, lastReReview)
+}
+
+type reviewerRef struct {
+	username string
+	name     string
+}
+
+// buildReviewerInfos derives the full ReviewerInfo slice from a normalized event
+// stream, the set of approved reviewer usernames, and the MR creation time.
+func buildReviewerInfos(
+	reviewers []reviewerRef,
+	events []DiscussionEvent,
+	approvedBy map[string]bool,
+	mrCreatedAt time.Time,
+) []domain.ReviewerInfo {
+	type ts struct {
+		lastComment  time.Time
+		lastReReview time.Time
+		lastApproval time.Time
+	}
+	stamps := make(map[string]*ts, len(reviewers))
+	for _, r := range reviewers {
+		stamps[r.username] = &ts{}
+	}
+	for _, e := range events {
+		s, ok := stamps[e.AuthorUsername]
+		if !ok {
+			continue
+		}
+		switch e.Kind {
+		case KindComment:
+			if e.Timestamp.After(s.lastComment) {
+				s.lastComment = e.Timestamp
+			}
+		case KindReReviewRequest:
+			if e.Timestamp.After(s.lastReReview) {
+				s.lastReReview = e.Timestamp
+			}
+		case KindApproval:
+			if e.Timestamp.After(s.lastApproval) {
+				s.lastApproval = e.Timestamp
+			}
+		}
+	}
+	result := make([]domain.ReviewerInfo, 0, len(reviewers))
+	for _, r := range reviewers {
+		s := stamps[r.username]
+		state := deriveState(approvedBy[r.username], s.lastComment, s.lastReReview)
+		var waitingSince, approvedAt time.Time
+		switch state {
+		case domain.ReviewerReReviewRequested:
+			waitingSince = s.lastReReview
+			if waitingSince.IsZero() {
+				waitingSince = mrCreatedAt
+			}
+		case domain.ReviewerCommented:
+			waitingSince = s.lastComment
+		}
+		if state == domain.ReviewerApproved {
+			approvedAt = s.lastApproval
+		}
+		result = append(result, domain.ReviewerInfo{
+			Username:     r.username,
+			Name:         r.name,
+			State:        state,
+			WaitingSince: waitingSince,
+			ApprovedAt:   approvedAt,
+		})
+	}
+	return result
+}
+
+// countRoundTripsFromEvents counts the number of KindReReviewRequest events,
+// which corresponds to how many times the MR bounced between reviewer and author.
+func countRoundTripsFromEvents(events []DiscussionEvent) int {
+	count := 0
+	for _, e := range events {
+		if e.Kind == KindReReviewRequest {
+			count++
+		}
+	}
+	return count
+}
+
+// threadState holds the resolution flags from the first note of a discussion thread.
+type threadState struct {
+	resolvable bool
+	resolved   bool
+}
+
+// countOpenThreads counts threads that are resolvable but not yet resolved.
+func countOpenThreads(threads []threadState) int {
+	count := 0
+	for _, t := range threads {
+		if t.resolvable && !t.resolved {
+			count++
+		}
+	}
+	return count
+}
+
+func restThreadStates(discussions []*gl.Discussion) []threadState {
+	states := make([]threadState, 0, len(discussions))
+	for _, d := range discussions {
+		if len(d.Notes) == 0 {
+			continue
+		}
+		states = append(states, threadState{d.Notes[0].Resolvable, d.Notes[0].Resolved})
+	}
+	return states
+}
+
+func gqlThreadStates(discussions []pkggitlab.GQLDiscussion) []threadState {
+	states := make([]threadState, 0, len(discussions))
+	for _, d := range discussions {
+		if len(d.Notes.Nodes) == 0 {
+			continue
+		}
+		states = append(states, threadState{d.Notes.Nodes[0].Resolvable, d.Notes.Nodes[0].Resolved})
+	}
+	return states
+}
+
 // DeriveReviewerStates processes GitLab discussions chronologically and returns
 // a ReviewerInfo slice for the active reviewers listed on the MR.
 func DeriveReviewerStates(
@@ -28,95 +276,21 @@ func DeriveReviewerStates(
 	if len(mr.Reviewers) == 0 {
 		return nil
 	}
-
 	approvedBy := make(map[string]bool, len(approvals.ApprovedBy))
 	for _, a := range approvals.ApprovedBy {
 		if a.User != nil {
 			approvedBy[a.User.Username] = true
 		}
 	}
-
-	type reviewerTimestamps struct {
-		lastComment  time.Time
-		lastReReview time.Time
-		lastApproval time.Time
+	refs := make([]reviewerRef, len(mr.Reviewers))
+	for i, r := range mr.Reviewers {
+		refs[i] = reviewerRef{username: r.Username, name: r.Name}
 	}
-
-	ts := make(map[string]*reviewerTimestamps, len(mr.Reviewers))
-	for _, r := range mr.Reviewers {
-		ts[r.Username] = &reviewerTimestamps{}
+	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil {
+		mrCreatedAt = *mr.CreatedAt
 	}
-
-	for _, d := range discussions {
-		// Resolved threads are no longer the author's ball — skip them when
-		// computing lastComment so a resolved reviewer comment doesn't keep
-		// the MR in NeedsAuthorAction.
-		if len(d.Notes) > 0 && d.Notes[0].Resolvable && d.Notes[0].Resolved {
-			continue
-		}
-		for _, note := range d.Notes {
-			if note.CreatedAt == nil {
-				continue
-			}
-			t := *note.CreatedAt
-
-			if note.System {
-				if note.Body == approvedBody {
-					if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastApproval) {
-						rts.lastApproval = t
-					}
-					continue
-				}
-				username := extractReReviewUsername(note.Body)
-				if username == "" {
-					continue
-				}
-				if rts, ok := ts[username]; ok {
-					if t.After(rts.lastReReview) {
-						rts.lastReReview = t
-					}
-				}
-				continue
-			}
-
-			if rts, ok := ts[note.Author.Username]; ok {
-				if t.After(rts.lastComment) {
-					rts.lastComment = t
-				}
-			}
-		}
-	}
-
-	result := make([]domain.ReviewerInfo, 0, len(mr.Reviewers))
-	for _, r := range mr.Reviewers {
-		rts := ts[r.Username]
-		state := deriveState(approvedBy[r.Username], rts.lastComment, rts.lastReReview)
-
-		var waitingSince time.Time
-		switch state {
-		case domain.ReviewerReReviewRequested:
-			waitingSince = rts.lastReReview
-			if waitingSince.IsZero() && mr.CreatedAt != nil {
-				waitingSince = *mr.CreatedAt
-			}
-		case domain.ReviewerCommented:
-			waitingSince = rts.lastComment
-		}
-
-		var approvedAt time.Time
-		if state == domain.ReviewerApproved {
-			approvedAt = rts.lastApproval
-		}
-
-		result = append(result, domain.ReviewerInfo{
-			Username:     r.Username,
-			Name:         r.Name,
-			State:        state,
-			WaitingSince: waitingSince,
-			ApprovedAt:   approvedAt,
-		})
-	}
-	return result
+	return buildReviewerInfos(refs, normalizeDiscussionEventsREST(discussions), approvedBy, mrCreatedAt)
 }
 
 func extractReReviewUsername(body string) string {
@@ -148,13 +322,23 @@ func MapMR(
 	approvals *gl.MergeRequestApprovals,
 	requiredApprovals int,
 ) domain.MergeRequest {
-	reviewers := DeriveReviewerStates(mr, discussions, approvals)
-	openThreads := countOpenThreads(discussions)
-
-	var createdAt time.Time
-	if mr.CreatedAt != nil {
-		createdAt = *mr.CreatedAt
+	approvedBy := make(map[string]bool, len(approvals.ApprovedBy))
+	for _, a := range approvals.ApprovedBy {
+		if a.User != nil {
+			approvedBy[a.User.Username] = true
+		}
 	}
+	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil {
+		mrCreatedAt = *mr.CreatedAt
+	}
+	refs := make([]reviewerRef, len(mr.Reviewers))
+	for i, r := range mr.Reviewers {
+		refs[i] = reviewerRef{username: r.Username, name: r.Name}
+	}
+	events := normalizeDiscussionEventsREST(discussions)
+	reviewers := buildReviewerInfos(refs, events, approvedBy, mrCreatedAt)
+	openThreads := countOpenThreads(restThreadStates(discussions))
 
 	domainMR := domain.MergeRequest{
 		ID:                int(mr.ID),
@@ -164,11 +348,11 @@ func MapMR(
 		WebURL:            mr.WebURL,
 		ProjectPath:       projectPathFromRef(mr.References),
 		Reviewers:         reviewers,
-		CreatedAt:         createdAt,
+		CreatedAt:         mrCreatedAt,
 		ApprovalCount:     countApprovals(reviewers),
 		RequiredApprovals: requiredApprovals,
 		OpenThreads:       openThreads,
-		RoundTripCount:    countRoundTrips(discussions),
+		RoundTripCount:    countRoundTripsFromEvents(events),
 	}
 	if mr.Author != nil {
 		domainMR.Author = mr.Author.Username
@@ -191,7 +375,7 @@ func MapMR(
 			}
 		}
 	case domain.PhaseNeedsReview:
-		domainMR.WaitingSince = createdAt
+		domainMR.WaitingSince = mrCreatedAt
 		for _, r := range reviewers {
 			if r.State == domain.ReviewerReReviewRequested && r.WaitingSince.After(domainMR.WaitingSince) {
 				domainMR.WaitingSince = r.WaitingSince
@@ -202,32 +386,6 @@ func MapMR(
 	}
 
 	return domainMR
-}
-
-func countRoundTrips(discussions []*gl.Discussion) int {
-	count := 0
-	for _, d := range discussions {
-		for _, note := range d.Notes {
-			if note.System && extractReReviewUsername(note.Body) != "" {
-				count++
-			}
-		}
-	}
-	return count
-}
-
-func countOpenThreads(discussions []*gl.Discussion) int {
-	count := 0
-	for _, d := range discussions {
-		if len(d.Notes) == 0 {
-			continue
-		}
-		first := d.Notes[0]
-		if first.Resolvable && !first.Resolved {
-			count++
-		}
-	}
-	return count
 }
 
 func countApprovals(reviewers []domain.ReviewerInfo) int {
@@ -289,10 +447,19 @@ func projectPathFromRef(refs *gl.IssueReferences) string {
 // If the MR's discussions overflowed (hasNextPage=true) the caller should have already
 // logged a warning; this function uses whatever data was returned.
 func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domain.MergeRequest {
-	reviewers := DeriveReviewerStatesFromGQL(mr)
-	openThreads := countOpenThreadsGQL(mr)
-
+	approvedBy := make(map[string]bool, len(mr.ApprovedBy.Nodes))
+	for _, u := range mr.ApprovedBy.Nodes {
+		approvedBy[u.Username] = true
+	}
+	refs := make([]reviewerRef, len(mr.Reviewers.Nodes))
+	for i, r := range mr.Reviewers.Nodes {
+		refs[i] = reviewerRef{username: r.Username, name: r.Name}
+	}
 	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
+
+	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
+	reviewers := buildReviewerInfos(refs, events, approvedBy, createdAt)
+	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{
 		ID:                parseGIDNumericSafe(mr.ID),
@@ -308,7 +475,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domai
 		ApprovalCount:     countApprovals(reviewers),
 		RequiredApprovals: requiredApprovals,
 		OpenThreads:       openThreads,
-		RoundTripCount:    countRoundTripsGQL(mr),
+		RoundTripCount:    countRoundTripsFromEvents(events),
 	}
 
 	domainMR.Phase = domain.ClassifyPhase(
@@ -338,121 +505,6 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domai
 	}
 
 	return domainMR
-}
-
-// DeriveReviewerStatesFromGQL is the GraphQL equivalent of DeriveReviewerStates.
-func DeriveReviewerStatesFromGQL(mr pkggitlab.GQLMergeRequest) []domain.ReviewerInfo {
-	if len(mr.Reviewers.Nodes) == 0 {
-		return nil
-	}
-
-	approvedBy := make(map[string]bool, len(mr.ApprovedBy.Nodes))
-	for _, u := range mr.ApprovedBy.Nodes {
-		approvedBy[u.Username] = true
-	}
-
-	type reviewerTimestamps struct {
-		lastComment  time.Time
-		lastReReview time.Time
-		lastApproval time.Time
-	}
-	ts := make(map[string]*reviewerTimestamps, len(mr.Reviewers.Nodes))
-	for _, r := range mr.Reviewers.Nodes {
-		ts[r.Username] = &reviewerTimestamps{}
-	}
-
-	for _, d := range mr.Discussions.Nodes {
-		// Resolved threads are no longer the author's ball — skip them when
-		// computing lastComment so a resolved reviewer comment doesn't keep
-		// the MR in NeedsAuthorAction.
-		if len(d.Notes.Nodes) > 0 && d.Notes.Nodes[0].Resolvable && d.Notes.Nodes[0].Resolved {
-			continue
-		}
-		for _, note := range d.Notes.Nodes {
-			if note.CreatedAt == "" {
-				continue
-			}
-			t, err := time.Parse(time.RFC3339, note.CreatedAt)
-			if err != nil {
-				continue
-			}
-			if note.System {
-				if note.Body == approvedBody {
-					if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastApproval) {
-						rts.lastApproval = t
-					}
-					continue
-				}
-				username := extractReReviewUsername(note.Body)
-				if username == "" {
-					continue
-				}
-				if rts, ok := ts[username]; ok && t.After(rts.lastReReview) {
-					rts.lastReReview = t
-				}
-				continue
-			}
-			if rts, ok := ts[note.Author.Username]; ok && t.After(rts.lastComment) {
-				rts.lastComment = t
-			}
-		}
-	}
-
-	mrCreatedAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
-
-	result := make([]domain.ReviewerInfo, 0, len(mr.Reviewers.Nodes))
-	for _, r := range mr.Reviewers.Nodes {
-		rts := ts[r.Username]
-		state := deriveState(approvedBy[r.Username], rts.lastComment, rts.lastReReview)
-		var waitingSince time.Time
-		switch state {
-		case domain.ReviewerReReviewRequested:
-			waitingSince = rts.lastReReview
-			if waitingSince.IsZero() {
-				waitingSince = mrCreatedAt
-			}
-		case domain.ReviewerCommented:
-			waitingSince = rts.lastComment
-		}
-		var approvedAt time.Time
-		if state == domain.ReviewerApproved {
-			approvedAt = rts.lastApproval
-		}
-		result = append(result, domain.ReviewerInfo{
-			Username:     r.Username,
-			Name:         r.Name,
-			State:        state,
-			WaitingSince: waitingSince,
-			ApprovedAt:   approvedAt,
-		})
-	}
-	return result
-}
-
-func countOpenThreadsGQL(mr pkggitlab.GQLMergeRequest) int {
-	count := 0
-	for _, d := range mr.Discussions.Nodes {
-		if len(d.Notes.Nodes) == 0 {
-			continue
-		}
-		first := d.Notes.Nodes[0]
-		if first.Resolvable && !first.Resolved {
-			count++
-		}
-	}
-	return count
-}
-
-func countRoundTripsGQL(mr pkggitlab.GQLMergeRequest) int {
-	count := 0
-	for _, d := range mr.Discussions.Nodes {
-		for _, note := range d.Notes.Nodes {
-			if note.System && extractReReviewUsername(note.Body) != "" {
-				count++
-			}
-		}
-	}
-	return count
 }
 
 // deriveReadyToMergeSince returns when the MR last reached the required approval
