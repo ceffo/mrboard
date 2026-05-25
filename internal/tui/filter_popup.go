@@ -13,9 +13,7 @@ import (
 
 // FilterAppliedMsg is sent on every toggle to immediately update the board filter.
 type FilterAppliedMsg struct {
-	Phases    map[domain.MRPhase]bool
-	Authors   []string // empty = all authors
-	Reviewers []string // empty = all reviewers
+	Criteria FilterCriteria
 }
 
 // FilterClosedMsg is sent when the user closes the filter popup (f or Esc).
@@ -208,18 +206,16 @@ func newFilterPopupWidget(
 	authors []string,
 	reviewers []string,
 	userMap map[string]string,
-	phases map[domain.MRPhase]bool,
+	current FilterCriteria,
 	currentUser string,
-	filterAuthors []string,
-	filterReviewers []string,
 ) filterPopupWidget {
 	// Status section.
 	var arr [4]bool
-	if len(phases) == 0 {
+	if len(current.Phases) == 0 {
 		arr = [4]bool{true, true, true, true}
 	} else {
 		for i := range arr {
-			arr[i] = phases[domain.MRPhase(i)]
+			arr[i] = current.Phases[domain.MRPhase(i)]
 		}
 	}
 
@@ -247,9 +243,9 @@ func newFilterPopupWidget(
 	}
 
 	var authorChecked map[string]bool
-	if len(filterAuthors) > 0 {
-		authorChecked = make(map[string]bool, len(filterAuthors))
-		for _, a := range filterAuthors {
+	if len(current.Authors) > 0 {
+		authorChecked = make(map[string]bool, len(current.Authors))
+		for _, a := range current.Authors {
 			authorChecked[a] = true
 		}
 	}
@@ -262,9 +258,9 @@ func newFilterPopupWidget(
 	}
 
 	var reviewerChecked map[string]bool
-	if len(filterReviewers) > 0 {
-		reviewerChecked = make(map[string]bool, len(filterReviewers))
-		for _, r := range filterReviewers {
+	if len(current.Reviewers) > 0 {
+		reviewerChecked = make(map[string]bool, len(current.Reviewers))
+		for _, r := range current.Reviewers {
 			reviewerChecked[r] = true
 		}
 	}
@@ -343,9 +339,11 @@ func (p filterPopupWidget) buildApplied() FilterAppliedMsg {
 		}
 	}
 	return FilterAppliedMsg{
-		Phases:    phaseMap,
-		Authors:   p.author.selectedSlice(),
-		Reviewers: p.reviewer.selectedSlice(),
+		Criteria: FilterCriteria{
+			Phases:    phaseMap,
+			Authors:   p.author.selectedSlice(),
+			Reviewers: p.reviewer.selectedSlice(),
+		},
 	}
 }
 
