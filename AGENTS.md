@@ -268,4 +268,18 @@ br sync --flush-only    # Export beads changes to JSONL
 git commit -m "..."     # Commit everything
 ```
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in `.beads/` and are managed with the `br` CLI (beads-rust). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles using default strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo; domain context lives in `docs/architecture.md`, `docs/domain-model.md`, and `docs/tui-conventions.md` (no `CONTEXT.md` or `docs/adr/`). See `docs/agents/domain.md`.
+
 <!-- end-bv-agent-instructions -->
