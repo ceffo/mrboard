@@ -188,13 +188,18 @@ func (c *Client) FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQ
 		return nil, err
 	}
 
-	// Detect unsupported approvalRules field and retry once with the reduced query.
-	if len(gqlErrs) > 0 && !c.gqlApprovalRulesMissing.Load() {
+	// Detect unsupported approvalRules field and retry with the reduced query.
+	// We retry regardless of whether gqlApprovalRulesMissing was already set by a
+	// concurrent goroutine — without this, parallel user fetches all hit the full
+	// query simultaneously; the first sets the flag and retries, but the others
+	// (which also got the error) skip the retry and return an error.
+	if len(gqlErrs) > 0 {
 		for _, e := range gqlErrs {
 			if strings.Contains(e.Message, "approvalRules") {
-				c.gqlApprovalRulesMissing.Store(true)
-				c.logger.Info("gitlab: approvalRules not supported by this GitLab instance; " +
-					"IsApprover will not display for GQL-fetched MRs")
+				if !c.gqlApprovalRulesMissing.Swap(true) {
+					c.logger.Info("gitlab: approvalRules not supported by this GitLab instance; " +
+						"IsApprover will not display for GQL-fetched MRs")
+				}
 				mrs, gqlErrs, err = c.doGQLUserMRs(ctx, username, gqlUserMRsQueryReduced)
 				if err != nil {
 					return nil, err
