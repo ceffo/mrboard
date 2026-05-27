@@ -10,6 +10,8 @@ import (
 	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
+
+	ilog "github.com/ceffo/mrboard/internal/log"
 )
 
 const perPage = 100
@@ -72,8 +74,8 @@ func (c *Client) ListGroupMRs(ctx context.Context, groupID, excludedAuthor strin
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListGroupMergeRequests(groupID, opts, gl.WithContext(ctx))
 		if err != nil {
-			elapsed := time.Since(start).Round(time.Millisecond)
-			c.logger.Error("gitlab: list group MRs error", "group", groupID, "duration", elapsed, "error", err)
+			elapsed := time.Since(start)
+			c.logger.Error("gitlab: list group MRs error", "group", groupID, "duration", ilog.FmtDur(elapsed), "error", err)
 			return nil, fmt.Errorf("gitlab: list group MRs %q: %w", groupID, err)
 		}
 		all = append(all, mrs...)
@@ -82,8 +84,8 @@ func (c *Client) ListGroupMRs(ctx context.Context, groupID, excludedAuthor strin
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start).Round(time.Millisecond)
-	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", elapsed)
+	elapsed := time.Since(start)
+	c.logger.Debug("gitlab: list group MRs done", "group", groupID, "count", len(all), "duration", ilog.FmtDur(elapsed))
 	return all, nil
 }
 
@@ -101,8 +103,8 @@ func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicM
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts, gl.WithContext(ctx))
 		if err != nil {
-			elapsed := time.Since(start).Round(time.Millisecond)
-			c.logger.Error("gitlab: list user MRs error", "username", username, "duration", elapsed, "error", err)
+			elapsed := time.Since(start)
+			c.logger.Error("gitlab: list user MRs error", "username", username, "duration", ilog.FmtDur(elapsed), "error", err)
 			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
 		}
 		all = append(all, mrs...)
@@ -111,8 +113,8 @@ func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicM
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start).Round(time.Millisecond)
-	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", elapsed)
+	elapsed := time.Since(start)
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", ilog.FmtDur(elapsed))
 	return all, nil
 }
 
@@ -125,8 +127,8 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 	for {
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts, gl.WithContext(ctx))
 		if err != nil {
-			elapsed := time.Since(start).Round(time.Millisecond)
-			c.logger.Error("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+			elapsed := time.Since(start)
+			c.logger.Error("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 			return nil, fmt.Errorf("gitlab: get discussions project=%d MR=%d: %w", projectID, mrIID, err)
 		}
 		all = append(all, discussions...)
@@ -135,9 +137,9 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	c.logger.Debug("gitlab: get discussions done",
-		"project", projectID, "mr", mrIID, "count", len(all), "duration", elapsed)
+		"project", projectID, "mr", mrIID, "count", len(all), "duration", ilog.FmtDur(elapsed))
 	return all, nil
 }
 
@@ -155,14 +157,14 @@ func (c *Client) GetMRApprovalRules(
 	start := time.Now()
 	c.logger.Debug("gitlab: get approval rules", "project", projectID, "mr", mrIID)
 	rules, _, err := c.gl.MergeRequestApprovals.GetApprovalRules(projectID, mrIID, gl.WithContext(ctx))
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	if err != nil {
 		c.logger.Error("gitlab: get approval rules error",
-			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return nil, fmt.Errorf("gitlab: get approval rules project=%d MR=%d: %w", projectID, mrIID, err)
 	}
 	c.logger.Debug("gitlab: get approval rules done",
-		"project", projectID, "mr", mrIID, "count", len(rules), "duration", elapsed)
+		"project", projectID, "mr", mrIID, "count", len(rules), "duration", ilog.FmtDur(elapsed))
 	return rules, nil
 }
 
@@ -177,9 +179,9 @@ func (c *Client) GetProjectMembers(
 	for {
 		members, resp, err := c.gl.ProjectMembers.ListAllProjectMembers(projectID, opts, gl.WithContext(ctx))
 		if err != nil {
-			elapsed := time.Since(start).Round(time.Millisecond)
+			elapsed := time.Since(start)
 			c.logger.Error("gitlab: get project members error",
-				"project", projectID, "duration", elapsed, "error", err)
+				"project", projectID, "duration", ilog.FmtDur(elapsed), "error", err)
 			return nil, fmt.Errorf("gitlab: get project members project=%d: %w", projectID, err)
 		}
 		for _, m := range members {
@@ -192,9 +194,9 @@ func (c *Client) GetProjectMembers(
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	c.logger.Debug("gitlab: get project members done",
-		"project", projectID, "count", len(all), "duration", elapsed)
+		"project", projectID, "count", len(all), "duration", ilog.FmtDur(elapsed))
 	return all, nil
 }
 
@@ -212,14 +214,14 @@ func (c *Client) CreateMRApprovalRule(
 			ApprovalsRequired: &approvsReq,
 			UserIDs:           &payload.UserIDs,
 		}, gl.WithContext(ctx))
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	if err != nil {
 		c.logger.Error("gitlab: create approval rule error",
-			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return nil, fmt.Errorf("gitlab: create approval rule project=%d MR=%d: %w", projectID, mrIID, err)
 	}
 	c.logger.Debug("gitlab: create approval rule done",
-		"project", projectID, "mr", mrIID, "rule_id", rule.ID, "duration", elapsed)
+		"project", projectID, "mr", mrIID, "rule_id", rule.ID, "duration", ilog.FmtDur(elapsed))
 	return rule, nil
 }
 
@@ -237,15 +239,15 @@ func (c *Client) UpdateMRApprovalRule(
 			ApprovalsRequired: &approvsReq,
 			UserIDs:           &payload.UserIDs,
 		}, gl.WithContext(ctx))
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	if err != nil {
 		c.logger.Error("gitlab: update approval rule error",
-			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return fmt.Errorf("gitlab: update approval rule project=%d MR=%d rule=%d: %w",
 			projectID, mrIID, ruleID, err)
 	}
 	c.logger.Debug("gitlab: update approval rule done",
-		"project", projectID, "mr", mrIID, "duration", elapsed)
+		"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed))
 	return nil
 }
 
@@ -255,12 +257,12 @@ func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*g
 	c.logger.Debug("gitlab: get approvals", "project", projectID, "mr", mrIID)
 	approvals, _, err := c.gl.MergeRequests.GetMergeRequestApprovals(projectID, mrIID, gl.WithContext(ctx))
 	if err != nil {
-		elapsed := time.Since(start).Round(time.Millisecond)
-		c.logger.Error("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+		elapsed := time.Since(start)
+		c.logger.Error("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return nil, fmt.Errorf("gitlab: get approvals project=%d MR=%d: %w", projectID, mrIID, err)
 	}
-	elapsed := time.Since(start).Round(time.Millisecond)
-	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", elapsed)
+	elapsed := time.Since(start)
+	c.logger.Debug("gitlab: get approvals done", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed))
 	return approvals, nil
 }
 
@@ -284,13 +286,13 @@ func (c *Client) GetMRDescription(ctx context.Context, projectID, mrIID int64) (
 	start := time.Now()
 	c.logger.Debug("gitlab: get MR description", "project", projectID, "mr", mrIID)
 	mr, _, err := c.gl.MergeRequests.GetMergeRequest(projectID, mrIID, nil, gl.WithContext(ctx))
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := time.Since(start)
 	if err != nil {
 		c.logger.Error("gitlab: get MR description error",
-			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return "", fmt.Errorf("gitlab: get MR description project=%d MR=%d: %w", projectID, mrIID, err)
 	}
-	c.logger.Debug("gitlab: get MR description done", "project", projectID, "mr", mrIID, "duration", elapsed)
+	c.logger.Debug("gitlab: get MR description done", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed))
 	return mr.Description, nil
 }
 
@@ -317,7 +319,7 @@ func (c *Client) ListNonArchivedProjectIDs(ctx context.Context, groupID string) 
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start).Round(time.Millisecond).String()
+	elapsed := ilog.FmtDur(time.Since(start))
 	c.logger.Debug("gitlab: list non-archived projects done", "group", groupID, "count", len(ids), "duration", elapsed)
 	return ids, nil
 }

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	ilog "github.com/ceffo/mrboard/internal/log"
 )
 
 // gqlUserMRsQueryFull includes approvalRules — supported on GitLab.com and some self-managed versions.
@@ -182,7 +184,7 @@ func (c *Client) FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQ
 	mrs, gqlErrs, err := c.doGQLUserMRs(ctx, username, query)
 	if err != nil {
 		c.logger.Error("gitlab: graphql request error", "username", username,
-			"duration", time.Since(start).Round(time.Millisecond), "error", err)
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
 		return nil, err
 	}
 
@@ -205,7 +207,7 @@ func (c *Client) FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQ
 		return nil, fmt.Errorf("gitlab: graphql errors for user %q: %s", username, gqlErrs[0].Message)
 	}
 
-	elapsed := time.Since(start).Round(time.Millisecond)
+	elapsed := ilog.FmtDur(time.Since(start))
 	c.logger.Debug("gitlab: graphql user MRs done", "username", username, "count", len(mrs), "duration", elapsed)
 	return mrs, nil
 }

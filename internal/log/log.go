@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type contextKey struct{}
@@ -67,6 +68,15 @@ func parseLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+// FmtDur formats a duration for log fields.
+// Under 1s: millisecond precision ("376ms"). At or above 1s: second precision ("16s", "1m14s").
+func FmtDur(d time.Duration) string {
+	if d < time.Second {
+		return d.Round(time.Millisecond).String()
+	}
+	return d.Round(time.Second).String()
 }
 
 func defaultPath() string {
