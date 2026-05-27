@@ -243,6 +243,23 @@ The refresh `tea.Cmd` returns one of these. Widgets receive them via the normal 
 
 Reviewer pill icons: `⏳` not_started · `💬` commented · `🔄` re_review_requested · `✓` approved
 
+## Async operations — mandatory spinner feedback
+
+**Every async operation that touches the network or runs an external process MUST show a
+spinner in the relevant part of the UI while in-flight.** Never leave the user staring at
+blank space or stale content while work is happening.
+
+Patterns:
+- **Full-screen loading** (e.g. initial board fetch): show the global spinner overlay
+  (`spinnerWidget`) over the full body.
+- **Panel loading** (e.g. detail fetch, diff view initial load): replace the panel body
+  with a centered spinner string (e.g. `d.styles.DetailMeta.Render("⠋ Loading…")`).
+- **Per-item loading** (e.g. per-file diff render in the diff view): render a spinner
+  placeholder in the item's slot while the async cmd is in-flight.
+
+Never render a blank panel, empty list, or silent cursor while an async cmd is running.
+The spinner gives the user confidence the app is working and prevents spurious key presses.
+
 ## UX rules
 
 - Focus starts on the first non-empty column's first card at startup

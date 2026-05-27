@@ -111,6 +111,13 @@ type FileDiff struct {
 	LinesRemoved int
 }
 
+// MRDiff holds diff refs and per-file diffs for a single MR.
+type MRDiff struct {
+	BaseSHA string
+	HeadSHA string
+	Files   []FileDiff
+}
+
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
 	ID          int

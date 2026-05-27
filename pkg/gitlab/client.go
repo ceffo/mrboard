@@ -338,6 +338,39 @@ func (c *Client) GetMRDiffs(ctx context.Context, projectID, mrIID int64) ([]*gl.
 	return diffs, nil
 }
 
+// GetMRDiffRefs returns the BaseSha and HeadSha for an MR's latest diff.
+func (c *Client) GetMRDiffRefs(ctx context.Context, projectID, mrIID int64) (baseSHA, headSHA string, err error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get MR diff refs", "project_id", projectID, "mr_iid", mrIID)
+	mr, _, err := c.gl.MergeRequests.GetMergeRequest(projectID, mrIID, nil, gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: get MR diff refs error", "project_id", projectID, "mr_iid", mrIID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return "", "", fmt.Errorf("gitlab: diff refs project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	baseSHA = mr.DiffRefs.BaseSha
+	headSHA = mr.DiffRefs.HeadSha
+	c.logger.Debug("gitlab: got MR diff refs", "project_id", projectID, "mr_iid", mrIID,
+		"base", baseSHA, "duration", ilog.FmtDur(time.Since(start)))
+	return baseSHA, headSHA, nil
+}
+
+// GetRawFileContent fetches the raw bytes of a file at the given ref (SHA or branch name).
+func (c *Client) GetRawFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get raw file content", "project_id", projectID, "path", path, "ref", ref)
+	opts := &gl.GetRawFileOptions{Ref: &ref}
+	content, _, err := c.gl.RepositoryFiles.GetRawFile(projectID, path, opts, gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: get raw file content error", "project_id", projectID, "path", path, "ref", ref,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return nil, fmt.Errorf("gitlab: file content project=%d path=%s ref=%s: %w", projectID, path, ref, err)
+	}
+	c.logger.Debug("gitlab: got raw file content", "project_id", projectID, "path", path, "ref", ref,
+		"bytes", len(content), "duration", ilog.FmtDur(time.Since(start)))
+	return content, nil
+}
+
 // IsProjectArchived reports whether the given project is archived. Results are cached.
 // Safe for concurrent use.
 func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, error) {

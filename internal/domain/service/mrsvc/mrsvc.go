@@ -28,8 +28,11 @@ type MergeRequestSource interface {
 	// Creates the rule if it doesn't exist; updates it if it does.
 	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
 
-	// GetDiff fetches the per-file diffs for a single MR.
-	GetDiff(ctx context.Context, projectID, mrIID int64) ([]domain.FileDiff, error)
+	// GetDiff fetches diff refs and per-file diffs for a single MR.
+	GetDiff(ctx context.Context, projectID, mrIID int64) (domain.MRDiff, error)
+
+	// GetFileContent fetches the raw content of a file at a given ref (SHA or branch).
+	GetFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error)
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.

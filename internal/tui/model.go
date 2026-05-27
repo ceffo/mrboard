@@ -140,11 +140,20 @@ type DetailFetchResultMsg struct {
 	Err         error
 }
 
-// DiffFetchResultMsg carries the diff files for a single MR.
+// DiffFetchResultMsg carries the MRDiff (refs + file list) for a single MR.
 type DiffFetchResultMsg struct {
 	ProjectID int
 	MRIID     int
-	Files     []domain.FileDiff
+	Diff      domain.MRDiff
+	Err       error
+}
+
+// FileRenderResultMsg carries the pre-rendered lines for a single diff file.
+type FileRenderResultMsg struct {
+	ProjectID int
+	MRIID     int
+	FileIdx   int
+	Lines     []string
 	Err       error
 }
 
@@ -390,6 +399,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DiffFetchResultMsg:
 		return m.handleDiffFetchResult(msg)
 
+	case FileRenderResultMsg:
+		return m.handleFileRenderResult(msg)
+
 	case FilterAppliedMsg:
 		m.filter = msg.Criteria
 		m.applyMRFilter()
@@ -511,8 +523,10 @@ func (m Model) handleKeyDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.closeDiffView()
 	case key.Matches(msg, m.diffViewKeys.PrevFile):
 		m.diffView.PrevFile()
+		return m, (&m).maybeRenderCurrentFile()
 	case key.Matches(msg, m.diffViewKeys.NextFile):
 		m.diffView.NextFile()
+		return m, (&m).maybeRenderCurrentFile()
 	case key.Matches(msg, m.diffViewKeys.ScrollUp):
 		m.diffView.ScrollUp()
 	case key.Matches(msg, m.diffViewKeys.ScrollDown):
@@ -652,14 +666,88 @@ func (m Model) fetchDiffCmd(mr *domain.MergeRequest) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, fetchTimeout)
 		defer cancel()
-		files, err := src.GetDiff(ctx, projectID, mrIID)
+		diff, err := src.GetDiff(ctx, projectID, mrIID)
 		return DiffFetchResultMsg{
 			ProjectID: int(projectID),
 			MRIID:     int(mrIID),
-			Files:     files,
+			Diff:      diff,
 			Err:       err,
 		}
 	}
+}
+
+// fetchFileRenderCmd fetches old+new file content and runs difft (or fallback) asynchronously.
+func (m Model) fetchFileRenderCmd(fileIdx int) tea.Cmd {
+	src := m.src
+	base := m.baseCtx
+	mr := m.diffView.mr
+	if mr == nil || fileIdx >= len(m.diffView.files) {
+		return nil
+	}
+	projectID := int64(mr.ProjectID)
+	mrIID := int64(mr.IID)
+	f := m.diffView.files[fileIdx]
+	baseSHA := m.diffView.baseSHA
+	headSHA := m.diffView.headSHA
+	width := m.diffView.diffPaneWidth()
+	styles := m.diffView.styles
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+
+		var oldContent, newContent []byte
+		if !f.NewFile && baseSHA != "" {
+			//nolint:errcheck // failure → nil content → difft fallback path handles it
+			oldContent, _ = src.GetFileContent(ctx, projectID, f.OldPath, baseSHA)
+		}
+		if !f.DeletedFile && headSHA != "" {
+			//nolint:errcheck // failure → nil content → difft fallback path handles it
+			newContent, _ = src.GetFileContent(ctx, projectID, f.NewPath, headSHA)
+		}
+
+		var lines []string
+		if difftBin != "" {
+			var err error
+			lines, err = runDifft(oldContent, newContent, f.OldPath, f.NewPath, width)
+			if err != nil {
+				lines = nil
+			}
+		}
+		// Fallback: colorize the unified diff string from GitLab.
+		if lines == nil {
+			w := newDiffViewWidget(styles)
+			lines = w.colorizedLines(f.Diff, width)
+		}
+		return FileRenderResultMsg{
+			ProjectID: int(projectID),
+			MRIID:     int(mrIID),
+			FileIdx:   fileIdx,
+			Lines:     lines,
+		}
+	}
+}
+
+// maybeRenderCurrentFile dispatches a render cmd for the current file if it hasn't
+// been rendered yet. For the fallback path (no difft), rendering is synchronous.
+func (m *Model) maybeRenderCurrentFile() tea.Cmd {
+	if !m.showDiffView || len(m.diffView.files) == 0 {
+		return nil
+	}
+	idx := m.diffView.fileIdx
+	if m.diffView.HasRendered(idx) || m.diffView.IsRendering(idx) {
+		return nil
+	}
+	if m.diffView.files[idx].TooLarge {
+		return nil
+	}
+	if difftBin == "" {
+		// Synchronous fallback — no async cmd needed.
+		m.diffView.RenderFallback(idx)
+		return nil
+	}
+	m.diffView.SetRendering(idx)
+	return m.fetchFileRenderCmd(idx)
 }
 
 func (m Model) renderDiffScreen() string {
@@ -829,18 +917,30 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
-// handleDiffFetchResult handles DiffFetchResultMsg: populates the diff view with fetched file diffs.
+// handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.
 func (m Model) handleDiffFetchResult(msg DiffFetchResultMsg) (tea.Model, tea.Cmd) {
-	if m.showDiffView && m.diffView.mr != nil &&
-		m.diffView.mr.ProjectID == msg.ProjectID && m.diffView.mr.IID == msg.MRIID {
-		if msg.Err == nil {
-			m.diffView.SetDiff(msg.Files)
-			added, removed := diffStats(msg.Files)
-			m.header.SetStats(fmt.Sprintf("%d files  +%d -%d", len(msg.Files), added, removed))
-		} else {
-			m.diffView.loading = false
-		}
+	if !m.showDiffView || m.diffView.mr == nil ||
+		m.diffView.mr.ProjectID != msg.ProjectID || m.diffView.mr.IID != msg.MRIID {
+		return m, nil
 	}
+	if msg.Err != nil {
+		m.diffView.loading = false
+		return m, nil
+	}
+	m.diffView.SetDiff(msg.Diff)
+	added, removed := diffStats(msg.Diff.Files)
+	m.header.SetStats(fmt.Sprintf("%d files  +%d -%d", len(msg.Diff.Files), added, removed))
+	cmd := (&m).maybeRenderCurrentFile()
+	return m, cmd
+}
+
+// handleFileRenderResult stores rendered lines in the diff view cache.
+func (m Model) handleFileRenderResult(msg FileRenderResultMsg) (tea.Model, tea.Cmd) {
+	if !m.showDiffView || m.diffView.mr == nil ||
+		m.diffView.mr.ProjectID != msg.ProjectID || m.diffView.mr.IID != msg.MRIID {
+		return m, nil
+	}
+	m.diffView.SetRendered(msg.FileIdx, msg.Lines)
 	return m, nil
 }
 

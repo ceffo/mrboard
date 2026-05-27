@@ -255,24 +255,22 @@ func (_c *MockMergeRequestSource_GetDetail_Call) RunAndReturn(run func(ctx conte
 }
 
 // GetDiff provides a mock function for the type MockMergeRequestSource
-func (_mock *MockMergeRequestSource) GetDiff(ctx context.Context, projectID int64, mrIID int64) ([]domain.FileDiff, error) {
+func (_mock *MockMergeRequestSource) GetDiff(ctx context.Context, projectID int64, mrIID int64) (domain.MRDiff, error) {
 	ret := _mock.Called(ctx, projectID, mrIID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDiff")
 	}
 
-	var r0 []domain.FileDiff
+	var r0 domain.MRDiff
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) ([]domain.FileDiff, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) (domain.MRDiff, error)); ok {
 		return returnFunc(ctx, projectID, mrIID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) []domain.FileDiff); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) domain.MRDiff); ok {
 		r0 = returnFunc(ctx, projectID, mrIID)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]domain.FileDiff)
-		}
+		r0 = ret.Get(0).(domain.MRDiff)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, int64, int64) error); ok {
 		r1 = returnFunc(ctx, projectID, mrIID)
@@ -318,12 +316,92 @@ func (_c *MockMergeRequestSource_GetDiff_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockMergeRequestSource_GetDiff_Call) Return(fileDiffs []domain.FileDiff, err error) *MockMergeRequestSource_GetDiff_Call {
-	_c.Call.Return(fileDiffs, err)
+func (_c *MockMergeRequestSource_GetDiff_Call) Return(mRDiff domain.MRDiff, err error) *MockMergeRequestSource_GetDiff_Call {
+	_c.Call.Return(mRDiff, err)
 	return _c
 }
 
-func (_c *MockMergeRequestSource_GetDiff_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64) ([]domain.FileDiff, error)) *MockMergeRequestSource_GetDiff_Call {
+func (_c *MockMergeRequestSource_GetDiff_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64) (domain.MRDiff, error)) *MockMergeRequestSource_GetDiff_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetFileContent provides a mock function for the type MockMergeRequestSource
+func (_mock *MockMergeRequestSource) GetFileContent(ctx context.Context, projectID int64, path string, ref string) ([]byte, error) {
+	ret := _mock.Called(ctx, projectID, path, ref)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFileContent")
+	}
+
+	var r0 []byte
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string, string) ([]byte, error)); ok {
+		return returnFunc(ctx, projectID, path, ref)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string, string) []byte); ok {
+		r0 = returnFunc(ctx, projectID, path, ref)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64, string, string) error); ok {
+		r1 = returnFunc(ctx, projectID, path, ref)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockMergeRequestSource_GetFileContent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFileContent'
+type MockMergeRequestSource_GetFileContent_Call struct {
+	*mock.Call
+}
+
+// GetFileContent is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID int64
+//   - path string
+//   - ref string
+func (_e *MockMergeRequestSource_Expecter) GetFileContent(ctx interface{}, projectID interface{}, path interface{}, ref interface{}) *MockMergeRequestSource_GetFileContent_Call {
+	return &MockMergeRequestSource_GetFileContent_Call{Call: _e.mock.On("GetFileContent", ctx, projectID, path, ref)}
+}
+
+func (_c *MockMergeRequestSource_GetFileContent_Call) Run(run func(ctx context.Context, projectID int64, path string, ref string)) *MockMergeRequestSource_GetFileContent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMergeRequestSource_GetFileContent_Call) Return(bytes []byte, err error) *MockMergeRequestSource_GetFileContent_Call {
+	_c.Call.Return(bytes, err)
+	return _c
+}
+
+func (_c *MockMergeRequestSource_GetFileContent_Call) RunAndReturn(run func(ctx context.Context, projectID int64, path string, ref string) ([]byte, error)) *MockMergeRequestSource_GetFileContent_Call {
 	_c.Call.Return(run)
 	return _c
 }

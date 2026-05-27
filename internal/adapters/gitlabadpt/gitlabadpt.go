@@ -451,16 +451,46 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 }
 
 // GetDiff implements mrsvc.MergeRequestSource.
-func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) ([]domain.FileDiff, error) {
+// Fetches file diffs and diff refs (BaseSHA/HeadSHA) in parallel.
+func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) (domain.MRDiff, error) {
 	logger := ilog.FromContext(ctx)
 	start := time.Now()
 	logger.Info("gitlab: get MR diff", "project_id", projectID, "mr_iid", mrIID)
-	raw, err := a.client.GetMRDiffs(ctx, projectID, mrIID)
-	if err != nil {
-		return nil, err
+
+	type diffsResult struct {
+		diffs []*gl.MergeRequestDiff
+		err   error
 	}
-	files := make([]domain.FileDiff, 0, len(raw))
-	for _, d := range raw {
+	type refsResult struct {
+		baseSHA string
+		headSHA string
+		err     error
+	}
+
+	diffsCh := make(chan diffsResult, 1)
+	refsCh := make(chan refsResult, 1)
+
+	go func() {
+		d, err := a.client.GetMRDiffs(ctx, projectID, mrIID)
+		diffsCh <- diffsResult{d, err}
+	}()
+	go func() {
+		base, head, err := a.client.GetMRDiffRefs(ctx, projectID, mrIID)
+		refsCh <- refsResult{base, head, err}
+	}()
+
+	dr := <-diffsCh
+	rr := <-refsCh
+
+	if dr.err != nil {
+		return domain.MRDiff{}, dr.err
+	}
+	if rr.err != nil {
+		return domain.MRDiff{}, rr.err
+	}
+
+	files := make([]domain.FileDiff, 0, len(dr.diffs))
+	for _, d := range dr.diffs {
 		added, removed := countDiffLines(d.Diff)
 		files = append(files, domain.FileDiff{
 			OldPath:      d.OldPath,
@@ -475,8 +505,17 @@ func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) ([]
 		})
 	}
 	logger.Info("gitlab: get MR diff done", "project_id", projectID, "mr_iid", mrIID,
-		"files", len(files), "duration", ilog.FmtDur(time.Since(start)))
-	return files, nil
+		"files", len(files), "base", rr.baseSHA, "duration", ilog.FmtDur(time.Since(start)))
+	return domain.MRDiff{
+		BaseSHA: rr.baseSHA,
+		HeadSHA: rr.headSHA,
+		Files:   files,
+	}, nil
+}
+
+// GetFileContent implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) GetFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error) {
+	return a.client.GetRawFileContent(ctx, projectID, path, ref)
 }
 
 // countDiffLines counts added and removed lines in a unified diff string.

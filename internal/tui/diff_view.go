@@ -2,7 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,26 +15,53 @@ import (
 )
 
 const (
-	fileListWidth   = 28
-	fileListSepChar = "│"
-	halfPageDivisor = 2
+	fileListWidth      = 28
+	fileListSepChar    = "│"
+	halfPageDivisor    = 2
+	sideBySideMinWidth = 180
+	tempFilePerm       = 0o600
+	tempDirPerm        = 0o700
 )
 
+// difftBin is the path to the difft binary, discovered once at startup.
+// Empty string means difft is unavailable; use the colorized fallback.
+var difftBin string
+
+func init() {
+	difftBin, _ = exec.LookPath("difft") //nolint:errcheck // not found → empty string, which is the intended fallback
+}
+
 // diffViewWidget renders a full-screen diff view for a single MR.
-// Layout: file list (left) | separator | diff content (right, scrollable).
+// Layout: file list (left, 28 cols) | separator | diff content (right, scrollable).
+//
+// Rendering is lazy and cached per file: the model dispatches an async cmd
+// when a file has no cached render yet. Until the result arrives, a spinner
+// placeholder is shown. rendered/rendering are maps (reference types) so
+// mutations survive Bubble Tea's value-copy semantics.
 type diffViewWidget struct {
 	mr      *domain.MergeRequest
+	baseSHA string
+	headSHA string
 	files   []domain.FileDiff
 	fileIdx int
 	vp      scrollViewport
 	styles  Styles
 	width   int
 	height  int
-	loading bool
+	loading bool // true until SetDiff is called (waiting for initial MRDiff)
+
+	// rendered caches pre-rendered lines per file index.
+	// Being a map (reference type), it is shared across all Model value copies.
+	rendered  map[int][]string
+	rendering map[int]bool // true while an async render cmd is in-flight
 }
 
 func newDiffViewWidget(styles Styles) diffViewWidget {
-	return diffViewWidget{styles: styles}
+	return diffViewWidget{
+		styles:    styles,
+		rendered:  make(map[int][]string),
+		rendering: make(map[int]bool),
+	}
 }
 
 func (d *diffViewWidget) SetStyles(s Styles) { d.styles = s }
@@ -39,16 +69,51 @@ func (d *diffViewWidget) SetStyles(s Styles) { d.styles = s }
 func (d *diffViewWidget) SetMR(mr *domain.MergeRequest) {
 	d.mr = mr
 	d.files = nil
+	d.baseSHA = ""
+	d.headSHA = ""
 	d.fileIdx = 0
 	d.vp.reset()
 	d.loading = true
+	d.rendered = make(map[int][]string)
+	d.rendering = make(map[int]bool)
 }
 
-func (d *diffViewWidget) SetDiff(files []domain.FileDiff) {
-	d.files = files
+func (d *diffViewWidget) SetDiff(diff domain.MRDiff) {
+	d.files = diff.Files
+	d.baseSHA = diff.BaseSHA
+	d.headSHA = diff.HeadSHA
 	d.fileIdx = 0
 	d.vp.reset()
 	d.loading = false
+}
+
+// HasRendered reports whether file idx has cached rendered lines.
+func (d *diffViewWidget) HasRendered(idx int) bool {
+	_, ok := d.rendered[idx]
+	return ok
+}
+
+// IsRendering reports whether an async render is in-flight for file idx.
+func (d *diffViewWidget) IsRendering(idx int) bool { return d.rendering[idx] }
+
+// SetRendering marks file idx as having an in-flight render cmd.
+func (d *diffViewWidget) SetRendering(idx int) { d.rendering[idx] = true }
+
+// SetRendered stores pre-rendered lines for file idx and clears its in-flight flag.
+func (d *diffViewWidget) SetRendered(idx int, lines []string) {
+	delete(d.rendering, idx)
+	d.rendered[idx] = lines
+}
+
+// RenderFallback synchronously computes colorized lines for file idx using the
+// lipgloss-based fallback and stores the result in the cache. Used when difft
+// is unavailable so no async cmd is needed.
+func (d *diffViewWidget) RenderFallback(idx int) {
+	if idx >= len(d.files) {
+		return
+	}
+	f := d.files[idx]
+	d.rendered[idx] = d.colorizedLines(f.Diff, d.diffPaneWidth())
 }
 
 func (d *diffViewWidget) SetSize(width, height int) {
@@ -80,16 +145,17 @@ func (d *diffViewWidget) diffPaneWidth() int {
 
 func (d *diffViewWidget) diffBodyLines() int { return d.height }
 
-func (d *diffViewWidget) currentLines() []string {
-	if len(d.files) == 0 || d.fileIdx >= len(d.files) {
-		return nil
-	}
-	return d.colorizedLines(d.files[d.fileIdx].Diff, d.diffPaneWidth())
+func (d *diffViewWidget) currentLines() []string { return d.rendered[d.fileIdx] }
+
+func (d *diffViewWidget) ScrollUp() { d.vp.scrollUp() }
+func (d *diffViewWidget) ScrollDown() {
+	d.vp.scrollDown(len(d.currentLines()), d.diffBodyLines())
 }
 
-func (d *diffViewWidget) ScrollUp()   { d.vp.scrollUp() }
-func (d *diffViewWidget) ScrollDown() { d.vp.scrollDown(len(d.currentLines()), d.diffBodyLines()) }
-func (d *diffViewWidget) HalfPageUp() { d.vp.scrollHalfPageUp(d.diffBodyLines() / halfPageDivisor) }
+func (d *diffViewWidget) HalfPageUp() {
+	d.vp.scrollHalfPageUp(d.diffBodyLines() / halfPageDivisor)
+}
+
 func (d *diffViewWidget) HalfPageDown() {
 	d.vp.scrollHalfPageDown(len(d.currentLines()), d.diffBodyLines(), d.diffBodyLines()/halfPageDivisor)
 }
@@ -106,18 +172,15 @@ func (d diffViewWidget) render() string {
 	if d.mr == nil || d.height <= 0 || d.width <= 0 {
 		return ""
 	}
-
 	filePane := d.renderFileList(d.height)
 	sep := d.renderSeparator(d.height)
 	diffPane := d.renderDiffContent(d.diffPaneWidth(), d.height)
-
 	return lip.JoinHorizontal(lip.Top, filePane, sep, diffPane)
 }
 
 func (d diffViewWidget) renderFileList(height int) string {
 	lines := make([]string, 0, height)
 
-	// Sliding window: keep selected file visible
 	total := len(d.files)
 	start := d.fileIdx - height/halfPageDivisor
 	if start < 0 {
@@ -144,9 +207,7 @@ func (d diffViewWidget) renderFileList(height int) string {
 			maxNameW = 1
 		}
 		name = truncateWidth(name, maxNameW)
-		line := fmt.Sprintf("%s %s", marker, name)
-		// Pad to full width so background fills
-		padded := lip.NewStyle().Width(fileListWidth).Render(line)
+		padded := lip.NewStyle().Width(fileListWidth).Render(fmt.Sprintf("%s %s", marker, name))
 		if i == d.fileIdx {
 			lines = append(lines, d.styles.DiffFileSelected.Render(padded))
 		} else {
@@ -154,12 +215,10 @@ func (d diffViewWidget) renderFileList(height int) string {
 		}
 	}
 
-	// Pad with blank lines to fill height
 	blank := lip.NewStyle().Width(fileListWidth).Render("")
 	for len(lines) < height {
 		lines = append(lines, blank)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -173,45 +232,50 @@ func (d diffViewWidget) renderSeparator(height int) string {
 }
 
 func (d diffViewWidget) renderDiffContent(width, height int) string {
-	if d.loading {
-		blank := strings.Repeat(" ", width)
-		lines := make([]string, height)
-		lines[0] = d.styles.DetailMeta.Render(truncateWidth("Loading diff…", width))
-		for i := 1; i < height; i++ {
-			lines[i] = blank
+	blank := strings.Repeat(" ", width)
+	padLines := func(lines []string) string {
+		for len(lines) < height {
+			lines = append(lines, blank)
 		}
 		return strings.Join(lines, "\n")
+	}
+	placeholder := func(msg string) string {
+		out := make([]string, height)
+		out[0] = d.styles.DetailMeta.Render(truncateWidth(msg, width))
+		for i := 1; i < height; i++ {
+			out[i] = blank
+		}
+		return strings.Join(out, "\n")
+	}
+
+	if d.loading {
+		return placeholder("⠋ Loading diff…")
 	}
 	if len(d.files) == 0 {
-		blank := strings.Repeat(" ", width)
-		lines := make([]string, height)
-		lines[0] = d.styles.DetailMeta.Render(truncateWidth("No files changed", width))
-		for i := 1; i < height; i++ {
-			lines[i] = blank
-		}
-		return strings.Join(lines, "\n")
+		return placeholder("No files changed")
 	}
+
 	f := d.files[d.fileIdx]
 	if f.TooLarge {
-		blank := strings.Repeat(" ", width)
-		lines := make([]string, height)
-		lines[0] = d.styles.ErrorMsg.Render(truncateWidth("File too large to display", width))
-		for i := 1; i < height; i++ {
-			lines[i] = blank
-		}
-		return strings.Join(lines, "\n")
+		return d.styles.ErrorMsg.Render(truncateWidth("File too large to display", width))
 	}
 
-	all := d.colorizedLines(f.Diff, width)
-	window := d.vp.window(all, height)
-	// Pad to fill height
-	blank := strings.Repeat(" ", width)
-	for len(window) < height {
-		window = append(window, blank)
+	all := d.currentLines()
+	if all == nil {
+		// Per-file async render in-flight: show spinner.
+		name := filepath.Base(f.NewPath)
+		if f.DeletedFile {
+			name = filepath.Base(f.OldPath)
+		}
+		return placeholder(fmt.Sprintf("⠋ Rendering %s…", name))
 	}
-	return strings.Join(window, "\n")
+
+	window := d.vp.window(all, height)
+	return padLines(window)
 }
 
+// colorizedLines renders a unified diff string with lipgloss syntax highlighting.
+// Used as the fallback when difft is not available.
 func (d diffViewWidget) colorizedLines(diff string, width int) []string {
 	rawLines := strings.Split(diff, "\n")
 	out := make([]string, 0, len(rawLines))
@@ -243,7 +307,7 @@ func diffStats(files []domain.FileDiff) (added, removed int) {
 	return added, removed
 }
 
-// diffFileMarker returns a 3-char status marker for a file in the diff list.
+// diffFileMarker returns a 3-char status prefix for the file list.
 func diffFileMarker(f domain.FileDiff) string {
 	switch {
 	case f.NewFile:
@@ -255,4 +319,58 @@ func diffFileMarker(f domain.FileDiff) string {
 	default:
 		return "[~]"
 	}
+}
+
+// runDifft runs the difft binary on old/new content and returns the output lines.
+// Pass nil for oldContent (new file) or newContent (deleted file) to use /dev/null.
+func runDifft(oldContent, newContent []byte, oldName, newName string, width int) ([]string, error) {
+	dir, err := os.MkdirTemp("", "mrboard-diff-*")
+	if err != nil {
+		return nil, fmt.Errorf("difft: mktemp: %w", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Use a/b subdirs so difft displays "a/filename" and "b/filename" instead of the full temp path.
+	for _, sub := range []string{"a", "b"} {
+		if err := os.Mkdir(filepath.Join(dir, sub), tempDirPerm); err != nil {
+			return nil, fmt.Errorf("difft: mkdir %s: %w", sub, err)
+		}
+	}
+
+	oldPath := "/dev/null"
+	if oldContent != nil {
+		oldPath = filepath.Join(dir, "a", filepath.Base(oldName))
+		if err := os.WriteFile(oldPath, oldContent, tempFilePerm); err != nil {
+			return nil, fmt.Errorf("difft: write old: %w", err)
+		}
+	}
+
+	newPath := "/dev/null"
+	if newContent != nil {
+		newPath = filepath.Join(dir, "b", filepath.Base(newName))
+		if err := os.WriteFile(newPath, newContent, tempFilePerm); err != nil {
+			return nil, fmt.Errorf("difft: write new: %w", err)
+		}
+	}
+
+	display := "inline"
+	if width >= sideBySideMinWidth {
+		display = "side-by-side"
+	}
+
+	// difftBin is set by exec.LookPath in init() — path is safe.
+	cmd := exec.Command(difftBin, //nolint:gosec
+		"--display", display,
+		"--width", strconv.Itoa(width),
+		"--color", "always",
+		oldPath, newPath)
+	out, err := cmd.Output()
+	// difft exits 1 when files differ (expected); only fail when there is no output.
+	if err != nil && len(out) == 0 {
+		return nil, fmt.Errorf("difft: %w", err)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("difft produced no output")
+	}
+	return strings.Split(strings.TrimRight(string(out), "\n"), "\n"), nil
 }
