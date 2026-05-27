@@ -357,7 +357,7 @@ func TestMapMR_RoundTripCount(t *testing.T) {
 		discussion(userNote("alice", t2)),
 		discussion(systemNote("requested review from @alice", t3)),
 	}
-	result := MapMR(m, discussions, approvals(), 1)
+	result := MapMR(m, discussions, approvals())
 	if result.RoundTripCount != 2 {
 		t.Errorf("want RoundTripCount=2, got %d", result.RoundTripCount)
 	}

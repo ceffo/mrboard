@@ -6,14 +6,14 @@ import (
 )
 
 func TestClassifyPhase_Draft(t *testing.T) {
-	phase := ClassifyPhase(true, 0, 2, 2, nil)
+	phase := ClassifyPhase(true, false, nil)
 	if phase != PhaseDraft {
 		t.Fatalf("expected PhaseDraft, got %d", phase)
 	}
 }
 
 func TestClassifyPhase_ReadyToMerge(t *testing.T) {
-	phase := ClassifyPhase(false, 0, 2, 2, []ReviewerInfo{
+	phase := ClassifyPhase(false, true, []ReviewerInfo{
 		{State: ReviewerApproved},
 	})
 	if phase != PhaseReadyToMerge {
@@ -22,9 +22,16 @@ func TestClassifyPhase_ReadyToMerge(t *testing.T) {
 }
 
 func TestClassifyPhase_ReadyToMerge_NoReviewers(t *testing.T) {
-	phase := ClassifyPhase(false, 0, 0, 0, nil)
+	phase := ClassifyPhase(false, true, nil)
 	if phase != PhaseReadyToMerge {
-		t.Fatalf("expected PhaseReadyToMerge when 0 required approvals and 0 threads, got %d", phase)
+		t.Fatalf("expected PhaseReadyToMerge when mergeable=true and no reviewers, got %d", phase)
+	}
+}
+
+func TestClassifyPhase_NotReadyToMerge_WhenMergeableFalse(t *testing.T) {
+	phase := ClassifyPhase(false, false, nil)
+	if phase != PhaseNeedsReview {
+		t.Fatalf("expected PhaseNeedsReview when mergeable=false and no reviewers, got %d", phase)
 	}
 }
 
@@ -33,7 +40,7 @@ func TestClassifyPhase_NeedsAuthorAction(t *testing.T) {
 		{State: ReviewerCommented},
 		{State: ReviewerReReviewRequested},
 	}
-	phase := ClassifyPhase(false, 1, 0, 2, reviewers)
+	phase := ClassifyPhase(false, false, reviewers)
 	if phase != PhaseNeedsAuthorAction {
 		t.Fatalf("expected PhaseNeedsAuthorAction, got %d", phase)
 	}
@@ -44,14 +51,14 @@ func TestClassifyPhase_NeedsAuthorAction_TakesPrecedenceOverReReview(t *testing.
 		{State: ReviewerReReviewRequested},
 		{State: ReviewerCommented},
 	}
-	phase := ClassifyPhase(false, 0, 1, 2, reviewers)
+	phase := ClassifyPhase(false, false, reviewers)
 	if phase != PhaseNeedsAuthorAction {
 		t.Fatalf("expected PhaseNeedsAuthorAction when mixed states, got %d", phase)
 	}
 }
 
 func TestClassifyPhase_NeedsReview_NoReviewers(t *testing.T) {
-	phase := ClassifyPhase(false, 1, 0, 2, nil)
+	phase := ClassifyPhase(false, false, nil)
 	if phase != PhaseNeedsReview {
 		t.Fatalf("expected PhaseNeedsReview with no reviewers, got %d", phase)
 	}
@@ -62,17 +69,16 @@ func TestClassifyPhase_NeedsReview_AllNotStarted(t *testing.T) {
 		{State: ReviewerNotStarted},
 		{State: ReviewerNotStarted},
 	}
-	phase := ClassifyPhase(false, 0, 0, 2, reviewers)
+	phase := ClassifyPhase(false, false, reviewers)
 	if phase != PhaseNeedsReview {
 		t.Fatalf("expected PhaseNeedsReview when all NotStarted, got %d", phase)
 	}
 }
 
 func TestClassifyPhase_DraftTakesPrecedence(t *testing.T) {
-	// Draft wins even with enough approvals and no threads
-	phase := ClassifyPhase(true, 0, 2, 2, nil)
+	phase := ClassifyPhase(true, true, nil)
 	if phase != PhaseDraft {
-		t.Fatalf("expected PhaseDraft to take precedence, got %d", phase)
+		t.Fatalf("expected PhaseDraft to take precedence over mergeable=true, got %d", phase)
 	}
 }
 

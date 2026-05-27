@@ -25,10 +25,9 @@ type Source struct {
 // Exported so existing call-sites (e.g. cfg.GitLab.URL) continue to compile
 // during the architecture migration.
 type GitLab struct {
-	URL               string        `mapstructure:"url"`
-	Token             string        `mapstructure:"token"`
-	Timeout           time.Duration `mapstructure:"timeout"`
-	RequiredApprovals int           `mapstructure:"required_approvals"`
+	URL     string        `mapstructure:"url"`
+	Token   string        `mapstructure:"token"`
+	Timeout time.Duration `mapstructure:"timeout"`
 }
 
 // logSection mirrors the [log] YAML section.
@@ -67,9 +66,8 @@ type GitLabClientConfig struct {
 
 // GitLabAdapterConfig is the configuration consumed by internal/adapters/gitlabadpt.
 type GitLabAdapterConfig struct {
-	RequiredApprovals int
-	Sources           []Source
-	ExcludedAuthors   []string
+	Sources         []Source
+	ExcludedAuthors []string
 }
 
 // MRServiceConfig is the configuration consumed by internal/domain/service/mrsvc.
@@ -99,9 +97,8 @@ func (c *AppConfig) GitLabClientConfig() GitLabClientConfig {
 // GitLabAdapterConfig extracts the configuration slice consumed by internal/adapters/gitlabadpt.
 func (c *AppConfig) GitLabAdapterConfig() GitLabAdapterConfig {
 	return GitLabAdapterConfig{
-		RequiredApprovals: c.GitLab.RequiredApprovals,
-		Sources:           c.Sources,
-		ExcludedAuthors:   c.ExcludedAuthors,
+		Sources:         c.Sources,
+		ExcludedAuthors: c.ExcludedAuthors,
 	}
 }
 
@@ -121,8 +118,6 @@ func (c *AppConfig) LogConfig() LogConfig {
 
 // --- Loading ----------------------------------------------------------------
 
-const defaultRequiredApprovals = 2
-
 // Load reads configuration from path. When path is empty, it searches:
 //
 //	$XDG_CONFIG_HOME/mrboard/mrboard.yaml
@@ -134,7 +129,6 @@ func Load(path string) (*AppConfig, error) {
 	v := viper.New()
 
 	v.SetDefault("gitlab.timeout", "30s")
-	v.SetDefault("gitlab.required_approvals", defaultRequiredApprovals)
 	v.SetDefault("log.level", "info")
 	v.SetDefault("lifetime_warn_after", "72h")
 	v.SetDefault("lifetime_error_after", "120h")

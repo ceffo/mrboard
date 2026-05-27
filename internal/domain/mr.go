@@ -88,6 +88,7 @@ type ReviewerInfo struct {
 	State        ReviewerState
 	WaitingSince time.Time
 	ApprovedAt   time.Time // zero unless State == ReviewerApproved
+	IsApprover   bool      // member of the "Approvers" approval rule
 }
 
 // MergeRequest is the core domain type representing a GitLab merge request.
@@ -110,10 +111,8 @@ type MergeRequest struct {
 	WaitingSince      time.Time
 	ReadyToMergeSince time.Time
 
-	ApprovalCount     int
-	RequiredApprovals int
-	OpenThreads       int
-	RoundTripCount    int
+	OpenThreads    int
+	RoundTripCount int
 }
 
 // DisplayAuthor returns the human-readable author name, falling back to the username.
@@ -126,11 +125,12 @@ func (mr MergeRequest) DisplayAuthor() string {
 
 // ClassifyPhase determines the MRPhase from the MR's fields.
 // Evaluated in priority order per docs/domain-model.md.
-func ClassifyPhase(draft bool, openThreads, approvalCount, requiredApprovals int, reviewers []ReviewerInfo) MRPhase {
+// mergeable should be set from GitLab's detailed_merge_status == "mergeable".
+func ClassifyPhase(draft bool, mergeable bool, reviewers []ReviewerInfo) MRPhase {
 	if draft {
 		return PhaseDraft
 	}
-	if openThreads == 0 && approvalCount >= requiredApprovals {
+	if mergeable {
 		return PhaseReadyToMerge
 	}
 	for _, r := range reviewers {

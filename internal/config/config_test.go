@@ -36,29 +36,6 @@ sources:
 	if cfg.GitLab.URL != "https://gitlab.example.com" {
 		t.Errorf("got URL %q", cfg.GitLab.URL)
 	}
-	if cfg.GitLab.RequiredApprovals != 2 {
-		t.Errorf("expected default RequiredApprovals=2, got %d", cfg.GitLab.RequiredApprovals)
-	}
-}
-
-func TestLoadRequiredApprovalsExplicit(t *testing.T) {
-	path := writeTemp(t, `
-gitlab:
-  url: https://gitlab.example.com
-  token: glpat-abc
-  required_approvals: 3
-
-sources:
-  - type: group
-    ids: [x]
-`)
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.GitLab.RequiredApprovals != 3 {
-		t.Errorf("expected 3, got %d", cfg.GitLab.RequiredApprovals)
-	}
 }
 
 func TestGitlabTokenEnvOverride(t *testing.T) {
@@ -261,9 +238,6 @@ current_user: alice
 	}
 
 	glAdapt := cfg.GitLabAdapterConfig()
-	if glAdapt.RequiredApprovals != 3 {
-		t.Errorf("GitLabAdapterConfig.RequiredApprovals = %d", glAdapt.RequiredApprovals)
-	}
 	if len(glAdapt.Sources) != 2 {
 		t.Errorf("GitLabAdapterConfig.Sources len = %d", len(glAdapt.Sources))
 	}

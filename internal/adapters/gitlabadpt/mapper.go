@@ -320,7 +320,6 @@ func MapMR(
 	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
 	approvals *gl.MergeRequestApprovals,
-	requiredApprovals int,
 ) domain.MergeRequest {
 	approvedBy := make(map[string]bool, len(approvals.ApprovedBy))
 	for _, a := range approvals.ApprovedBy {
@@ -341,31 +340,23 @@ func MapMR(
 	openThreads := countOpenThreads(restThreadStates(discussions))
 
 	domainMR := domain.MergeRequest{
-		ID:                int(mr.ID),
-		IID:               int(mr.IID),
-		ProjectID:         int(mr.ProjectID),
-		Title:             mr.Title,
-		WebURL:            mr.WebURL,
-		ProjectPath:       projectPathFromRef(mr.References),
-		Reviewers:         reviewers,
-		CreatedAt:         mrCreatedAt,
-		ApprovalCount:     countApprovals(reviewers),
-		RequiredApprovals: requiredApprovals,
-		OpenThreads:       openThreads,
-		RoundTripCount:    countRoundTripsFromEvents(events),
+		ID:             int(mr.ID),
+		IID:            int(mr.IID),
+		ProjectID:      int(mr.ProjectID),
+		Title:          mr.Title,
+		WebURL:         mr.WebURL,
+		ProjectPath:    projectPathFromRef(mr.References),
+		Reviewers:      reviewers,
+		CreatedAt:      mrCreatedAt,
+		OpenThreads:    openThreads,
+		RoundTripCount: countRoundTripsFromEvents(events),
 	}
 	if mr.Author != nil {
 		domainMR.Author = mr.Author.Username
 		domainMR.AuthorName = mr.Author.Name
 	}
 
-	domainMR.Phase = domain.ClassifyPhase(
-		mr.Draft,
-		openThreads,
-		domainMR.ApprovalCount,
-		requiredApprovals,
-		reviewers,
-	)
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, false, reviewers)
 
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:
@@ -382,20 +373,10 @@ func MapMR(
 			}
 		}
 	case domain.PhaseReadyToMerge:
-		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers, requiredApprovals)
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
 	}
 
 	return domainMR
-}
-
-func countApprovals(reviewers []domain.ReviewerInfo) int {
-	n := 0
-	for _, r := range reviewers {
-		if r.State == domain.ReviewerApproved {
-			n++
-		}
-	}
-	return n
 }
 
 // MapDiscussionsToThreads converts raw GitLab discussions into domain threads,
@@ -446,7 +427,7 @@ func projectPathFromRef(refs *gl.IssueReferences) string {
 // MapMRFromGraphQL converts a GitLab GraphQL MR response into a domain.MergeRequest.
 // If the MR's discussions overflowed (hasNextPage=true) the caller should have already
 // logged a warning; this function uses whatever data was returned.
-func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domain.MergeRequest {
+func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 	approvedBy := make(map[string]bool, len(mr.ApprovedBy.Nodes))
 	for _, u := range mr.ApprovedBy.Nodes {
 		approvedBy[u.Username] = true
@@ -462,29 +443,21 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domai
 	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{
-		ID:                parseGIDNumericSafe(mr.ID),
-		IID:               parseIIDSafe(mr.IID),
-		ProjectID:         parseGIDNumericSafe(mr.Project.ID),
-		Title:             mr.Title,
-		WebURL:            mr.WebURL,
-		Author:            mr.Author.Username,
-		AuthorName:        mr.Author.Name,
-		ProjectPath:       mr.Project.FullPath,
-		Reviewers:         reviewers,
-		CreatedAt:         createdAt,
-		ApprovalCount:     countApprovals(reviewers),
-		RequiredApprovals: requiredApprovals,
-		OpenThreads:       openThreads,
-		RoundTripCount:    countRoundTripsFromEvents(events),
+		ID:             parseGIDNumericSafe(mr.ID),
+		IID:            parseIIDSafe(mr.IID),
+		ProjectID:      parseGIDNumericSafe(mr.Project.ID),
+		Title:          mr.Title,
+		WebURL:         mr.WebURL,
+		Author:         mr.Author.Username,
+		AuthorName:     mr.Author.Name,
+		ProjectPath:    mr.Project.FullPath,
+		Reviewers:      reviewers,
+		CreatedAt:      createdAt,
+		OpenThreads:    openThreads,
+		RoundTripCount: countRoundTripsFromEvents(events),
 	}
 
-	domainMR.Phase = domain.ClassifyPhase(
-		mr.Draft,
-		openThreads,
-		domainMR.ApprovalCount,
-		requiredApprovals,
-		reviewers,
-	)
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, false, reviewers)
 
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:
@@ -501,35 +474,22 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest, requiredApprovals int) domai
 			}
 		}
 	case domain.PhaseReadyToMerge:
-		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers, requiredApprovals)
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
 	}
 
 	return domainMR
 }
 
-// deriveReadyToMergeSince returns when the MR last reached the required approval
-// count by finding the requiredApprovals-th oldest ApprovedAt timestamp.
-// Returns zero time if timestamps are unavailable (e.g. zero required approvals).
-func deriveReadyToMergeSince(reviewers []domain.ReviewerInfo, requiredApprovals int) time.Time {
-	if requiredApprovals <= 0 {
-		return time.Time{}
-	}
-	var times []time.Time
+// deriveReadyToMergeSince returns the latest approval timestamp, used as a
+// proxy for when the MR became ready to merge.
+func deriveReadyToMergeSince(reviewers []domain.ReviewerInfo) time.Time {
+	var latest time.Time
 	for _, r := range reviewers {
-		if r.State == domain.ReviewerApproved && !r.ApprovedAt.IsZero() {
-			times = append(times, r.ApprovedAt)
+		if r.State == domain.ReviewerApproved && r.ApprovedAt.After(latest) {
+			latest = r.ApprovedAt
 		}
 	}
-	if len(times) < requiredApprovals {
-		return time.Time{}
-	}
-	// Sort ascending; the requiredApprovals-th entry is when the count hit the threshold.
-	for i := 1; i < len(times); i++ {
-		for j := i; j > 0 && times[j].Before(times[j-1]); j-- {
-			times[j], times[j-1] = times[j-1], times[j]
-		}
-	}
-	return times[requiredApprovals-1]
+	return latest
 }
 
 // parseGIDNumericSafe extracts the trailing numeric ID from a GitLab global ID

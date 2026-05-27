@@ -57,9 +57,8 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		}
 	}
 	adapter := gitlabadpt.New(client, gitlabadpt.Config{
-		RequiredApprovals: adptCfg.RequiredApprovals,
-		Sources:           sources,
-		ExcludedAuthors:   adptCfg.ExcludedAuthors,
+		Sources:         sources,
+		ExcludedAuthors: adptCfg.ExcludedAuthors,
 	})
 
 	// 4. State store

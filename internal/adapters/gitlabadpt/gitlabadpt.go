@@ -21,9 +21,8 @@ const enrichConcurrency = 10
 
 // Config holds the adapter-specific configuration.
 type Config struct {
-	RequiredApprovals int
-	Sources           []mrsvc.Source
-	ExcludedAuthors   []string
+	Sources         []mrsvc.Source
+	ExcludedAuthors []string
 }
 
 // GitLabAdapter implements mrsvc.MergeRequestSource using a live GitLab client.
@@ -270,7 +269,7 @@ func (a *GitLabAdapter) fetchUserSourceGraphQL(
 			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
 				"username", username, "mr_iid", mr.IID)
 		}
-		mapped = append(mapped, MapMRFromGraphQL(mr, a.cfg.RequiredApprovals))
+		mapped = append(mapped, MapMRFromGraphQL(mr))
 	}
 	logger.Info("gitlab: user source fetched (graphql)",
 		"username", username, "total", len(gqlMRs), "active", len(mapped),
@@ -318,11 +317,7 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		if err != nil {
 			return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d discussions: %w", mr.ProjectID, mr.IID, err)
 		}
-		emptyApprovals := &gl.MergeRequestApprovals{
-			ApprovalsRequired: int64(a.cfg.RequiredApprovals),
-			ApprovalsLeft:     int64(a.cfg.RequiredApprovals),
-		}
-		return MapMR(mr, discussions, emptyApprovals, a.cfg.RequiredApprovals), nil
+		return MapMR(mr, discussions, &gl.MergeRequestApprovals{}), nil
 	}
 
 	type discResult struct {
@@ -356,5 +351,5 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approvals: %w", mr.ProjectID, mr.IID, ar.err)
 	}
 
-	return MapMR(mr, dr.discussions, ar.approvals, a.cfg.RequiredApprovals), nil
+	return MapMR(mr, dr.discussions, ar.approvals), nil
 }
