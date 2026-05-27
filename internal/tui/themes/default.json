@@ -12,6 +12,7 @@
     "success":     { "dark": "42",  "light": "28"  },
     "warning":     { "dark": "214", "light": "172" },
     "danger":      { "dark": "196", "light": "160" },
-    "info":        { "dark": "39",  "light": "27"  }
+    "info":        { "dark": "39",  "light": "27"  },
+    "color-approver": { "dark": "220", "light": "136" }
   }
 }

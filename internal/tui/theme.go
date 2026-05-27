@@ -42,4 +42,6 @@ const (
 	Danger ColorKey = "danger"
 	// Info signals neutral informational content (cyan/teal family).
 	Info ColorKey = "info"
+	// ColorApprover is the color for reviewers who are designated approvers.
+	ColorApprover ColorKey = "color-approver"
 )

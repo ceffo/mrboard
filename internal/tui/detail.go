@@ -167,6 +167,9 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 
 	if len(d.mr.Reviewers) > 0 {
 		add(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))
+		if required, given := approvalCounts(d.mr.Reviewers); required > 0 {
+			add(d.styles.DetailMeta.Render(fmt.Sprintf("✓ %d/%d approvals", given, required)))
+		}
 	}
 
 	add("") // blank separator

@@ -12,6 +12,7 @@
     "success":     { "dark": "#9ece6a" },
     "warning":     { "dark": "#e0af68" },
     "danger":      { "dark": "#f7768e" },
-    "info":        { "dark": "#7dcfff" }
+    "info":        { "dark": "#7dcfff" },
+    "color-approver": { "dark": "#ff9e64" }
   }
 }

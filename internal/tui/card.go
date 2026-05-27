@@ -168,24 +168,36 @@ func (c cardWidget) durationStyle(dur time.Duration) lip.Style {
 }
 
 // renderPills returns each reviewer pill as a separately styled string.
+// Approvers are listed before plain reviewers; NotStarted reviewers are omitted.
 func (c cardWidget) renderPills(now time.Time) []string {
 	if len(c.mr.Reviewers) == 0 {
 		return nil
 	}
-	parts := make([]string, 0, len(c.mr.Reviewers))
+	// Stable two-pass sort: approvers first, then plain reviewers.
+	sorted := make([]domain.ReviewerInfo, 0, len(c.mr.Reviewers))
 	for _, r := range c.mr.Reviewers {
+		if r.IsApprover {
+			sorted = append(sorted, r)
+		}
+	}
+	for _, r := range c.mr.Reviewers {
+		if !r.IsApprover {
+			sorted = append(sorted, r)
+		}
+	}
+	parts := make([]string, 0, len(sorted))
+	for _, r := range sorted {
 		if r.State == domain.ReviewerNotStarted {
 			continue
 		}
-		rendered := c.renderPill(r, now)
-		parts = append(parts, rendered)
+		parts = append(parts, c.renderPill(r, now))
 	}
 	return parts
 }
 
 func (c cardWidget) renderPill(r domain.ReviewerInfo, now time.Time) string {
 	icon := reviewerIcon(r.State)
-	displayName := c.renderUsername(r.Username)
+	displayName := c.renderReviewerUsername(r)
 	pillStyle := pillStyle(r.State, c.styles)
 	var rendered strings.Builder
 	rendered.WriteString(pillStyle.Render("["))
@@ -216,40 +228,65 @@ func pillStyle(state domain.ReviewerState, styles Styles) lip.Style {
 	}
 }
 
-func (c cardWidget) renderUsername(username string) string {
-	if username == "" {
+func (c cardWidget) renderReviewerUsername(r domain.ReviewerInfo) string {
+	if r.Username == "" {
 		return c.styles.ErrorMsg.Render("<unknown>")
 	}
-	return c.styles.UsernameAtSign.Render("@") + c.styles.CardAuthor.Render(username)
+	nameStyle := c.styles.CardAuthor
+	if r.IsApprover {
+		nameStyle = c.styles.ApproverName
+	}
+	return c.styles.UsernameAtSign.Render("@") + nameStyle.Render(r.Username)
 }
 
-// wrapPills lays out reviewer pills into lines that each fit within width columns.
+// wrapPills lays out reviewer pills into lines that each fit within width columns,
+// followed by an approval count line when an approvers rule is present.
 func (c cardWidget) wrapPills(now time.Time, width int) []string {
 	pills := c.renderPills(now)
-	if len(pills) == 0 {
-		return nil
-	}
 	var lines []string
-	line := ""
-	lineW := 0
-	for i, p := range pills {
-		pW := lip.Width(p)
-		if lineW == 0 {
-			line = p
-			lineW = pW
-		} else if lineW+1+pW <= width {
-			line += " " + p
-			lineW += 1 + pW
-		} else {
-			lines = append(lines, line)
-			line = p
-			lineW = pW
-		}
-		if i == len(pills)-1 {
-			lines = append(lines, line)
+	if len(pills) > 0 {
+		line := ""
+		lineW := 0
+		for i, p := range pills {
+			pW := lip.Width(p)
+			if lineW == 0 {
+				line = p
+				lineW = pW
+			} else if lineW+1+pW <= width {
+				line += " " + p
+				lineW += 1 + pW
+			} else {
+				lines = append(lines, line)
+				line = p
+				lineW = pW
+			}
+			if i == len(pills)-1 {
+				lines = append(lines, line)
+			}
 		}
 	}
+
+	required, given := approvalCounts(c.mr.Reviewers)
+	if required > 0 {
+		approvalLine := fmt.Sprintf("✓ %d/%d approvals", given, required)
+		lines = append(lines, c.styles.CardMeta.Render(approvalLine))
+	}
+
 	return lines
+}
+
+// approvalCounts returns (required, given) from a reviewer list.
+// required = number of IsApprover reviewers; given = those who also Approved.
+func approvalCounts(reviewers []domain.ReviewerInfo) (required, given int) {
+	for _, r := range reviewers {
+		if r.IsApprover {
+			required++
+			if r.State == domain.ReviewerApproved {
+				given++
+			}
+		}
+	}
+	return
 }
 
 func reviewerIcon(s domain.ReviewerState) string {
