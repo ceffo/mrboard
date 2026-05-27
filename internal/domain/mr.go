@@ -81,6 +81,13 @@ func (p MRPhase) String() string {
 	}
 }
 
+// ProjectMember is a GitLab project member (Developer or higher access level).
+type ProjectMember struct {
+	UserID   int64
+	Username string
+	Name     string
+}
+
 // ReviewerInfo holds the current state for a single reviewer on an MR.
 type ReviewerInfo struct {
 	Username     string

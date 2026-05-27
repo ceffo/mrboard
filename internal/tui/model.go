@@ -148,45 +148,48 @@ type Options struct {
 
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state           appState
-	header          headerWidget
-	board           boardWidget
-	footer          footerWidget
-	sp              spinnerWidget
-	detail          detailWidget
-	showDetail      bool
-	filterPopup     filterPopupWidget
-	showFilter      bool
-	themePicker     themePickerWidget
-	showThemePicker bool
-	keys            KeyMap
-	detailKeys      DetailKeyMap
-	filterKeys      FilterPopupKeyMap
-	themePickerKeys ThemePickerKeyMap
-	styles          Styles
-	theme           theme.Theme[ColorKey]
-	themeName       string // currently active theme name
-	themeMode       string // "auto", "dark", "light"
-	hasDarkBg       bool
-	width           int
-	height          int
-	errors          []error
-	errMsg          string
-	cfg             *config.Config
-	src             mrsvc.MergeRequestSource
-	store           domain.StateStore
-	allMRs          []domain.MergeRequest
-	userMap         map[string]string
-	currentUser     string
-	viewMode        domain.ViewMode
-	sortField       sortField
-	sortDesc        bool
-	filter          FilterCriteria
-	fetchCancel     context.CancelFunc
-	baseCtx         context.Context
-	logger          *slog.Logger
-	isRefreshing    bool
-	prevFocusMR     *domain.MergeRequest // saved before refresh for focus restoration
+	state              appState
+	header             headerWidget
+	board              boardWidget
+	footer             footerWidget
+	sp                 spinnerWidget
+	detail             detailWidget
+	showDetail         bool
+	filterPopup        filterPopupWidget
+	showFilter         bool
+	themePicker        themePickerWidget
+	showThemePicker    bool
+	approverEditor     *approverEditorWidget
+	showApproverEditor bool
+	keys               KeyMap
+	detailKeys         DetailKeyMap
+	filterKeys         FilterPopupKeyMap
+	themePickerKeys    ThemePickerKeyMap
+	approverEditorKeys ApproverEditorKeyMap
+	styles             Styles
+	theme              theme.Theme[ColorKey]
+	themeName          string // currently active theme name
+	themeMode          string // "auto", "dark", "light"
+	hasDarkBg          bool
+	width              int
+	height             int
+	errors             []error
+	errMsg             string
+	cfg                *config.Config
+	src                mrsvc.MergeRequestSource
+	store              domain.StateStore
+	allMRs             []domain.MergeRequest
+	userMap            map[string]string
+	currentUser        string
+	viewMode           domain.ViewMode
+	sortField          sortField
+	sortDesc           bool
+	filter             FilterCriteria
+	fetchCancel        context.CancelFunc
+	baseCtx            context.Context
+	logger             *slog.Logger
+	isRefreshing       bool
+	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -252,30 +255,31 @@ func New(
 	}
 
 	m := Model{
-		state:           stateLoading,
-		header:          newHeaderWidget(styles),
-		board:           newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
-		footer:          newFooterWidget(keys, styles, version),
-		sp:              newSpinnerWidget(),
-		detail:          newDetailWidget(styles),
-		keys:            keys,
-		detailKeys:      DefaultDetailKeyMap,
-		filterKeys:      DefaultFilterPopupKeyMap,
-		themePickerKeys: DefaultThemePickerKeyMap,
-		styles:          styles,
-		theme:           th,
-		themeName:       themeName,
-		themeMode:       themeMode,
-		hasDarkBg:       initialDark,
-		cfg:             cfg,
-		src:             src,
-		store:           store,
-		currentUser:     cfg.CurrentUser,
-		viewMode:        viewMode,
-		sortField:       sf,
-		sortDesc:        st.SortDesc,
-		baseCtx:         ctx,
-		logger:          logger,
+		state:              stateLoading,
+		header:             newHeaderWidget(styles),
+		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		footer:             newFooterWidget(keys, styles, version),
+		sp:                 newSpinnerWidget(),
+		detail:             newDetailWidget(styles),
+		keys:               keys,
+		detailKeys:         DefaultDetailKeyMap,
+		filterKeys:         DefaultFilterPopupKeyMap,
+		themePickerKeys:    DefaultThemePickerKeyMap,
+		approverEditorKeys: DefaultApproverEditorKeyMap,
+		styles:             styles,
+		theme:              th,
+		themeName:          themeName,
+		themeMode:          themeMode,
+		hasDarkBg:          initialDark,
+		cfg:                cfg,
+		src:                src,
+		store:              store,
+		currentUser:        cfg.CurrentUser,
+		viewMode:           viewMode,
+		sortField:          sf,
+		sortDesc:           st.SortDesc,
+		baseCtx:            ctx,
+		logger:             logger,
 	}
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -378,24 +382,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showFilter = false
 		return m, nil
 
+	case MembersLoadedMsg:
+		if m.approverEditor != nil {
+			m.approverEditor.SetMembers(msg.Members, msg.Err)
+		}
+		return m, nil
+
+	case ApproversSavedMsg:
+		return m.handleApproversSaved(msg)
+
 	case ThemePickerClosedMsg:
 		m.showThemePicker = false
 		return m, nil
 
 	case ThemeChangedMsg:
-		m.themeName = msg.Name
-		m.themeMode = msg.Mode
-		switch msg.Mode {
-		case themeModeDark:
-			m.hasDarkBg = true
-		case themeModeLight:
-			m.hasDarkBg = false
-			// themeModeAuto or "": keep current hasDarkBg from last BackgroundColorMsg
-		}
-		m.theme = LoadThemeByName(msg.Name)
-		m.applyTheme()
-		m.saveState()
-		return m, nil
+		return m.handleThemeChanged(msg)
 
 	case tickMsg:
 		return m, tickCmd()
@@ -423,6 +424,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.state != stateBoard || m.isRefreshing {
 		return m, nil
+	}
+
+	if m.showApproverEditor && m.approverEditor != nil {
+		updated, cmd := m.approverEditor.Update(msg)
+		m.approverEditor = updated.(*approverEditorWidget)
+		return m, cmd
 	}
 
 	if m.showFilter {
@@ -525,6 +532,14 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		)
 		m.showFilter = true
 		return m, nil
+	case key.Matches(msg, m.keys.Approvers):
+		if mr := m.board.FocusedMR(); mr != nil {
+			m.approverEditor = newApproverEditorWidget(
+				m.baseCtx, *mr, m.styles, m.approverEditorKeys, m.src,
+			)
+			m.showApproverEditor = true
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -608,6 +623,9 @@ func (m Model) renderContent() string {
 			overlay := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
 			return m.renderWithOverlay(board, overlay)
 		}
+		if m.showApproverEditor && m.approverEditor != nil {
+			return m.renderWithOverlay(board, m.approverEditor.render())
+		}
 		if m.showFilter {
 			return m.renderWithOverlay(board, m.filterPopup.render())
 		}
@@ -676,6 +694,40 @@ func (m Model) renderWithOverlay(board, popup string) string {
 	return lip.NewCompositor(bgLayer, popupLayer).Render()
 }
 
+// handleApproversSaved handles ApproversSavedMsg: closes the editor and updates the in-place MR.
+func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) {
+	m.showApproverEditor = false
+	if msg.Err != nil {
+		m.errors = append(m.errors, msg.Err)
+		return m, nil
+	}
+	for i, mr := range m.allMRs {
+		if mr.ProjectID == msg.MR.ProjectID && mr.IID == msg.MR.IID {
+			m.allMRs[i] = msg.MR
+			break
+		}
+	}
+	m.applyMRFilter()
+	return m, nil
+}
+
+// handleThemeChanged handles ThemeChangedMsg: updates theme state and propagates styles.
+func (m Model) handleThemeChanged(msg ThemeChangedMsg) (tea.Model, tea.Cmd) {
+	m.themeName = msg.Name
+	m.themeMode = msg.Mode
+	switch msg.Mode {
+	case themeModeDark:
+		m.hasDarkBg = true
+	case themeModeLight:
+		m.hasDarkBg = false
+		// themeModeAuto or "": keep current hasDarkBg from last BackgroundColorMsg
+	}
+	m.theme = LoadThemeByName(msg.Name)
+	m.applyTheme()
+	m.saveState()
+	return m, nil
+}
+
 // applyTheme regenerates all styles from the current theme and dark-mode flag,
 // then propagates them to all widgets including open overlays.
 func (m *Model) applyTheme() {
@@ -692,6 +744,9 @@ func (m *Model) applyTheme() {
 	m.detail.SetStyles(m.styles)
 	m.filterPopup.styles = m.styles
 	m.themePicker.styles = m.styles
+	if m.approverEditor != nil {
+		m.approverEditor.styles = m.styles
+	}
 }
 
 func (m *Model) applyMRFilter() {

@@ -311,6 +311,57 @@ func (a *GitLabAdapter) fetchUserSourceREST(
 	return sourceResult{raw: active, errs: errs}
 }
 
+// FetchMR implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error) {
+	mr, err := a.client.GetMR(ctx, projectID, mrIID)
+	if err != nil {
+		return domain.MergeRequest{}, err
+	}
+	return a.enrichMR(ctx, mr)
+}
+
+// GetProjectMembers implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error) {
+	const developerLevel = 40
+	members, err := a.client.GetProjectMembers(ctx, projectID, developerLevel)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.ProjectMember, len(members))
+	for i, m := range members {
+		result[i] = domain.ProjectMember{
+			UserID:   m.ID,
+			Username: m.Username,
+			Name:     m.Name,
+		}
+	}
+	return result, nil
+}
+
+// SaveApprovers implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error {
+	rules, err := a.client.GetMRApprovalRules(ctx, projectID, mrIID)
+	if err != nil {
+		return err
+	}
+	required := 1
+	if len(userIDs) == 0 {
+		required = 0
+	}
+	payload := pkggitlab.MRApprovalRulePayload{
+		Name:              approversRuleName,
+		ApprovalsRequired: required,
+		UserIDs:           userIDs,
+	}
+	for _, r := range rules {
+		if r.Name == approversRuleName {
+			return a.client.UpdateMRApprovalRule(ctx, projectID, mrIID, r.ID, payload)
+		}
+	}
+	_, err = a.client.CreateMRApprovalRule(ctx, projectID, mrIID, payload)
+	return err
+}
+
 func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) (domain.MergeRequest, error) {
 	if mr.Draft {
 		discussions, err := a.client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)

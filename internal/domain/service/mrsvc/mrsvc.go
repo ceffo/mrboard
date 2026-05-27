@@ -17,6 +17,16 @@ type MergeRequestSource interface {
 
 	// GetDetail fetches the description and discussion threads for a single MR.
 	GetDetail(ctx context.Context, projectID, mrIID int64) (description string, threads []domain.Thread, err error)
+
+	// FetchMR fetches a single MR by project ID and MR IID.
+	FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error)
+
+	// GetProjectMembers returns all project members with Developer (40) or higher access.
+	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
+
+	// SaveApprovers writes the "Approvers" approval rule with the given user IDs.
+	// Creates the rule if it doesn't exist; updates it if it does.
+	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.

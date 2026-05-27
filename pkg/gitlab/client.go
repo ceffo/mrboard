@@ -258,6 +258,21 @@ func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*g
 	return approvals, nil
 }
 
+// GetMR returns a single MR as a BasicMergeRequest, fetched by project ID and IID.
+func (c *Client) GetMR(ctx context.Context, projectID, mrIID int64) (*gl.BasicMergeRequest, error) {
+	iids := []int64{mrIID}
+	mrs, _, err := c.gl.MergeRequests.ListProjectMergeRequests(projectID, &gl.ListProjectMergeRequestsOptions{
+		IIDs: &iids,
+	}, gl.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: get MR project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	if len(mrs) == 0 {
+		return nil, fmt.Errorf("gitlab: MR !%d not found in project %d", mrIID, projectID)
+	}
+	return mrs[0], nil
+}
+
 // GetMRDescription fetches the description of a single MR.
 func (c *Client) GetMRDescription(ctx context.Context, projectID, mrIID int64) (string, error) {
 	start := time.Now()

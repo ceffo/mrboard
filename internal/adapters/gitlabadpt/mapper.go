@@ -11,9 +11,14 @@ import (
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 )
 
-// reReviewPrefix is the system note body prefix GitLab emits when an author
-// re-requests review from a specific reviewer.
-const reReviewPrefix = "requested review from @"
+const (
+	// approversRuleName is the canonical name of the GitLab MR approval rule managed by mrboard.
+	approversRuleName = "Approvers"
+
+	// reReviewPrefix is the system note body prefix GitLab emits when an author
+	// re-requests review from a specific reviewer.
+	reReviewPrefix = "requested review from @"
+)
 
 // detailedMergeStatusMergeable is the GitLab detailed_merge_status value that means the MR can be merged.
 const detailedMergeStatusMergeable = "mergeable"
@@ -321,7 +326,7 @@ func deriveState(approved bool, lastComment, lastReReview time.Time) domain.Revi
 // approverSetFromRESTRules extracts eligible approver usernames from the "Approvers" rule.
 func approverSetFromRESTRules(rules []*gl.MergeRequestApprovalRule) map[string]bool {
 	for _, r := range rules {
-		if r.Name == "Approvers" {
+		if r.Name == approversRuleName {
 			set := make(map[string]bool, len(r.EligibleApprovers))
 			for _, u := range r.EligibleApprovers {
 				set[u.Username] = true
@@ -335,7 +340,7 @@ func approverSetFromRESTRules(rules []*gl.MergeRequestApprovalRule) map[string]b
 // approverSetFromGQLRules extracts eligible approver usernames from the GQL "Approvers" rule.
 func approverSetFromGQLRules(rules []pkggitlab.GQLApprovalRule) map[string]bool {
 	for _, r := range rules {
-		if r.Name == "Approvers" {
+		if r.Name == approversRuleName {
 			set := make(map[string]bool, len(r.EligibleApprovers))
 			for _, u := range r.EligibleApprovers {
 				set[u.Username] = true

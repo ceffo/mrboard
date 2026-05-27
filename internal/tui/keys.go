@@ -16,6 +16,7 @@ type KeyMap struct {
 	ToggleView  key.Binding
 	Filter      key.Binding
 	Theme       key.Binding
+	Approvers   key.Binding
 	Quit        key.Binding
 }
 
@@ -23,7 +24,7 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Theme, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Theme, k.Approvers, k.Quit,
 	}
 }
 
@@ -62,6 +63,7 @@ var DefaultKeyMap = KeyMap{
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Filter:      key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 	Theme:       key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
+	Approvers:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approvers")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }
 
@@ -119,6 +121,36 @@ var DefaultThemePickerKeyMap = ThemePickerKeyMap{
 	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev pane")),
 	Confirm:   key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("↵/space", "select")),
 	Close:     key.NewBinding(key.WithKeys("t", "esc"), key.WithHelp("t/esc", "close")),
+}
+
+// ApproverEditorKeyMap holds keybindings for the approver editor overlay.
+type ApproverEditorKeyMap struct {
+	Up        key.Binding
+	Down      key.Binding
+	Toggle    key.Binding
+	FocusNext key.Binding
+	FocusPrev key.Binding
+	Confirm   key.Binding
+	Close     key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k ApproverEditorKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.FocusNext, k.Confirm, k.Close}
+}
+
+// FullHelp implements help.KeyMap.
+func (k ApproverEditorKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// DefaultApproverEditorKeyMap is the default keybinding set for the approver editor overlay.
+var DefaultApproverEditorKeyMap = ApproverEditorKeyMap{
+	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Toggle:    key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+	FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "all members")),
+	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "reviewers")),
+	Confirm:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "save")),
+	Close:     key.NewBinding(key.WithKeys("a", "esc"), key.WithHelp("a/esc", "close")),
 }
 
 // DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.
