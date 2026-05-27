@@ -143,6 +143,9 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 
 // GetDetail implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) GetDetail(ctx context.Context, projectID, mrIID int64) (string, []domain.Thread, error) {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: get detail", "project_id", projectID, "mr_iid", mrIID)
 	desc, err := a.client.GetMRDescription(ctx, projectID, mrIID)
 	if err != nil {
 		return "", nil, fmt.Errorf("get detail project=%d MR=%d description: %w", projectID, mrIID, err)
@@ -152,6 +155,8 @@ func (a *GitLabAdapter) GetDetail(ctx context.Context, projectID, mrIID int64) (
 		return desc, nil, fmt.Errorf("get detail project=%d MR=%d discussions: %w", projectID, mrIID, err)
 	}
 	threads := MapDiscussionsToThreads(discussions)
+	logger.Info("gitlab: get detail done", "project_id", projectID, "mr_iid", mrIID,
+		"threads", len(threads), "duration", ilog.FmtDur(time.Since(start)))
 	return desc, threads, nil
 }
 
@@ -313,15 +318,27 @@ func (a *GitLabAdapter) fetchUserSourceREST(
 
 // FetchMR implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error) {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: fetch MR", "project_id", projectID, "mr_iid", mrIID)
 	mr, err := a.client.GetMR(ctx, projectID, mrIID)
 	if err != nil {
 		return domain.MergeRequest{}, err
 	}
-	return a.enrichMR(ctx, mr)
+	result, err := a.enrichMR(ctx, mr)
+	if err != nil {
+		return domain.MergeRequest{}, err
+	}
+	logger.Info("gitlab: fetch MR done", "project_id", projectID, "mr_iid", mrIID,
+		"duration", ilog.FmtDur(time.Since(start)))
+	return result, nil
 }
 
 // GetProjectMembers implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error) {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: get project members", "project_id", projectID)
 	const developerLevel = 40
 	members, err := a.client.GetProjectMembers(ctx, projectID, developerLevel)
 	if err != nil {
@@ -335,11 +352,17 @@ func (a *GitLabAdapter) GetProjectMembers(ctx context.Context, projectID int64) 
 			Name:     m.Name,
 		}
 	}
+	logger.Info("gitlab: get project members done", "project_id", projectID,
+		"members", len(result), "duration", ilog.FmtDur(time.Since(start)))
 	return result, nil
 }
 
 // SaveApprovers implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: save approvers", "project_id", projectID, "mr_iid", mrIID,
+		"user_ids", userIDs, "required", len(userIDs))
 	rules, err := a.client.GetMRApprovalRules(ctx, projectID, mrIID)
 	if err != nil {
 		return err
@@ -352,11 +375,22 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 	}
 	for _, r := range rules {
 		if r.Name == approversRuleName {
-			return a.client.UpdateMRApprovalRule(ctx, projectID, mrIID, r.ID, payload)
+			err = a.client.UpdateMRApprovalRule(ctx, projectID, mrIID, r.ID, payload)
+			if err != nil {
+				return err
+			}
+			logger.Info("gitlab: approval rule updated", "project_id", projectID, "mr_iid", mrIID,
+				"rule_id", r.ID, "required", required, "duration", ilog.FmtDur(time.Since(start)))
+			return nil
 		}
 	}
 	_, err = a.client.CreateMRApprovalRule(ctx, projectID, mrIID, payload)
-	return err
+	if err != nil {
+		return err
+	}
+	logger.Info("gitlab: approval rule created", "project_id", projectID, "mr_iid", mrIID,
+		"required", required, "duration", ilog.FmtDur(time.Since(start)))
+	return nil
 }
 
 func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) (domain.MergeRequest, error) {
