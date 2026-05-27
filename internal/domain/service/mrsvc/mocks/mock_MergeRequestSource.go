@@ -254,6 +254,80 @@ func (_c *MockMergeRequestSource_GetDetail_Call) RunAndReturn(run func(ctx conte
 	return _c
 }
 
+// GetDiff provides a mock function for the type MockMergeRequestSource
+func (_mock *MockMergeRequestSource) GetDiff(ctx context.Context, projectID int64, mrIID int64) ([]domain.FileDiff, error) {
+	ret := _mock.Called(ctx, projectID, mrIID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDiff")
+	}
+
+	var r0 []domain.FileDiff
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) ([]domain.FileDiff, error)); ok {
+		return returnFunc(ctx, projectID, mrIID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) []domain.FileDiff); ok {
+		r0 = returnFunc(ctx, projectID, mrIID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.FileDiff)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64, int64) error); ok {
+		r1 = returnFunc(ctx, projectID, mrIID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockMergeRequestSource_GetDiff_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDiff'
+type MockMergeRequestSource_GetDiff_Call struct {
+	*mock.Call
+}
+
+// GetDiff is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID int64
+//   - mrIID int64
+func (_e *MockMergeRequestSource_Expecter) GetDiff(ctx interface{}, projectID interface{}, mrIID interface{}) *MockMergeRequestSource_GetDiff_Call {
+	return &MockMergeRequestSource_GetDiff_Call{Call: _e.mock.On("GetDiff", ctx, projectID, mrIID)}
+}
+
+func (_c *MockMergeRequestSource_GetDiff_Call) Run(run func(ctx context.Context, projectID int64, mrIID int64)) *MockMergeRequestSource_GetDiff_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMergeRequestSource_GetDiff_Call) Return(fileDiffs []domain.FileDiff, err error) *MockMergeRequestSource_GetDiff_Call {
+	_c.Call.Return(fileDiffs, err)
+	return _c
+}
+
+func (_c *MockMergeRequestSource_GetDiff_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64) ([]domain.FileDiff, error)) *MockMergeRequestSource_GetDiff_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetProjectMembers provides a mock function for the type MockMergeRequestSource
 func (_mock *MockMergeRequestSource) GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error) {
 	ret := _mock.Called(ctx, projectID)

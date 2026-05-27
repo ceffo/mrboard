@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -447,4 +448,45 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 	}
 
 	return MapMR(mr, dr.discussions, ar.approvals, rr.rules), nil
+}
+
+// GetDiff implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) ([]domain.FileDiff, error) {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: get MR diff", "project_id", projectID, "mr_iid", mrIID)
+	raw, err := a.client.GetMRDiffs(ctx, projectID, mrIID)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]domain.FileDiff, 0, len(raw))
+	for _, d := range raw {
+		added, removed := countDiffLines(d.Diff)
+		files = append(files, domain.FileDiff{
+			OldPath:      d.OldPath,
+			NewPath:      d.NewPath,
+			NewFile:      d.NewFile,
+			DeletedFile:  d.DeletedFile,
+			RenamedFile:  d.RenamedFile,
+			TooLarge:     d.TooLarge,
+			Diff:         d.Diff,
+			LinesAdded:   added,
+			LinesRemoved: removed,
+		})
+	}
+	logger.Info("gitlab: get MR diff done", "project_id", projectID, "mr_iid", mrIID,
+		"files", len(files), "duration", ilog.FmtDur(time.Since(start)))
+	return files, nil
+}
+
+// countDiffLines counts added and removed lines in a unified diff string.
+func countDiffLines(diff string) (added, removed int) {
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return added, removed
 }

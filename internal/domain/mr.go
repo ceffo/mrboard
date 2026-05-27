@@ -98,6 +98,19 @@ type ReviewerInfo struct {
 	IsApprover   bool      // member of the "Approvers" approval rule
 }
 
+// FileDiff holds the diff for a single file in an MR.
+type FileDiff struct {
+	OldPath      string
+	NewPath      string
+	NewFile      bool
+	DeletedFile  bool
+	RenamedFile  bool
+	TooLarge     bool
+	Diff         string // raw unified diff text
+	LinesAdded   int
+	LinesRemoved int
+}
+
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
 	ID          int

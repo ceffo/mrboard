@@ -56,9 +56,16 @@ type Styles struct {
 	ReviewerName                lip.Style
 	ApproverName                lip.Style
 	PillBracket                 lip.Style
-	CardFocusedBg               lip.Style     // background-only style for filling focused card spaces
-	CardTitleMergeable          lip.Style     // card title when MR is in Approved column and GitLab says mergeable
-	CardTitleBlocked            lip.Style     // card title when MR is in Approved column but GitLab blocks merge
+	CardFocusedBg               lip.Style // background-only style for filling focused card spaces
+	CardTitleMergeable          lip.Style // card title when MR is in Approved column and GitLab says mergeable
+	CardTitleBlocked            lip.Style // card title when MR is in Approved column but GitLab blocks merge
+	DiffAdded                   lip.Style
+	DiffRemoved                 lip.Style
+	DiffHunkHeader              lip.Style
+	DiffFileHeader              lip.Style
+	DiffFileSelected            lip.Style
+	DiffFileItem                lip.Style
+	DiffSeparator               lip.Style
 	LifetimeWarn                time.Duration // open-duration warning threshold
 	LifetimeError               time.Duration // open-duration error threshold
 }
@@ -142,6 +149,13 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		CardFocusedBg:       lip.NewStyle().Background(c(BgElevated)),
 		CardTitleMergeable:  lip.NewStyle().Bold(true).Foreground(c(Success)),
 		CardTitleBlocked:    lip.NewStyle().Bold(true).Foreground(c(Danger)),
+		DiffAdded:           lip.NewStyle().Foreground(c(Success)),
+		DiffRemoved:         lip.NewStyle().Foreground(c(Danger)),
+		DiffHunkHeader:      lip.NewStyle().Foreground(c(Info)).Bold(true),
+		DiffFileHeader:      lip.NewStyle().Foreground(c(FgMedium)).Bold(true),
+		DiffFileSelected:    lip.NewStyle().Foreground(c(FgHigh)).Background(c(BgElevated)).Bold(true),
+		DiffFileItem:        lip.NewStyle().Foreground(c(FgMedium)),
+		DiffSeparator:       lip.NewStyle().Foreground(c(Border)),
 		LifetimeWarn:        3 * 24 * time.Hour,
 		LifetimeError:       5 * 24 * time.Hour,
 	}

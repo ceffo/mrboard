@@ -17,6 +17,7 @@ type KeyMap struct {
 	Filter      key.Binding
 	Theme       key.Binding
 	Approvers   key.Binding
+	Diff        key.Binding
 	Quit        key.Binding
 }
 
@@ -24,7 +25,7 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Theme, k.Approvers, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Theme, k.Approvers, k.Diff, k.Quit,
 	}
 }
 
@@ -64,6 +65,7 @@ var DefaultKeyMap = KeyMap{
 	Filter:      key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 	Theme:       key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 	Approvers:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approvers")),
+	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }
 
@@ -160,4 +162,46 @@ var DefaultDetailKeyMap = DetailKeyMap{
 	Close:      key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Open:       key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
 	Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+}
+
+// DiffViewKeyMap holds keybindings for the diff view.
+type DiffViewKeyMap struct {
+	PrevFile     key.Binding
+	NextFile     key.Binding
+	ScrollUp     key.Binding
+	ScrollDown   key.Binding
+	HalfPageUp   key.Binding
+	HalfPageDown key.Binding
+	Top          key.Binding
+	Bottom       key.Binding
+	Open         key.Binding
+	Close        key.Binding
+	Quit         key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k DiffViewKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		k.PrevFile, k.NextFile, k.ScrollUp, k.ScrollDown,
+		k.HalfPageUp, k.HalfPageDown, k.Top, k.Bottom,
+		k.Open, k.Close, k.Quit,
+	}
+}
+
+// FullHelp implements help.KeyMap.
+func (k DiffViewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// DefaultDiffViewKeyMap is the default keybinding set for the diff view.
+var DefaultDiffViewKeyMap = DiffViewKeyMap{
+	PrevFile:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prev file")),
+	NextFile:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next file")),
+	ScrollUp:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "scroll up")),
+	ScrollDown:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "scroll down")),
+	HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("^u", "½ page up")),
+	HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("^d", "½ page down")),
+	Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
+	Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
+	Open:         key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
+	Close:        key.NewBinding(key.WithKeys("d", "esc"), key.WithHelp("d/esc", "close")),
+	Quit:         key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }

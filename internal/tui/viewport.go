@@ -48,3 +48,32 @@ func (v scrollViewport) hasAbove() bool { return v.offset > 0 }
 func (v scrollViewport) hasBelow(total, visible int) bool {
 	return v.clampedOffset(total, visible)+visible < total
 }
+
+func (v *scrollViewport) scrollHalfPageUp(half int) {
+	if v.offset > half {
+		v.offset -= half
+	} else {
+		v.offset = 0
+	}
+}
+
+func (v *scrollViewport) scrollHalfPageDown(total, visible, half int) {
+	maxOff := total - visible
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	v.offset += half
+	if v.offset > maxOff {
+		v.offset = maxOff
+	}
+}
+
+func (v *scrollViewport) scrollToTop() { v.offset = 0 }
+
+func (v *scrollViewport) scrollToBottom(total, visible int) {
+	maxOff := total - visible
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	v.offset = maxOff
+}

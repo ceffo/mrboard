@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"runtime"
@@ -139,6 +140,14 @@ type DetailFetchResultMsg struct {
 	Err         error
 }
 
+// DiffFetchResultMsg carries the diff files for a single MR.
+type DiffFetchResultMsg struct {
+	ProjectID int
+	MRIID     int
+	Files     []domain.FileDiff
+	Err       error
+}
+
 // Options are session-scoped overrides passed via CLI flags.
 // They are not persisted to the state file.
 type Options struct {
@@ -161,6 +170,9 @@ type Model struct {
 	showThemePicker    bool
 	approverEditor     *approverEditorWidget
 	showApproverEditor bool
+	diffView           diffViewWidget
+	diffViewKeys       DiffViewKeyMap
+	showDiffView       bool
 	keys               KeyMap
 	detailKeys         DetailKeyMap
 	filterKeys         FilterPopupKeyMap
@@ -266,6 +278,8 @@ func New(
 		filterKeys:         DefaultFilterPopupKeyMap,
 		themePickerKeys:    DefaultThemePickerKeyMap,
 		approverEditorKeys: DefaultApproverEditorKeyMap,
+		diffViewKeys:       DefaultDiffViewKeyMap,
+		diffView:           newDiffViewWidget(styles),
 		styles:             styles,
 		theme:              th,
 		themeName:          themeName,
@@ -373,6 +387,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case DiffFetchResultMsg:
+		return m.handleDiffFetchResult(msg)
+
 	case FilterAppliedMsg:
 		m.filter = msg.Criteria
 		m.applyMRFilter()
@@ -454,6 +471,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showDiffView {
+		return m.handleKeyDiff(msg)
+	}
+
 	if m.showDetail {
 		return m.handleKeyDetail(msg)
 	}
@@ -473,6 +494,40 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.board.FocusedMR(); mr != nil {
 			return m, openBrowser(mr.WebURL)
+		}
+	case key.Matches(msg, m.keys.Diff):
+		if mr := m.board.FocusedMR(); mr != nil {
+			m.openDiffView(mr)
+			return m, m.fetchDiffCmd(mr)
+		}
+	}
+	return m, nil
+}
+
+// handleKeyDiff handles keys while the diff view owns focus.
+func (m Model) handleKeyDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.diffViewKeys.Close):
+		m.closeDiffView()
+	case key.Matches(msg, m.diffViewKeys.PrevFile):
+		m.diffView.PrevFile()
+	case key.Matches(msg, m.diffViewKeys.NextFile):
+		m.diffView.NextFile()
+	case key.Matches(msg, m.diffViewKeys.ScrollUp):
+		m.diffView.ScrollUp()
+	case key.Matches(msg, m.diffViewKeys.ScrollDown):
+		m.diffView.ScrollDown()
+	case key.Matches(msg, m.diffViewKeys.HalfPageUp):
+		m.diffView.HalfPageUp()
+	case key.Matches(msg, m.diffViewKeys.HalfPageDown):
+		m.diffView.HalfPageDown()
+	case key.Matches(msg, m.diffViewKeys.Top):
+		m.diffView.ScrollToTop()
+	case key.Matches(msg, m.diffViewKeys.Bottom):
+		m.diffView.ScrollToBottom()
+	case key.Matches(msg, m.diffViewKeys.Open):
+		if m.diffView.mr != nil {
+			return m, openBrowser(m.diffView.mr.WebURL)
 		}
 	}
 	return m, nil
@@ -544,6 +599,11 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showApproverEditor = true
 			return m, nil
 		}
+	case key.Matches(msg, m.keys.Diff):
+		if mr := m.board.FocusedMR(); mr != nil {
+			m.openDiffView(mr)
+			return m, m.fetchDiffCmd(mr)
+		}
 	}
 	return m, nil
 }
@@ -561,6 +621,54 @@ func (m *Model) closeDetail() {
 	m.board.SetActive(true)
 	m.footer.SetKeyMap(m.keys)
 	m.resizeBoard()
+}
+
+func (m *Model) openDiffView(mr *domain.MergeRequest) {
+	m.showDiffView = true
+	m.diffView.SetMR(mr)
+	bodyH := m.height - chromeHeight
+	m.diffView.SetSize(m.width, bodyH)
+	m.header.SetTitle(fmt.Sprintf("diff !%d – %s", mr.IID, mr.Title))
+	m.header.SetStats("loading…")
+	m.footer.SetKeyMap(m.diffViewKeys)
+}
+
+func (m *Model) closeDiffView() {
+	m.showDiffView = false
+	m.header.SetTitle("mrboard")
+	m.header.SetStats("")
+	if m.showDetail {
+		m.footer.SetKeyMap(m.detailKeys)
+	} else {
+		m.footer.SetKeyMap(m.keys)
+	}
+}
+
+func (m Model) fetchDiffCmd(mr *domain.MergeRequest) tea.Cmd {
+	src := m.src
+	base := m.baseCtx
+	projectID := int64(mr.ProjectID)
+	mrIID := int64(mr.IID)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+		files, err := src.GetDiff(ctx, projectID, mrIID)
+		return DiffFetchResultMsg{
+			ProjectID: int(projectID),
+			MRIID:     int(mrIID),
+			Files:     files,
+			Err:       err,
+		}
+	}
+}
+
+func (m Model) renderDiffScreen() string {
+	headerStr := m.header.render()
+	footerStr := m.footer.render()
+	bodyH := m.height - chromeHeight
+	m.diffView.SetSize(m.width, bodyH)
+	body := m.diffView.render()
+	return headerStr + "\n" + body + "\n" + footerStr
 }
 
 func (m *Model) openThemePicker() {
@@ -581,6 +689,9 @@ func (m *Model) resizeBoard() {
 		m.detail.SetSize(detailW, m.height-chromeHeight)
 	} else {
 		m.board.SetSize(m.width, m.height-chromeHeight)
+	}
+	if m.showDiffView {
+		m.diffView.SetSize(m.width, m.height-chromeHeight)
 	}
 }
 
@@ -622,6 +733,9 @@ func (m Model) renderContent() string {
 		return lip.Place(m.width, m.height, lip.Center, lip.Center, body)
 
 	case stateBoard:
+		if m.showDiffView {
+			return m.renderDiffScreen()
+		}
 		board := m.renderBoard()
 		if m.isRefreshing {
 			overlay := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
@@ -715,6 +829,21 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
+// handleDiffFetchResult handles DiffFetchResultMsg: populates the diff view with fetched file diffs.
+func (m Model) handleDiffFetchResult(msg DiffFetchResultMsg) (tea.Model, tea.Cmd) {
+	if m.showDiffView && m.diffView.mr != nil &&
+		m.diffView.mr.ProjectID == msg.ProjectID && m.diffView.mr.IID == msg.MRIID {
+		if msg.Err == nil {
+			m.diffView.SetDiff(msg.Files)
+			added, removed := diffStats(msg.Files)
+			m.header.SetStats(fmt.Sprintf("%d files  +%d -%d", len(msg.Files), added, removed))
+		} else {
+			m.diffView.loading = false
+		}
+	}
+	return m, nil
+}
+
 // handleThemeChanged handles ThemeChangedMsg: updates theme state and propagates styles.
 func (m Model) handleThemeChanged(msg ThemeChangedMsg) (tea.Model, tea.Cmd) {
 	m.themeName = msg.Name
@@ -746,6 +875,7 @@ func (m *Model) applyTheme() {
 	m.board.SetStyles(m.styles)
 	m.footer.SetStyles(m.styles)
 	m.detail.SetStyles(m.styles)
+	m.diffView.SetStyles(m.styles)
 	m.filterPopup.styles = m.styles
 	m.themePicker.styles = m.styles
 	if m.approverEditor != nil {

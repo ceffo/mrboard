@@ -27,6 +27,9 @@ type MergeRequestSource interface {
 	// SaveApprovers writes the "Approvers" approval rule with the given user IDs.
 	// Creates the rule if it doesn't exist; updates it if it does.
 	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+
+	// GetDiff fetches the per-file diffs for a single MR.
+	GetDiff(ctx context.Context, projectID, mrIID int64) ([]domain.FileDiff, error)
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.

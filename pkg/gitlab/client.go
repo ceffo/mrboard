@@ -320,6 +320,24 @@ func (c *Client) ListNonArchivedProjectIDs(ctx context.Context, groupID string) 
 	return ids, nil
 }
 
+// GetMRDiffs fetches all file diffs for an MR, requesting unified diff format.
+func (c *Client) GetMRDiffs(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestDiff, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get MR diffs", "project_id", projectID, "mr_iid", mrIID)
+	unidiff := true
+	diffs, _, err := c.gl.MergeRequests.ListMergeRequestDiffs(projectID, mrIID,
+		&gl.ListMergeRequestDiffsOptions{Unidiff: &unidiff},
+		gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: get MR diffs error", "project_id", projectID, "mr_iid", mrIID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return nil, fmt.Errorf("gitlab: get MR diffs project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Info("gitlab: got MR diffs", "project_id", projectID, "mr_iid", mrIID,
+		"files", len(diffs), "duration", ilog.FmtDur(time.Since(start)))
+	return diffs, nil
+}
+
 // IsProjectArchived reports whether the given project is archived. Results are cached.
 // Safe for concurrent use.
 func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, error) {

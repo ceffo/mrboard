@@ -11,11 +11,12 @@ import (
 )
 
 type headerWidget struct {
-	styles       Styles
-	mrs          []domain.MergeRequest
-	width        int
-	title        string
-	filterActive bool
+	styles        Styles
+	mrs           []domain.MergeRequest
+	width         int
+	title         string
+	filterActive  bool
+	statsOverride string
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -27,6 +28,7 @@ func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetFilterActive(v bool)           { h.filterActive = v }
+func (h *headerWidget) SetStats(s string)                { h.statsOverride = s }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
 func (h headerWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return h, nil }
@@ -35,7 +37,11 @@ func (h headerWidget) View() tea.View                        { return tea.NewVie
 func (h headerWidget) render() string {
 	bg := h.styles.Header
 	title := h.styles.HeaderTitle.Inherit(bg).Render(h.title)
-	stats := h.styles.HeaderStats.Inherit(bg).Render(fmt.Sprintf("Total:%d", len(h.mrs)))
+	statsStr := fmt.Sprintf("Total:%d", len(h.mrs))
+	if h.statsOverride != "" {
+		statsStr = h.statsOverride
+	}
+	stats := h.styles.HeaderStats.Inherit(bg).Render(statsStr)
 	if h.filterActive {
 		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[filtered]")
 	}
