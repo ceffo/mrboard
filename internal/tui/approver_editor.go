@@ -24,6 +24,9 @@ type ApproversSavedMsg struct {
 	Err error
 }
 
+// ApproverEditorClosedMsg is sent when the editor is dismissed without saving.
+type ApproverEditorClosedMsg struct{}
+
 const (
 	approverEditorSectionReviewers = 0
 	approverEditorSectionMembers   = 1
@@ -99,7 +102,7 @@ func (w *approverEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //noli
 
 	switch {
 	case key.Matches(kMsg, w.keys.Close):
-		return w, func() tea.Msg { return ApproversSavedMsg{Err: nil, MR: w.mr} }
+		return w, func() tea.Msg { return ApproverEditorClosedMsg{} }
 
 	case key.Matches(kMsg, w.keys.FocusNext):
 		w.section = (w.section + 1) % approverEditorNumSections
@@ -177,29 +180,6 @@ func (w *approverEditorWidget) toggleCurrent() {
 	w.selected[username] = !w.selected[username]
 }
 
-// selectedUserIDs returns the GitLab user IDs for all selected usernames.
-// For reviewers not yet in the members list, their IDs are sourced from
-// the userIDByName map (populated lazily). Reviewers without a known ID
-// are silently skipped (they'd need the members list to be resolved).
-func (w *approverEditorWidget) selectedUserIDs() []int64 {
-	var ids []int64
-	seen := make(map[int64]bool)
-	for username, checked := range w.selected {
-		if !checked {
-			continue
-		}
-		id, ok := w.userIDByName[username]
-		if !ok {
-			continue
-		}
-		if !seen[id] {
-			ids = append(ids, id)
-			seen[id] = true
-		}
-	}
-	return ids
-}
-
 func (w *approverEditorWidget) fetchMembersCmd() tea.Cmd {
 	src := w.src
 	projectID := int64(w.mr.ProjectID)
@@ -215,10 +195,52 @@ func (w *approverEditorWidget) saveCmd() tea.Cmd {
 	src := w.src
 	projectID := int64(w.mr.ProjectID)
 	mrIID := int64(w.mr.IID)
-	userIDs := w.selectedUserIDs()
+
+	// Snapshot selection and the current ID map at call time.
+	selectedUsernames := make([]string, 0, len(w.selected))
+	for u, ok := range w.selected {
+		if ok {
+			selectedUsernames = append(selectedUsernames, u)
+		}
+	}
+	knownIDs := make(map[string]int64, len(w.userIDByName))
+	for k, v := range w.userIDByName {
+		knownIDs[k] = v
+	}
+
 	ctx, cancel := context.WithTimeout(w.baseCtx, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
+
+		// If any selected username has no known GitLab user ID (because the user
+		// never opened the "All Members" tab), fetch members now to resolve them.
+		needsFetch := false
+		for _, u := range selectedUsernames {
+			if _, ok := knownIDs[u]; !ok {
+				needsFetch = true
+				break
+			}
+		}
+		if needsFetch {
+			members, err := src.GetProjectMembers(ctx, projectID)
+			if err != nil {
+				return ApproversSavedMsg{Err: fmt.Errorf("resolve user IDs: %w", err)}
+			}
+			for _, m := range members {
+				knownIDs[m.Username] = m.UserID
+			}
+		}
+
+		// Build deduplicated user ID slice.
+		seen := make(map[int64]bool)
+		var userIDs []int64
+		for _, u := range selectedUsernames {
+			if id, ok := knownIDs[u]; ok && !seen[id] {
+				userIDs = append(userIDs, id)
+				seen[id] = true
+			}
+		}
+
 		if err := src.SaveApprovers(ctx, projectID, mrIID, userIDs); err != nil {
 			return ApproversSavedMsg{Err: err}
 		}

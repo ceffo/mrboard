@@ -388,6 +388,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ApproverEditorClosedMsg:
+		m.showApproverEditor = false
+		return m, nil
+
 	case ApproversSavedMsg:
 		return m.handleApproversSaved(msg)
 
