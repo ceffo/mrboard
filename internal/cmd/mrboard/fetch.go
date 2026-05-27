@@ -55,16 +55,16 @@ func printJSON(mrs []domain.MergeRequest) error {
 }
 
 type mrJSON struct {
-	ID               int            `json:"id"`
-	Title            string         `json:"title"`
-	WebURL           string         `json:"web_url"`
-	Phase            string         `json:"phase"`
-	Author           string         `json:"author"`
-	ReviewerStates   []reviewerJSON `json:"reviewer_states"`
-	ApprovalsRequired int           `json:"approvals_required,omitempty"`
-	TimeInPhase      string         `json:"time_in_phase"`
-	TimeOpen         string         `json:"time_open"`
-	RoundTrips       int            `json:"round_trips"`
+	ID                int            `json:"id"`
+	Title             string         `json:"title"`
+	WebURL            string         `json:"web_url"`
+	Phase             string         `json:"phase"`
+	Author            string         `json:"author"`
+	ReviewerStates    []reviewerJSON `json:"reviewer_states"`
+	ApprovalsRequired int            `json:"approvals_required,omitempty"`
+	TimeInPhase       string         `json:"time_in_phase"`
+	TimeOpen          string         `json:"time_open"`
+	RoundTrips        int            `json:"round_trips"`
 }
 
 type reviewerJSON struct {

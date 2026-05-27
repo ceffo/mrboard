@@ -505,8 +505,9 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		RoundTripCount: countRoundTripsFromEvents(events),
 	}
 
-	domainMR.DetailedMergeStatus = mr.DetailedMergeStatus
-	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
+	domainMR.DetailedMergeStatus = strings.ToLower(mr.DetailedMergeStatus)
+	isMergeable := domainMR.DetailedMergeStatus == detailedMergeStatusMergeable
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, isMergeable, reviewers)
 
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:

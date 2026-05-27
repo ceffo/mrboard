@@ -7,6 +7,7 @@ import (
 	gl "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -411,6 +412,25 @@ func TestMapMR_DetailedMergeStatus_Stored_NonMergeable(t *testing.T) {
 	result := MapMR(m, nil, approvals(), nil)
 	if result.DetailedMergeStatus != "ci_must_pass" {
 		t.Errorf("want DetailedMergeStatus=ci_must_pass stored, got %q", result.DetailedMergeStatus)
+	}
+}
+
+func TestMapMRFromGraphQL_DetailedMergeStatus_NormalizedToLowercase(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.DetailedMergeStatus = "MERGEABLE"
+	result := MapMRFromGraphQL(mr)
+	if result.DetailedMergeStatus != "mergeable" {
+		t.Errorf("want DetailedMergeStatus normalized to %q, got %q", "mergeable", result.DetailedMergeStatus)
+	}
+}
+
+func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.DetailedMergeStatus = "CI_MUST_PASS"
+	result := MapMRFromGraphQL(mr)
+	const wantStatus = "ci_must_pass"
+	if result.DetailedMergeStatus != wantStatus {
+		t.Errorf("want DetailedMergeStatus normalized to %q, got %q", wantStatus, result.DetailedMergeStatus)
 	}
 }
 
