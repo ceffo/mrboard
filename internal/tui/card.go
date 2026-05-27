@@ -19,6 +19,8 @@ const (
 	cardBorderAndPad = 4 // 1 border + 1 padding on each side
 	minInnerWidth    = 8
 	minEllipsisWidth = 3
+
+	detailedMergeStatusMergeable = "mergeable"
 )
 
 type cardWidget struct {
@@ -85,12 +87,13 @@ func (c cardWidget) render() string {
 	rawLines := []string{c.renderLine1(authorLabel, openDur, innerWidth)}
 	rawLines = append(rawLines, "") // blank line before title
 	titleWidth := max(innerWidth-1, 0)
+	titleStyle := c.titleStyle()
 	for _, tl := range wrapTitleLines(c.mr.Title, titleWidth) {
 		tl = " " + tl
 		if w := lip.Width(tl); w < innerWidth {
 			tl += strings.Repeat(" ", innerWidth-w)
 		}
-		rendered := c.styles.CardTitle.Render(tl)
+		rendered := titleStyle.Render(tl)
 		if c.focused && !c.focusInactive {
 			rendered = c.styles.CardFocusedBg.Render(rendered)
 		}
@@ -153,6 +156,19 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 		pad = 0
 	}
 	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
+}
+
+// titleStyle returns the appropriate style for the card title.
+// Cards in the Approved column are colored green when GitLab says the MR is
+// mergeable, or red when something still blocks the merge.
+func (c cardWidget) titleStyle() lip.Style {
+	if c.mr.Phase == domain.PhaseReadyToMerge {
+		if c.mr.DetailedMergeStatus == detailedMergeStatusMergeable {
+			return c.styles.CardTitleMergeable
+		}
+		return c.styles.CardTitleBlocked
+	}
+	return c.styles.CardTitle
 }
 
 // durationStyle picks the appropriate style based on how old the MR is.
@@ -264,12 +280,6 @@ func (c cardWidget) wrapPills(now time.Time, width int) []string {
 				lines = append(lines, line)
 			}
 		}
-	}
-
-	required, given := approvalCounts(c.mr.Reviewers)
-	if required > 0 {
-		approvalLine := fmt.Sprintf("✓ %d/%d approvals", given, required)
-		lines = append(lines, c.styles.CardMeta.Render(approvalLine))
 	}
 
 	return lines

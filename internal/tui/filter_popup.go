@@ -23,7 +23,7 @@ const (
 	phaseLabelDraft    = "Draft"
 	phaseLabelReview   = "Needs Review"
 	phaseLabelAuthorAc = "Needs Author Action"
-	phaseLabelReady    = "Ready to Merge"
+	phaseLabelReady    = "Approved"
 
 	markerChecked   = "[x]"
 	markerUnchecked = "[ ]"

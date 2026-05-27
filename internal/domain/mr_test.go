@@ -12,26 +12,47 @@ func TestClassifyPhase_Draft(t *testing.T) {
 	}
 }
 
-func TestClassifyPhase_ReadyToMerge(t *testing.T) {
-	phase := ClassifyPhase(false, true, []ReviewerInfo{
-		{State: ReviewerApproved},
+func TestClassifyPhase_ReadyToMerge_AllApproversApproved(t *testing.T) {
+	phase := ClassifyPhase(false, false, []ReviewerInfo{
+		{IsApprover: true, State: ReviewerApproved},
+		{IsApprover: true, State: ReviewerApproved},
 	})
 	if phase != PhaseReadyToMerge {
-		t.Fatalf("expected PhaseReadyToMerge, got %d", phase)
+		t.Fatalf("expected PhaseReadyToMerge when all approvers approved, got %d", phase)
 	}
 }
 
-func TestClassifyPhase_ReadyToMerge_NoReviewers(t *testing.T) {
-	phase := ClassifyPhase(false, true, nil)
-	if phase != PhaseReadyToMerge {
-		t.Fatalf("expected PhaseReadyToMerge when mergeable=true and no reviewers, got %d", phase)
-	}
-}
-
-func TestClassifyPhase_NotReadyToMerge_WhenMergeableFalse(t *testing.T) {
-	phase := ClassifyPhase(false, false, nil)
+func TestClassifyPhase_NotReadyToMerge_OnlyPartialApprovals(t *testing.T) {
+	phase := ClassifyPhase(false, false, []ReviewerInfo{
+		{IsApprover: true, State: ReviewerApproved},
+		{IsApprover: true, State: ReviewerNotStarted},
+	})
 	if phase != PhaseNeedsReview {
-		t.Fatalf("expected PhaseNeedsReview when mergeable=false and no reviewers, got %d", phase)
+		t.Fatalf("expected PhaseNeedsReview when not all approvers approved, got %d", phase)
+	}
+}
+
+func TestClassifyPhase_NotReadyToMerge_NoApprovers(t *testing.T) {
+	phase := ClassifyPhase(false, false, []ReviewerInfo{
+		{IsApprover: false, State: ReviewerApproved},
+	})
+	if phase != PhaseNeedsReview {
+		t.Fatalf("expected PhaseNeedsReview when no designated approvers, got %d", phase)
+	}
+}
+
+func TestClassifyPhase_NotReadyToMerge_EmptyReviewers(t *testing.T) {
+	phase := ClassifyPhase(false, true, nil)
+	if phase != PhaseNeedsReview {
+		t.Fatalf("expected PhaseNeedsReview with no reviewers (no approvers), got %d", phase)
+	}
+}
+
+func TestClassifyPhase_MergeableIgnored_StillNeedsReview(t *testing.T) {
+	// mergeable=true no longer drives phase; without approvers it stays NeedsReview
+	phase := ClassifyPhase(false, true, nil)
+	if phase != PhaseNeedsReview {
+		t.Fatalf("expected PhaseNeedsReview when mergeable=true but no approvers, got %d", phase)
 	}
 }
 

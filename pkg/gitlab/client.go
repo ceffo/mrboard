@@ -128,7 +128,8 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 		discussions, resp, err := c.gl.Discussions.ListMergeRequestDiscussions(projectID, mrIID, opts, gl.WithContext(ctx))
 		if err != nil {
 			elapsed := time.Since(start)
-			c.logger.Error("gitlab: get discussions error", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
+			c.logger.Error("gitlab: get discussions error",
+				"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 			return nil, fmt.Errorf("gitlab: get discussions project=%d MR=%d: %w", projectID, mrIID, err)
 		}
 		all = append(all, discussions...)
@@ -258,7 +259,8 @@ func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*g
 	approvals, _, err := c.gl.MergeRequests.GetMergeRequestApprovals(projectID, mrIID, gl.WithContext(ctx))
 	if err != nil {
 		elapsed := time.Since(start)
-		c.logger.Error("gitlab: get approvals error", "project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
+		c.logger.Error("gitlab: get approvals error",
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
 		return nil, fmt.Errorf("gitlab: get approvals project=%d MR=%d: %w", projectID, mrIID, err)
 	}
 	elapsed := time.Since(start)

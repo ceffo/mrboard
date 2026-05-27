@@ -56,6 +56,8 @@ type Styles struct {
 	UsernameAtSign              lip.Style
 	ApproverName                lip.Style
 	CardFocusedBg               lip.Style     // background-only style for filling focused card spaces
+	CardTitleMergeable          lip.Style     // card title when MR is in Approved column and GitLab says mergeable
+	CardTitleBlocked            lip.Style     // card title when MR is in Approved column but GitLab blocks merge
 	LifetimeWarn                time.Duration // open-duration warning threshold
 	LifetimeError               time.Duration // open-duration error threshold
 }
@@ -136,6 +138,8 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		UsernameAtSign:      lip.NewStyle().Foreground(c(Accent)).Bold(true),
 		ApproverName:        lip.NewStyle().Foreground(c(ColorApprover)).Bold(true),
 		CardFocusedBg:       lip.NewStyle().Background(c(BgElevated)),
+		CardTitleMergeable:  lip.NewStyle().Bold(true).Foreground(c(Success)),
+		CardTitleBlocked:    lip.NewStyle().Bold(true).Foreground(c(Danger)),
 		LifetimeWarn:        3 * 24 * time.Hour,
 		LifetimeError:       5 * 24 * time.Hour,
 	}

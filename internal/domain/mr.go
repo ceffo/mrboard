@@ -110,8 +110,9 @@ type MergeRequest struct {
 	ProjectPath string // namespace/project without domain, e.g. "group/repo"
 	Description string
 
-	Phase     MRPhase
-	Reviewers []ReviewerInfo
+	Phase               MRPhase
+	DetailedMergeStatus string // raw value from GitLab's detailed_merge_status field
+	Reviewers           []ReviewerInfo
 
 	CreatedAt         time.Time
 	NonDraftSince     time.Time
@@ -132,12 +133,23 @@ func (mr MergeRequest) DisplayAuthor() string {
 
 // ClassifyPhase determines the MRPhase from the MR's fields.
 // Evaluated in priority order per docs/domain-model.md.
-// mergeable should be set from GitLab's detailed_merge_status == "mergeable".
-func ClassifyPhase(draft bool, mergeable bool, reviewers []ReviewerInfo) MRPhase {
+// mergeable is kept for caller compatibility but no longer drives phase assignment.
+// The "Approved" column (PhaseReadyToMerge) is entered when all IsApprover reviewers
+// have approved. If there are no designated approvers, the MR stays in NeedsReview.
+func ClassifyPhase(draft bool, _ bool, reviewers []ReviewerInfo) MRPhase {
 	if draft {
 		return PhaseDraft
 	}
-	if mergeable {
+	approverCount, approvedCount := 0, 0
+	for _, r := range reviewers {
+		if r.IsApprover {
+			approverCount++
+			if r.State == ReviewerApproved {
+				approvedCount++
+			}
+		}
+	}
+	if approverCount > 0 && approvedCount == approverCount {
 		return PhaseReadyToMerge
 	}
 	for _, r := range reviewers {

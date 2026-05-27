@@ -164,6 +164,11 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 	phaseLbl := mrPhaseLabel(d.mr.Phase)
 	add(d.styles.DetailMeta.Render(
 		fmt.Sprintf("%s  ·  %s", d.mr.DisplayAuthor(), phaseLbl)))
+	if d.mr.Phase == domain.PhaseReadyToMerge &&
+		d.mr.DetailedMergeStatus != detailedMergeStatusMergeable &&
+		d.mr.DetailedMergeStatus != "" {
+		add(d.styles.ErrorMsg.Render("⚠ " + mergeBlockReason(d.mr.DetailedMergeStatus)))
+	}
 
 	if len(d.mr.Reviewers) > 0 {
 		add(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))
@@ -332,6 +337,30 @@ func truncateLines(s string, maxLines int) string {
 // joinHorizontalTop joins two strings side-by-side aligned at the top.
 func joinHorizontalTop(left, right string) string {
 	return lip.JoinHorizontal(lip.Top, left, right)
+}
+
+// mergeBlockReason maps a GitLab detailed_merge_status value to a human-readable string.
+func mergeBlockReason(status string) string {
+	switch status {
+	case "ci_must_pass":
+		return "CI pipeline must pass"
+	case "discussions_not_resolved":
+		return "Unresolved discussions"
+	case "draft_status":
+		return "MR is a draft"
+	case "not_approved":
+		return "Awaiting approval"
+	case "blocked_status":
+		return "Blocked by another MR"
+	case "jira_association_missing":
+		return "Jira issue required"
+	case "merge_request_blocked":
+		return "Merge blocked"
+	case "need_rebase":
+		return "Needs rebase"
+	default:
+		return status
+	}
 }
 
 // renderMarkdown renders markdown to ANSI terminal output via glamour.

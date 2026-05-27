@@ -395,21 +395,32 @@ func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
 	}
 }
 
-func TestMapMR_DetailedMergeStatus_Mergeable(t *testing.T) {
+func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	m.DetailedMergeStatus = detailedMergeStatusMergeable
 	result := MapMR(m, nil, approvals(), nil)
-	if result.Phase != domain.PhaseReadyToMerge {
-		t.Errorf("want PhaseReadyToMerge when DetailedMergeStatus=mergeable, got %v", result.Phase)
+	if result.DetailedMergeStatus != detailedMergeStatusMergeable {
+		t.Errorf("want DetailedMergeStatus=%s stored on domain MR, got %q",
+			detailedMergeStatusMergeable, result.DetailedMergeStatus)
 	}
 }
 
-func TestMapMR_DetailedMergeStatus_NotMergeable(t *testing.T) {
+func TestMapMR_DetailedMergeStatus_Stored_NonMergeable(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
-	m.DetailedMergeStatus = "checking"
+	m.DetailedMergeStatus = "ci_must_pass"
 	result := MapMR(m, nil, approvals(), nil)
-	if result.Phase == domain.PhaseReadyToMerge {
-		t.Errorf("want non-ready phase when DetailedMergeStatus=checking, got PhaseReadyToMerge")
+	if result.DetailedMergeStatus != "ci_must_pass" {
+		t.Errorf("want DetailedMergeStatus=ci_must_pass stored, got %q", result.DetailedMergeStatus)
+	}
+}
+
+func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
+	// alice is in the Approvers rule and has approved
+	m := mr(basicUser("alice", "Alice"))
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
+	result := MapMR(m, nil, approvals("alice"), rules)
+	if result.Phase != domain.PhaseReadyToMerge {
+		t.Errorf("want PhaseReadyToMerge when all approvers approved, got %v", result.Phase)
 	}
 }
 
