@@ -203,7 +203,7 @@ func (c cardWidget) renderPills(now time.Time) []string {
 	}
 	parts := make([]string, 0, len(sorted))
 	for _, r := range sorted {
-		if r.State == domain.ReviewerNotStarted {
+		if r.State == domain.ReviewerNotStarted && !r.IsApprover {
 			continue
 		}
 		parts = append(parts, c.renderPill(r, now))
@@ -214,18 +214,18 @@ func (c cardWidget) renderPills(now time.Time) []string {
 func (c cardWidget) renderPill(r domain.ReviewerInfo, now time.Time) string {
 	icon := reviewerIcon(r.State)
 	displayName := c.renderReviewerUsername(r)
-	pillStyle := pillStyle(r.State, c.styles)
+	ps := pillStyle(r.State, c.styles)
 	var rendered strings.Builder
-	rendered.WriteString(pillStyle.Render("["))
+	rendered.WriteString(c.styles.PillBracket.Render("["))
 	rendered.WriteString(displayName)
-	rendered.WriteString(pillStyle.Render("."))
-	rendered.WriteString(pillStyle.Render(icon))
+	rendered.WriteString(" ")
+	rendered.WriteString(ps.Render(icon))
 	if !r.WaitingSince.IsZero() {
 		duration := withNBSP(domain.FormatDuration(now.Sub(r.WaitingSince)))
 		rendered.WriteString(" ")
-		rendered.WriteString(pillStyle.Render(duration))
+		rendered.WriteString(ps.Render(duration))
 	}
-	rendered.WriteString(pillStyle.Render("]"))
+	rendered.WriteString(c.styles.PillBracket.Render("]"))
 	return rendered.String()
 }
 
@@ -248,11 +248,11 @@ func (c cardWidget) renderReviewerUsername(r domain.ReviewerInfo) string {
 	if r.Username == "" {
 		return c.styles.ErrorMsg.Render("<unknown>")
 	}
-	nameStyle := c.styles.CardAuthor
+	nameStyle := c.styles.ReviewerName
 	if r.IsApprover {
 		nameStyle = c.styles.ApproverName
 	}
-	return c.styles.UsernameAtSign.Render("@") + nameStyle.Render(r.Username)
+	return nameStyle.Render("@" + r.Username)
 }
 
 // wrapPills lays out reviewer pills into lines that each fit within width columns,

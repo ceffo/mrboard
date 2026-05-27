@@ -53,8 +53,9 @@ type Styles struct {
 	PopupSectionFocused         lip.Style
 	PopupTitle                  lip.Style
 	ScrollIndicator             lip.Style
-	UsernameAtSign              lip.Style
+	ReviewerName                lip.Style
 	ApproverName                lip.Style
+	PillBracket                 lip.Style
 	CardFocusedBg               lip.Style     // background-only style for filling focused card spaces
 	CardTitleMergeable          lip.Style     // card title when MR is in Approved column and GitLab says mergeable
 	CardTitleBlocked            lip.Style     // card title when MR is in Approved column but GitLab blocks merge
@@ -135,8 +136,9 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		PopupItemMarkerOff:  lip.NewStyle().Foreground(c(FgLow)),
 		PopupHint:           lip.NewStyle().Foreground(c(FgLow)),
 		FilterActive:        lip.NewStyle().Foreground(c(Warning)).Bold(true),
-		UsernameAtSign:      lip.NewStyle().Foreground(c(Accent)).Bold(true),
+		ReviewerName:        lip.NewStyle().Foreground(c(FgMedium)),
 		ApproverName:        lip.NewStyle().Foreground(c(ColorApprover)).Bold(true),
+		PillBracket:         lip.NewStyle().Foreground(c(FgLow)),
 		CardFocusedBg:       lip.NewStyle().Background(c(BgElevated)),
 		CardTitleMergeable:  lip.NewStyle().Bold(true).Foreground(c(Success)),
 		CardTitleBlocked:    lip.NewStyle().Bold(true).Foreground(c(Danger)),
