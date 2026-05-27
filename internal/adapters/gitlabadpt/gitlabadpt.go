@@ -52,7 +52,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 	rawMRs, mappedMRs, errs := a.listAllMRs(ctx, primaryExclusion)
 	logger.Info("gitlab: source listing done",
 		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
-		"duration", time.Since(listStart).Round(time.Millisecond))
+		"duration", ilog.FmtDur(time.Since(listStart)))
 
 	// Phase 2: deduplicate — build a combined slice (mapped first so they win
 	// on collision, then raw stubs with just key fields), run a single
@@ -134,10 +134,10 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []
 
 	logger.Info("gitlab: enrichment done",
 		"enriched", len(unique)-enrichErrs, "enrich_errors", enrichErrs,
-		"duration", time.Since(enrichStart).Round(time.Millisecond))
+		"duration", ilog.FmtDur(time.Since(enrichStart)))
 	logger.Info("gitlab: fetch done",
 		"mrs", len(finalMRs), "errors", len(errs),
-		"total_duration", time.Since(fetchStart).Round(time.Millisecond))
+		"total_duration", ilog.FmtDur(time.Since(fetchStart)))
 	return finalMRs, errs
 }
 
@@ -233,7 +233,7 @@ func (a *GitLabAdapter) fetchSourceID(
 		}
 		logger.Info("gitlab: group source fetched",
 			"group", id, "total", len(mrs), "active", len(active),
-			"duration", time.Since(start).Round(time.Millisecond))
+			"duration", ilog.FmtDur(time.Since(start)))
 		return sourceResult{raw: active}
 
 	case mrsvc.SourceTypeUser:
@@ -273,7 +273,7 @@ func (a *GitLabAdapter) fetchUserSourceGraphQL(
 	}
 	logger.Info("gitlab: user source fetched (graphql)",
 		"username", username, "total", len(gqlMRs), "active", len(mapped),
-		"duration", time.Since(start).Round(time.Millisecond))
+		"duration", ilog.FmtDur(time.Since(start)))
 	return sourceResult{mapped: mapped}
 }
 
@@ -307,7 +307,7 @@ func (a *GitLabAdapter) fetchUserSourceREST(
 	}
 	logger.Info("gitlab: user source fetched (REST fallback)",
 		"username", username, "total", len(mrs), "active", len(active),
-		"duration", time.Since(start).Round(time.Millisecond))
+		"duration", ilog.FmtDur(time.Since(start)))
 	return sourceResult{raw: active, errs: errs}
 }
 
@@ -344,10 +344,7 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 	if err != nil {
 		return err
 	}
-	required := 1
-	if len(userIDs) == 0 {
-		required = 0
-	}
+	required := len(userIDs)
 	payload := pkggitlab.MRApprovalRulePayload{
 		Name:              approversRuleName,
 		ApprovalsRequired: required,

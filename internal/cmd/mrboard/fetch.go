@@ -55,40 +55,48 @@ func printJSON(mrs []domain.MergeRequest) error {
 }
 
 type mrJSON struct {
-	ID             int            `json:"id"`
-	Title          string         `json:"title"`
-	WebURL         string         `json:"web_url"`
-	Phase          string         `json:"phase"`
-	Author         string         `json:"author"`
-	ReviewerStates []reviewerJSON `json:"reviewer_states"`
-	TimeInPhase    string         `json:"time_in_phase"`
-	TimeOpen       string         `json:"time_open"`
-	RoundTrips     int            `json:"round_trips"`
+	ID               int            `json:"id"`
+	Title            string         `json:"title"`
+	WebURL           string         `json:"web_url"`
+	Phase            string         `json:"phase"`
+	Author           string         `json:"author"`
+	ReviewerStates   []reviewerJSON `json:"reviewer_states"`
+	ApprovalsRequired int           `json:"approvals_required,omitempty"`
+	TimeInPhase      string         `json:"time_in_phase"`
+	TimeOpen         string         `json:"time_open"`
+	RoundTrips       int            `json:"round_trips"`
 }
 
 type reviewerJSON struct {
-	Username string `json:"username"`
-	State    string `json:"state"`
+	Username   string `json:"username"`
+	State      string `json:"state"`
+	IsApprover bool   `json:"is_approver,omitempty"`
 }
 
 func toMRJSON(mr domain.MergeRequest) mrJSON {
 	reviewers := make([]reviewerJSON, 0, len(mr.Reviewers))
+	approvalsRequired := 0
 	for _, r := range mr.Reviewers {
+		if r.IsApprover {
+			approvalsRequired++
+		}
 		reviewers = append(reviewers, reviewerJSON{
-			Username: r.Username,
-			State:    r.State.String(),
+			Username:   r.Username,
+			State:      r.State.String(),
+			IsApprover: r.IsApprover,
 		})
 	}
 	now := time.Now()
 	return mrJSON{
-		ID:             mr.ID,
-		Title:          mr.Title,
-		WebURL:         mr.WebURL,
-		Phase:          mr.Phase.String(),
-		Author:         mr.Author,
-		ReviewerStates: reviewers,
-		TimeInPhase:    domain.FormatDuration(now.Sub(mr.WaitingSince)),
-		TimeOpen:       domain.FormatDuration(now.Sub(mr.CreatedAt)),
-		RoundTrips:     mr.RoundTripCount,
+		ID:                mr.ID,
+		Title:             mr.Title,
+		WebURL:            mr.WebURL,
+		Phase:             mr.Phase.String(),
+		Author:            mr.Author,
+		ReviewerStates:    reviewers,
+		ApprovalsRequired: approvalsRequired,
+		TimeInPhase:       domain.FormatDuration(now.Sub(mr.WaitingSince)),
+		TimeOpen:          domain.FormatDuration(now.Sub(mr.CreatedAt)),
+		RoundTrips:        mr.RoundTripCount,
 	}
 }
