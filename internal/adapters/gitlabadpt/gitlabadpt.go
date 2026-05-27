@@ -317,7 +317,7 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		if err != nil {
 			return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d discussions: %w", mr.ProjectID, mr.IID, err)
 		}
-		return MapMR(mr, discussions, &gl.MergeRequestApprovals{}), nil
+		return MapMR(mr, discussions, &gl.MergeRequestApprovals{}, nil), nil
 	}
 
 	type discResult struct {
@@ -328,9 +328,14 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		approvals *gl.MergeRequestApprovals
 		err       error
 	}
+	type rulesResult struct {
+		rules []*gl.MergeRequestApprovalRule
+		err   error
+	}
 
 	discCh := make(chan discResult, 1)
 	apprCh := make(chan apprResult, 1)
+	rulesCh := make(chan rulesResult, 1)
 
 	go func() {
 		d, err := a.client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)
@@ -340,9 +345,14 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		a, err := a.client.GetMRApprovals(ctx, mr.ProjectID, mr.IID)
 		apprCh <- apprResult{a, err}
 	}()
+	go func() {
+		r, err := a.client.GetMRApprovalRules(ctx, mr.ProjectID, mr.IID)
+		rulesCh <- rulesResult{r, err}
+	}()
 
 	dr := <-discCh
 	ar := <-apprCh
+	rr := <-rulesCh
 
 	if dr.err != nil {
 		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d discussions: %w", mr.ProjectID, mr.IID, dr.err)
@@ -350,6 +360,9 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 	if ar.err != nil {
 		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approvals: %w", mr.ProjectID, mr.IID, ar.err)
 	}
+	if rr.err != nil {
+		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approval_rules: %w", mr.ProjectID, mr.IID, rr.err)
+	}
 
-	return MapMR(mr, dr.discussions, ar.approvals), nil
+	return MapMR(mr, dr.discussions, ar.approvals, rr.rules), nil
 }

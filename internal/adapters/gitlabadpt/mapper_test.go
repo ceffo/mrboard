@@ -357,9 +357,59 @@ func TestMapMR_RoundTripCount(t *testing.T) {
 		discussion(userNote("alice", t2)),
 		discussion(systemNote("requested review from @alice", t3)),
 	}
-	result := MapMR(m, discussions, approvals())
+	result := MapMR(m, discussions, approvals(), nil)
 	if result.RoundTripCount != 2 {
 		t.Errorf("want RoundTripCount=2, got %d", result.RoundTripCount)
+	}
+}
+
+func approvalRule(name string, usernames ...string) *gl.MergeRequestApprovalRule {
+	eligible := make([]*gl.BasicUser, len(usernames))
+	for i, u := range usernames {
+		eligible[i] = basicUser(u, u)
+	}
+	return &gl.MergeRequestApprovalRule{Name: name, EligibleApprovers: eligible}
+}
+
+func TestMapMR_IsApprover_InApproversRule(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"), basicUser("bob", "Bob"))
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
+	result := MapMR(m, nil, approvals(), rules)
+	for _, r := range result.Reviewers {
+		if r.Username == "alice" && !r.IsApprover {
+			t.Errorf("alice should be IsApprover=true")
+		}
+		if r.Username == "bob" && r.IsApprover {
+			t.Errorf("bob should be IsApprover=false")
+		}
+	}
+}
+
+func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	result := MapMR(m, nil, approvals(), nil)
+	for _, r := range result.Reviewers {
+		if r.IsApprover {
+			t.Errorf("want IsApprover=false when no Approvers rule, got true for %s", r.Username)
+		}
+	}
+}
+
+func TestMapMR_DetailedMergeStatus_Mergeable(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	m.DetailedMergeStatus = detailedMergeStatusMergeable
+	result := MapMR(m, nil, approvals(), nil)
+	if result.Phase != domain.PhaseReadyToMerge {
+		t.Errorf("want PhaseReadyToMerge when DetailedMergeStatus=mergeable, got %v", result.Phase)
+	}
+}
+
+func TestMapMR_DetailedMergeStatus_NotMergeable(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	m.DetailedMergeStatus = "checking"
+	result := MapMR(m, nil, approvals(), nil)
+	if result.Phase == domain.PhaseReadyToMerge {
+		t.Errorf("want non-ready phase when DetailedMergeStatus=checking, got PhaseReadyToMerge")
 	}
 }
 

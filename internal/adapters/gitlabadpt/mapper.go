@@ -15,6 +15,9 @@ import (
 // re-requests review from a specific reviewer.
 const reReviewPrefix = "requested review from @"
 
+// detailedMergeStatusMergeable is the GitLab detailed_merge_status value that means the MR can be merged.
+const detailedMergeStatusMergeable = "mergeable"
+
 // approvedBody is the GitLab system note body emitted when a reviewer approves.
 const approvedBody = "approved this merge request"
 
@@ -315,11 +318,48 @@ func deriveState(approved bool, lastComment, lastReReview time.Time) domain.Revi
 	return domain.ReviewerCommented
 }
 
+// approverSetFromRESTRules extracts eligible approver usernames from the "Approvers" rule.
+func approverSetFromRESTRules(rules []*gl.MergeRequestApprovalRule) map[string]bool {
+	for _, r := range rules {
+		if r.Name == "Approvers" {
+			set := make(map[string]bool, len(r.EligibleApprovers))
+			for _, u := range r.EligibleApprovers {
+				set[u.Username] = true
+			}
+			return set
+		}
+	}
+	return nil
+}
+
+// approverSetFromGQLRules extracts eligible approver usernames from the GQL "Approvers" rule.
+func approverSetFromGQLRules(rules []pkggitlab.GQLApprovalRule) map[string]bool {
+	for _, r := range rules {
+		if r.Name == "Approvers" {
+			set := make(map[string]bool, len(r.EligibleApprovers))
+			for _, u := range r.EligibleApprovers {
+				set[u.Username] = true
+			}
+			return set
+		}
+	}
+	return nil
+}
+
+// applyApproverFlag sets IsApprover on each ReviewerInfo whose username is in the approver set.
+func applyApproverFlag(reviewers []domain.ReviewerInfo, approvers map[string]bool) []domain.ReviewerInfo {
+	for i := range reviewers {
+		reviewers[i].IsApprover = approvers[reviewers[i].Username]
+	}
+	return reviewers
+}
+
 // MapMR converts raw GitLab API responses into a domain.MergeRequest.
 func MapMR(
 	mr *gl.BasicMergeRequest,
 	discussions []*gl.Discussion,
 	approvals *gl.MergeRequestApprovals,
+	approvalRules []*gl.MergeRequestApprovalRule,
 ) domain.MergeRequest {
 	approvedBy := make(map[string]bool, len(approvals.ApprovedBy))
 	for _, a := range approvals.ApprovedBy {
@@ -337,6 +377,7 @@ func MapMR(
 	}
 	events := normalizeDiscussionEventsREST(discussions)
 	reviewers := buildReviewerInfos(refs, events, approvedBy, mrCreatedAt)
+	reviewers = applyApproverFlag(reviewers, approverSetFromRESTRules(approvalRules))
 	openThreads := countOpenThreads(restThreadStates(discussions))
 
 	domainMR := domain.MergeRequest{
@@ -356,7 +397,7 @@ func MapMR(
 		domainMR.AuthorName = mr.Author.Name
 	}
 
-	domainMR.Phase = domain.ClassifyPhase(mr.Draft, false, reviewers)
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
 
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:
@@ -440,6 +481,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 
 	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
 	reviewers := buildReviewerInfos(refs, events, approvedBy, createdAt)
+	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalRules))
 	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{
@@ -457,7 +499,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		RoundTripCount: countRoundTripsFromEvents(events),
 	}
 
-	domainMR.Phase = domain.ClassifyPhase(mr.Draft, false, reviewers)
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
 
 	switch domainMR.Phase {
 	case domain.PhaseNeedsAuthorAction:

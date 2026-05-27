@@ -21,12 +21,15 @@ query($username: String!) {
         createdAt
         updatedAt
         webUrl
+        detailedMergeStatus
         author { username name }
         reviewers { nodes { username name } }
         project { id fullPath archived }
         approvedBy { nodes { username } }
-        approvalsRequired
-        approvalsLeft
+        approvalRules {
+          name
+          eligibleApprovers { username }
+        }
         discussions(first: 100) {
           pageInfo { hasNextPage }
           nodes {
@@ -53,6 +56,12 @@ type GQLUser struct {
 	Name     string `json:"name"`
 }
 
+// GQLApprovalRule is a single MR approval rule as returned by the GraphQL API.
+type GQLApprovalRule struct {
+	Name              string    `json:"name"`
+	EligibleApprovers []GQLUser `json:"eligibleApprovers"`
+}
+
 // GQLNote is a single note within a discussion.
 type GQLNote struct {
 	Author     GQLUser `json:"author"`
@@ -72,15 +81,16 @@ type GQLDiscussion struct {
 
 // GQLMergeRequest is a merge request as returned by the GraphQL API.
 type GQLMergeRequest struct {
-	ID        string  `json:"id"`  // "gid://gitlab/MergeRequest/456"
-	IID       string  `json:"iid"` // "42"
-	Title     string  `json:"title"`
-	Draft     bool    `json:"draft"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
-	WebURL    string  `json:"webUrl"`
-	Author    GQLUser `json:"author"`
-	Reviewers struct {
+	ID                  string  `json:"id"`  // "gid://gitlab/MergeRequest/456"
+	IID                 string  `json:"iid"` // "42"
+	Title               string  `json:"title"`
+	Draft               bool    `json:"draft"`
+	CreatedAt           string  `json:"createdAt"`
+	UpdatedAt           string  `json:"updatedAt"`
+	WebURL              string  `json:"webUrl"`
+	DetailedMergeStatus string  `json:"detailedMergeStatus"`
+	Author              GQLUser `json:"author"`
+	Reviewers           struct {
 		Nodes []GQLUser `json:"nodes"`
 	} `json:"reviewers"`
 	Project struct {
@@ -91,9 +101,8 @@ type GQLMergeRequest struct {
 	ApprovedBy struct {
 		Nodes []GQLUser `json:"nodes"`
 	} `json:"approvedBy"`
-	ApprovalsRequired int `json:"approvalsRequired"`
-	ApprovalsLeft     int `json:"approvalsLeft"`
-	Discussions       struct {
+	ApprovalRules []GQLApprovalRule `json:"approvalRules"`
+	Discussions   struct {
 		PageInfo struct {
 			HasNextPage bool `json:"hasNextPage"`
 		} `json:"pageInfo"`

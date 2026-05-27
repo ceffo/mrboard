@@ -135,6 +135,114 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 	return all, nil
 }
 
+// MRApprovalRulePayload holds the fields for creating or updating an MR approval rule.
+type MRApprovalRulePayload struct {
+	Name              string
+	ApprovalsRequired int
+	UserIDs           []int64
+}
+
+// GetMRApprovalRules returns the approval rules for an MR.
+func (c *Client) GetMRApprovalRules(
+	ctx context.Context, projectID, mrIID int64,
+) ([]*gl.MergeRequestApprovalRule, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get approval rules", "project", projectID, "mr", mrIID)
+	rules, _, err := c.gl.MergeRequestApprovals.GetApprovalRules(projectID, mrIID, gl.WithContext(ctx))
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		c.logger.Error("gitlab: get approval rules error",
+			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+		return nil, fmt.Errorf("gitlab: get approval rules project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Debug("gitlab: get approval rules done",
+		"project", projectID, "mr", mrIID, "count", len(rules), "duration", elapsed)
+	return rules, nil
+}
+
+// GetProjectMembers returns all project members (inherited) with access level >= minAccessLevel.
+func (c *Client) GetProjectMembers(
+	ctx context.Context, projectID int64, minAccessLevel int,
+) ([]*gl.ProjectMember, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get project members", "project", projectID, "min_level", minAccessLevel)
+	var all []*gl.ProjectMember
+	opts := &gl.ListProjectMembersOptions{ListOptions: gl.ListOptions{PerPage: perPage}}
+	for {
+		members, resp, err := c.gl.ProjectMembers.ListAllProjectMembers(projectID, opts, gl.WithContext(ctx))
+		if err != nil {
+			elapsed := time.Since(start).Round(time.Millisecond)
+			c.logger.Error("gitlab: get project members error",
+				"project", projectID, "duration", elapsed, "error", err)
+			return nil, fmt.Errorf("gitlab: get project members project=%d: %w", projectID, err)
+		}
+		for _, m := range members {
+			if int(m.AccessLevel) >= minAccessLevel {
+				all = append(all, m)
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	elapsed := time.Since(start).Round(time.Millisecond)
+	c.logger.Debug("gitlab: get project members done",
+		"project", projectID, "count", len(all), "duration", elapsed)
+	return all, nil
+}
+
+// CreateMRApprovalRule creates a new approval rule on an MR.
+func (c *Client) CreateMRApprovalRule(
+	ctx context.Context, projectID, mrIID int64, payload MRApprovalRulePayload,
+) (*gl.MergeRequestApprovalRule, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: create approval rule",
+		"project", projectID, "mr", mrIID, "name", payload.Name)
+	approvsReq := int64(payload.ApprovalsRequired)
+	rule, _, err := c.gl.MergeRequestApprovals.CreateApprovalRule(projectID, mrIID,
+		&gl.CreateMergeRequestApprovalRuleOptions{
+			Name:              gl.Ptr(payload.Name),
+			ApprovalsRequired: &approvsReq,
+			UserIDs:           &payload.UserIDs,
+		}, gl.WithContext(ctx))
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		c.logger.Error("gitlab: create approval rule error",
+			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+		return nil, fmt.Errorf("gitlab: create approval rule project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Debug("gitlab: create approval rule done",
+		"project", projectID, "mr", mrIID, "rule_id", rule.ID, "duration", elapsed)
+	return rule, nil
+}
+
+// UpdateMRApprovalRule updates an existing approval rule on an MR.
+func (c *Client) UpdateMRApprovalRule(
+	ctx context.Context, projectID, mrIID, ruleID int64, payload MRApprovalRulePayload,
+) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: update approval rule",
+		"project", projectID, "mr", mrIID, "rule_id", ruleID)
+	approvsReq := int64(payload.ApprovalsRequired)
+	_, _, err := c.gl.MergeRequestApprovals.UpdateApprovalRule(projectID, mrIID, ruleID,
+		&gl.UpdateMergeRequestApprovalRuleOptions{
+			Name:              gl.Ptr(payload.Name),
+			ApprovalsRequired: &approvsReq,
+			UserIDs:           &payload.UserIDs,
+		}, gl.WithContext(ctx))
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		c.logger.Error("gitlab: update approval rule error",
+			"project", projectID, "mr", mrIID, "duration", elapsed, "error", err)
+		return fmt.Errorf("gitlab: update approval rule project=%d MR=%d rule=%d: %w",
+			projectID, mrIID, ruleID, err)
+	}
+	c.logger.Debug("gitlab: update approval rule done",
+		"project", projectID, "mr", mrIID, "duration", elapsed)
+	return nil
+}
+
 // GetMRApprovals returns the approval status for an MR.
 func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*gl.MergeRequestApprovals, error) {
 	start := time.Now()
