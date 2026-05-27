@@ -487,7 +487,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 
 	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
 	reviewers := buildReviewerInfos(refs, events, approvedBy, createdAt)
-	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalRules))
+	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalState.Rules))
 	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{

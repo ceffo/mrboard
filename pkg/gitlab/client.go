@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
@@ -30,11 +29,6 @@ type Client struct {
 	// cacheMu guards concurrent access when sources are fetched in parallel.
 	cacheMu              sync.RWMutex
 	projectArchivedCache map[int64]bool
-
-	// gqlApprovalRulesMissing is set true on the first GQL response that reports
-	// the approvalRules field does not exist on the server's MergeRequest type.
-	// Subsequent calls use the reduced query and skip that field.
-	gqlApprovalRulesMissing atomic.Bool
 }
 
 // NewClient creates an authenticated GitLab client.

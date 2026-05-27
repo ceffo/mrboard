@@ -6,14 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	ilog "github.com/ceffo/mrboard/internal/log"
 )
 
-// gqlUserMRsQueryFull includes approvalRules — supported on GitLab.com and some self-managed versions.
-const gqlUserMRsQueryFull = `
+// gqlUserMRsQuery fetches open MRs authored by a user, including approval rules
+// via approvalState.rules (supported on GitLab self-managed and GitLab.com).
+const gqlUserMRsQuery = `
 query($username: String!) {
   user(username: $username) {
     authoredMergeRequests(state: opened, first: 100) {
@@ -30,49 +30,12 @@ query($username: String!) {
         reviewers { nodes { username name } }
         project { id fullPath archived }
         approvedBy { nodes { username } }
-        approvalRules {
-          name
-          eligibleApprovers { username }
-        }
-        discussions(first: 100) {
-          pageInfo { hasNextPage }
-          nodes {
-            notes(first: 100) {
-              nodes {
-                author { username name }
-                body
-                system
-                resolvable
-                resolved
-                createdAt
-              }
-            }
+        approvalState {
+          rules {
+            name
+            eligibleApprovers { username }
           }
         }
-      }
-    }
-  }
-}`
-
-// gqlUserMRsQueryReduced omits approvalRules for GitLab instances that don't support it.
-// IsApprover will not be set for MRs fetched via this query.
-const gqlUserMRsQueryReduced = `
-query($username: String!) {
-  user(username: $username) {
-    authoredMergeRequests(state: opened, first: 100) {
-      nodes {
-        id
-        iid
-        title
-        draft
-        createdAt
-        updatedAt
-        webUrl
-        detailedMergeStatus
-        author { username name }
-        reviewers { nodes { username name } }
-        project { id fullPath archived }
-        approvedBy { nodes { username } }
         discussions(first: 100) {
           pageInfo { hasNextPage }
           nodes {
@@ -144,8 +107,10 @@ type GQLMergeRequest struct {
 	ApprovedBy struct {
 		Nodes []GQLUser `json:"nodes"`
 	} `json:"approvedBy"`
-	ApprovalRules []GQLApprovalRule `json:"approvalRules"`
-	Discussions   struct {
+	ApprovalState struct {
+		Rules []GQLApprovalRule `json:"rules"`
+	} `json:"approvalState"`
+	Discussions struct {
 		PageInfo struct {
 			HasNextPage bool `json:"hasNextPage"`
 		} `json:"pageInfo"`
@@ -169,44 +134,16 @@ type gqlUserMRsResponse struct {
 }
 
 // FetchUserMRsGraphQL fetches all open MRs authored by username in a single GraphQL query.
-// On the first call it tries the full query including approvalRules. If the server returns
-// a field-not-found error for that field, it logs once at INFO level, records the fact, and
-// retries with a reduced query. All subsequent calls use the reduced query directly.
+// FetchUserMRsGraphQL fetches all open MRs authored by username in a single GraphQL query.
 func (c *Client) FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error) {
 	start := time.Now()
 	c.logger.Debug("gitlab: graphql user MRs", "username", username)
 
-	query := gqlUserMRsQueryFull
-	if c.gqlApprovalRulesMissing.Load() {
-		query = gqlUserMRsQueryReduced
-	}
-
-	mrs, gqlErrs, err := c.doGQLUserMRs(ctx, username, query)
+	mrs, gqlErrs, err := c.doGQLUserMRs(ctx, username, gqlUserMRsQuery)
 	if err != nil {
 		c.logger.Error("gitlab: graphql request error", "username", username,
 			"duration", ilog.FmtDur(time.Since(start)), "error", err)
 		return nil, err
-	}
-
-	// Detect unsupported approvalRules field and retry with the reduced query.
-	// We retry regardless of whether gqlApprovalRulesMissing was already set by a
-	// concurrent goroutine — without this, parallel user fetches all hit the full
-	// query simultaneously; the first sets the flag and retries, but the others
-	// (which also got the error) skip the retry and return an error.
-	if len(gqlErrs) > 0 {
-		for _, e := range gqlErrs {
-			if strings.Contains(e.Message, "approvalRules") {
-				if !c.gqlApprovalRulesMissing.Swap(true) {
-					c.logger.Info("gitlab: approvalRules not supported by this GitLab instance; " +
-						"IsApprover will not display for GQL-fetched MRs")
-				}
-				mrs, gqlErrs, err = c.doGQLUserMRs(ctx, username, gqlUserMRsQueryReduced)
-				if err != nil {
-					return nil, err
-				}
-				break
-			}
-		}
 	}
 	if len(gqlErrs) > 0 {
 		return nil, fmt.Errorf("gitlab: graphql errors for user %q: %s", username, gqlErrs[0].Message)
