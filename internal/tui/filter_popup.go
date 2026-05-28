@@ -13,7 +13,7 @@ import (
 
 // FilterAppliedMsg is sent on every toggle to immediately update the board filter.
 type FilterAppliedMsg struct {
-	Criteria FilterCriteria
+	Criteria domain.FilterCriteria
 }
 
 // FilterClosedMsg is sent when the user closes the filter popup (f or Esc).
@@ -206,7 +206,7 @@ func newFilterPopupWidget(
 	authors []string,
 	reviewers []string,
 	userMap map[string]string,
-	current FilterCriteria,
+	current domain.FilterCriteria,
 	currentUser string,
 ) filterPopupWidget {
 	// Status section.
@@ -339,7 +339,7 @@ func (p filterPopupWidget) buildApplied() FilterAppliedMsg {
 		}
 	}
 	return FilterAppliedMsg{
-		Criteria: FilterCriteria{
+		Criteria: domain.FilterCriteria{
 			Phases:    phaseMap,
 			Authors:   p.author.selectedSlice(),
 			Reviewers: p.reviewer.selectedSlice(),

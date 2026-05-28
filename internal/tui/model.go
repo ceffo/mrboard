@@ -205,7 +205,7 @@ type Model struct {
 	viewMode           domain.ViewMode
 	sortField          sortField
 	sortDesc           bool
-	filter             FilterCriteria
+	filter             domain.FilterCriteria
 	fetchCancel        context.CancelFunc
 	baseCtx            context.Context
 	logger             *slog.Logger

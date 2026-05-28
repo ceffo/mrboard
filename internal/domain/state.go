@@ -1,5 +1,15 @@
 package domain
 
+// FilterCriteria is the persisted filter state. Zero value means no filtering.
+type FilterCriteria struct {
+	// Phases is nil/empty = show all phases; otherwise only listed phases are shown.
+	Phases map[MRPhase]bool `yaml:"phases,omitempty"`
+	// Authors is nil/empty = show all authors.
+	Authors []string `yaml:"authors,omitempty"`
+	// Reviewers is nil/empty = show all reviewers.
+	Reviewers []string `yaml:"reviewers,omitempty"`
+}
+
 // ViewMode controls whether the board shows all MRs or only the current user's.
 type ViewMode int
 

@@ -1,0 +1,200 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.4
+- **Task Title**: gitlabadpt: wire reviewer fetch into FetchAll when opts.IncludeReviewerMRs
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:47:44.756Z
+- **Ended At**: 2026-05-28T15:51:40.236Z
+- **Duration**: 3m 55s
+- **Input Tokens**: 70
+- **Output Tokens**: 16395
+- **Total Tokens**: 16465
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Let me look at the relevant files to understand what needs to be wired.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+Now let me check the reviewer fetch methods added in mrr-ypr.3.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab[0m pattern: [96mFetchReviewerMRsGraphQL|ListReviewerMRs[0m
+Let me check the `FetchOptions` struct and `mrsvc.go`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+I have a clear picture. Now I'll implement the wiring. The plan:
+
+1. Rename `_` to `opts` in `FetchAll`
+2. After `listAllMRs`, when `opts.IncludeReviewerMRs`, fetch reviewer MRs and merge before dedup
+3. Add `listReviewerMRs`, `fetchReviewerSourceGraphQL`, `fetchReviewerSourceREST`
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// FetchAll implements mrsvc.MergeRequestSource.
+f..." → "// FetchAll implements mrsvc.MergeRequestSource.
+f..."
+Now add the three new methods at the end of the file, before `countDiffLines`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// countDiffLines counts added and removed lines i..." → "// listReviewerMRs fetches MRs for all configured ..."
+Now run `just check`:
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/adapters/gitlabadpt/gitlabadpt.go:270: 270-332 lines are duplicate of `internal/adapters/gitlabadpt/gitlabadpt.go:565-628` (dupl)
+func (a *GitLabAdapter) fetchUserSourceGraphQL(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	gqlMRs, err := a.client.FetchUserMRsGraphQL(ctx, username)
+	if err != nil {
+		logger.Warn("gitlab: graphql user fetch failed, falling back to REST", "username", username, "error", err)
+		return a.fetchUserSourceREST(ctx, username, logger, start)
+	}
+
+	var mapped []domain.MergeRequest
+	for _, mr := range gqlMRs {
+		if mr.Project.Archived {
+			logger.Debug("gitlab: skipping MR from archived project (graphql)", "iid", mr.IID, "project", mr.Project.FullPath)
+			continue
+		}
+		if mr.Discussions.PageInfo.HasNextPage {
+			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
+				"username", username, "mr_iid", mr.IID)
+		}
+		mapped = append(mapped, MapMRFromGraphQL(mr))
+	}
+	logger.Info("gitlab: user source fetched (graphql)",
+		"username", username, "total", len(gqlMRs), "active", len(mapped),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{mapped: mapped}
+}
+
+// fetchUserSourceREST is the legacy REST fallback for user sources.
+func (a *GitLabAdapter) fetchUserSourceREST(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	mrs, err := a.client.ListUserMRs(ctx, username)
+	if err != nil {
+		logger.Error("gitlab: list user MRs failed (REST)", "username", username, "error", err)
+		return sourceResult{errs: []error{fmt.Errorf("source user=%q: %w", username, err)}}
+	}
+	var active []*gl.BasicMergeRequest
+	var errs []error
+	for _, mr := range mrs {
+		archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+		if err != nil {
+			logger.Error("gitlab: check project archived failed",
+				"username", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
+			errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", username, mr.IID, err))
+			continue
+		}
+		if !archived {
+			active = append(active, mr)
+		} else {
+			logger.Debug("gitlab: skipping MR from archived project (REST)", "iid", mr.IID, "project", mr.ProjectID)
+		}
+	}
+	logger.Info("gitlab: user source fetched (REST fallback)",
+		"username", username, "total", len(mrs), "active", len(active),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{raw: active, errs: errs}
+}
+internal/adapters/gitlabadpt/gitlabadpt.go:565: 565-628 lines are duplicate of `internal/adapters/gitlabadpt/gitlabadpt.go:270-332` (dupl)
+func (a *GitLabAdapter) fetchReviewerSourceGraphQL(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	gqlMRs, err := a.client.FetchReviewerMRsGraphQL(ctx, username)
+	if err != nil {
+		logger.Warn("gitlab: graphql reviewer fetch failed, falling back to REST", "username", username, "error", err)
+		return a.fetchReviewerSourceREST(ctx, username, logger, start)
+	}
+
+	var mapped []domain.MergeRequest
+	for _, mr := range gqlMRs {
+		if mr.Project.Archived {
+			logger.Debug("gitlab: skipping reviewer MR from archived project (graphql)",
+				"iid", mr.IID, "project", mr.Project.FullPath)
+			continue
+		}
+		if mr.Discussions.PageInfo.HasNextPage {
+			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
+				"reviewer", username, "mr_iid", mr.IID)
+		}
+		mapped = append(mapped, MapMRFromGraphQL(mr))
+	}
+	logger.Info("gitlab: reviewer source fetched (graphql)",
+		"username", username, "total", len(gqlMRs), "active", len(mapped),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{mapped: mapped}
+}
+
+// fetchReviewerSourceREST is the REST fallback for reviewer-requested MRs.
+func (a *GitLabAdapter) fetchReviewerSourceREST(
+	ctx context.Context,
+	username string,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	mrs, err := a.client.ListReviewerMRs(ctx, username)
+	if err != nil {
+		logger.Error("gitlab: list reviewer MRs failed (REST)", "username", username, "error", err)
+		return sourceResult{errs: []error{fmt.Errorf("reviewer user=%q: %w", username, err)}}
+	}
+	var active []*gl.BasicMergeRequest
+	var errs []error
+	for _, mr := range mrs {
+		archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+		if err != nil {
+			logger.Error("gitlab: check project archived failed",
+				"reviewer", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
+			errs = append(errs, fmt.Errorf("reviewer user=%q MR=%d: %w", username, mr.IID, err))
+			continue
+		}
+		if !archived {
+			active = append(active, mr)
+		} else {
+			logger.Debug("gitlab: skipping reviewer MR from archived project (REST)", "iid", mr.IID, "project", mr.ProjectID)
+		}
+	}
+	logger.Info("gitlab: reviewer source fetched (REST fallback)",
+		"username", username, "total", len(mrs), "active", len(active),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{raw: active, errs: errs}
+}
+2 issues:
+* dupl: 2
+error: recipe `lint` failed on line 17 with exit code 1][0m
+As expected, `dupl` fires. I need to extract a shared helper for the GQL+REST pair. Let me check if any tests assert on the exact error strings first:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96msource user=|reviewer user=[0m
+No test assertions on those strings. Now I'll refactor both pairs to use shared helpers.
+
+First, check the `GQLMergeRequest` type location:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab[0m pattern: [96mtype GQLMergeRequest struct[0m
+Good. Now I'll refactor `fetchUserSourceGraphQL`, `fetchUserSourceREST`, `fetchReviewerSourceGraphQL`, and `fetchReviewerSourceREST` into two thin wrappers over two shared helpers:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// fetchUserSourceGraphQL fetches a user source vi..." → "// fetchUserSourceGraphQL fetches a user source vi..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// fetchReviewerSourceGraphQL fetches reviewer-req..." → "// fetchReviewerSourceGraphQL fetches reviewer-req..."
+[94m[Bash][0m $ just check 2>&1
+All 0 issues, all tests pass. Now close the bead and sync:
+[94m[Bash][0m $ extracted shared GQL+REST helpers to satisfy dupl linter" && br sync --flush-only
+Now update progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+### dupl..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.3" → "## 2026-05-28 - mrr-ypr.4
+- Renamed `_ mrsvc.Fetch..."
+<promise>COMPLETE</promise>

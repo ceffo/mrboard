@@ -10,6 +10,16 @@ When adding a second fetch method that mirrors an existing one (e.g. reviewer vs
 
 ---
 
+## 2026-05-28 - mrr-ypr.5
+- Moved `FilterCriteria` from `internal/tui/filter.go` to `internal/domain/state.go`
+- Added yaml tags: `Phases map[MRPhase]bool yaml:"phases,omitempty"`, `Authors []string yaml:"authors,omitempty"`, `Reviewers []string yaml:"reviewers,omitempty"`
+- Replaced `internal/tui/filter.go` with bare package declaration (type moved to domain)
+- Updated `FilterAppliedMsg.Criteria`, `newFilterPopupWidget` signature, `buildApplied` return, and `model.filter` field to `domain.FilterCriteria`
+- **Learnings:**
+  - `map[MRPhase]bool` with `yaml:"...,omitempty"` serializes correctly — omitempty on a map omits it when nil or empty
+  - The tui package already imported `internal/domain`, so no new import was needed in `filter_popup.go` or `model.go`
+---
+
 ## 2026-05-28 - mrr-ypr.4
 - Renamed `_ mrsvc.FetchOptions` to `opts` in `gitlabadpt.FetchAll`
 - Added Phase 1b in `FetchAll`: when `opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0`, calls `listReviewerMRs` and merges raw+mapped results before the dedup phase
