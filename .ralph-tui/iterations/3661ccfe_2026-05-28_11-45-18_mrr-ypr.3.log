@@ -1,0 +1,125 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.3
+- **Task Title**: pkg/gitlab: add GQL reviewRequestedMergeRequests query + REST fallback for reviewer MRs
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:45:18.370Z
+- **Ended At**: 2026-05-28T15:47:42.973Z
+- **Duration**: 2m 24s
+- **Input Tokens**: 25073
+- **Output Tokens**: 7671
+- **Total Tokens**: 32744
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Bash][0m Show bead mrr-ypr.3 details $ br show mrr-ypr.3 --format toon
+Let me check the existing GitLab client code to understand the current state.
+[94m[Bash][0m Show epic details $ br show mrr-ypr --format toon
+[94m[Bash][0m Check sizes of gitlab package files $ wc -l /Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m
+Now I understand the task. I need to add:
+1. A GQL `reviewRequestedMergeRequests` query in `graphql.go`
+2. A REST fallback `ListReviewerMRs` in `client.go`
+
+Let me check the go-gitlab library for the reviewer username field first.
+[94m[Bash][0m Check go-gitlab for ReviewerUsername field $ grep -r "ReviewerUsername\|reviewer_username" ~/go/pkg/mod/gitlab.com/gitlab-org/api/client-go*/merg...
+`ReviewerUsername` exists in go-gitlab. Now I'll implement both the GQL query and REST fallback.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "// doGQLUserMRs executes a GraphQL query and retur..." → "// gqlReviewerMRsQuery fetches open MRs where the ..."
+Now add the REST fallback to `client.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m edit: "// GetMRDiscussions returns all discussions (threa..." → "// ListReviewerMRs returns all open MRs where user..."
+[94m[Bash][0m Run quality checks $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+pkg/gitlab/client.go:87: 87-113 lines are duplicate of `pkg/gitlab/client.go:117-143` (dupl)
+func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicMergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list user MRs", "username", username)
+	var all []*gl.BasicMergeRequest
+	opts := &gl.ListMergeRequestsOptions{
+		AuthorUsername: gl.Ptr(username),
+		State:          gl.Ptr("opened"),
+		Scope:          gl.Ptr("all"),
+		ListOptions:    gl.ListOptions{PerPage: perPage},
+	}
+	for {
+		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts, gl.WithContext(ctx))
+		if err != nil {
+			elapsed := time.Since(start)
+			c.logger.Error("gitlab: list user MRs error", "username", username, "duration", ilog.FmtDur(elapsed), "error", err)
+			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
+		}
+		all = append(all, mrs...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	elapsed := time.Since(start)
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", ilog.FmtDur(elapsed))
+	return all, nil
+}
+pkg/gitlab/client.go:117: 117-143 lines are duplicate of `pkg/gitlab/client.go:87-113` (dupl)
+func (c *Client) ListReviewerMRs(ctx context.Context, username string) ([]*gl.BasicMergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list reviewer MRs", "username", username)
+	var all []*gl.BasicMergeRequest
+	opts := &gl.ListMergeRequestsOptions{
+		ReviewerUsername: gl.Ptr(username),
+		State:            gl.Ptr("opened"),
+		Scope:            gl.Ptr("all"),
+		ListOptions:      gl.ListOptions{PerPage: perPage},
+	}
+	for {
+		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts, gl.WithContext(ctx))
+		if err != nil {
+			elapsed := time.Since(start)
+			c.logger.Error("gitlab: list reviewer MRs error", "username", username, "duration", ilog.FmtDur(elapsed), "error", err)
+			return nil, fmt.Errorf("gitlab: list reviewer MRs for %q: %w", username, err)
+		}
+		all = append(all, mrs...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	elapsed := time.Since(start)
+	c.logger.Debug("gitlab: list reviewer MRs done", "username", username, "count", len(all), "duration", ilog.FmtDur(elapsed))
+	return all, nil
+}
+pkg/gitlab/client.go:131:1: The line is 122 characters long, which exceeds the maximum of 120 characters. (lll)
+			c.logger.Error("gitlab: list reviewer MRs error", "username", username, "duration", ilog.FmtDur(elapsed), "error", err)
+^
+pkg/gitlab/client.go:141:1: The line is 124 characters long, which exceeds the maximum of 120 characters. (lll)
+	c.logger.Debug("gitlab: list reviewer MRs done", "username", username, "count", len(all), "duration", ilog.FmtDur(elapsed))
+^
+4 issues:
+* dupl: 2
+* lll: 2
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Need to fix dupl (extract shared helper) and lll (line too long). Let me refactor both list methods:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m edit: "// ListUserMRs returns all open merge requests aut..." → "// listMRsPaged paginates through all open MRs mat..."
+[94m[Bash][0m Run quality checks $ just check 2>&1
+All checks pass. Now let me close the bead, update progress.md, and flush:
+[94m[Bash][0m Close bead mrr-ypr.3 $ refactored ListUserMRs to share listMRsPaged helper"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.2" → "## 2026-05-28 - mrr-ypr.3
+- Added `gqlReviewerMRsQ..."
+
+[91m[Error: <tool_use_error>File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.2" → "## 2026-05-28 - mrr-ypr.3
+- Added `gqlReviewerMRsQ..."
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+<promise>COMPLETE</promise>

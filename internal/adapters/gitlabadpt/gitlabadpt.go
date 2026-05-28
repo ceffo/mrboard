@@ -39,10 +39,11 @@ func New(client *pkggitlab.Client, cfg Config) *GitLabAdapter {
 }
 
 // FetchAll implements mrsvc.MergeRequestSource.
-func (a *GitLabAdapter) FetchAll(ctx context.Context, _ mrsvc.FetchOptions) ([]domain.MergeRequest, []error) {
+func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) ([]domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 	fetchStart := time.Now()
-	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors)
+	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors,
+		"include_reviewer_mrs", opts.IncludeReviewerMRs)
 
 	var primaryExclusion string
 	if len(a.cfg.ExcludedAuthors) > 0 {
@@ -55,6 +56,18 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, _ mrsvc.FetchOptions) ([]d
 	logger.Info("gitlab: source listing done",
 		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
 		"duration", ilog.FmtDur(time.Since(listStart)))
+
+	// Phase 1b: reviewer MRs (when requested).
+	if opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0 {
+		revStart := time.Now()
+		revRaw, revMapped, revErrs := a.listReviewerMRs(ctx)
+		logger.Info("gitlab: reviewer listing done",
+			"raw", len(revRaw), "mapped", len(revMapped), "reviewer_errors", len(revErrs),
+			"duration", ilog.FmtDur(time.Since(revStart)))
+		rawMRs = append(rawMRs, revRaw...)
+		mappedMRs = append(mappedMRs, revMapped...)
+		errs = append(errs, revErrs...)
+	}
 
 	// Phase 2: deduplicate — build a combined slice (mapped first so they win
 	// on collision, then raw stubs with just key fields), run a single
@@ -255,67 +268,17 @@ func (a *GitLabAdapter) fetchSourceID(
 // fetchUserSourceGraphQL fetches a user source via GraphQL (single query, no enrichment phase).
 // Falls back to REST on error.
 func (a *GitLabAdapter) fetchUserSourceGraphQL(
-	ctx context.Context,
-	username string,
-	logger *slog.Logger,
-	start time.Time,
+	ctx context.Context, username string, logger *slog.Logger, start time.Time,
 ) sourceResult {
-	gqlMRs, err := a.client.FetchUserMRsGraphQL(ctx, username)
-	if err != nil {
-		logger.Warn("gitlab: graphql user fetch failed, falling back to REST", "username", username, "error", err)
-		return a.fetchUserSourceREST(ctx, username, logger, start)
-	}
-
-	var mapped []domain.MergeRequest
-	for _, mr := range gqlMRs {
-		if mr.Project.Archived {
-			logger.Debug("gitlab: skipping MR from archived project (graphql)", "iid", mr.IID, "project", mr.Project.FullPath)
-			continue
-		}
-		if mr.Discussions.PageInfo.HasNextPage {
-			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
-				"username", username, "mr_iid", mr.IID)
-		}
-		mapped = append(mapped, MapMRFromGraphQL(mr))
-	}
-	logger.Info("gitlab: user source fetched (graphql)",
-		"username", username, "total", len(gqlMRs), "active", len(mapped),
-		"duration", ilog.FmtDur(time.Since(start)))
-	return sourceResult{mapped: mapped}
+	return a.fetchSourceViaGQL(ctx, username, "user",
+		a.client.FetchUserMRsGraphQL, a.fetchUserSourceREST, logger, start)
 }
 
 // fetchUserSourceREST is the legacy REST fallback for user sources.
 func (a *GitLabAdapter) fetchUserSourceREST(
-	ctx context.Context,
-	username string,
-	logger *slog.Logger,
-	start time.Time,
+	ctx context.Context, username string, logger *slog.Logger, start time.Time,
 ) sourceResult {
-	mrs, err := a.client.ListUserMRs(ctx, username)
-	if err != nil {
-		logger.Error("gitlab: list user MRs failed (REST)", "username", username, "error", err)
-		return sourceResult{errs: []error{fmt.Errorf("source user=%q: %w", username, err)}}
-	}
-	var active []*gl.BasicMergeRequest
-	var errs []error
-	for _, mr := range mrs {
-		archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
-		if err != nil {
-			logger.Error("gitlab: check project archived failed",
-				"username", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
-			errs = append(errs, fmt.Errorf("source user=%q MR=%d: %w", username, mr.IID, err))
-			continue
-		}
-		if !archived {
-			active = append(active, mr)
-		} else {
-			logger.Debug("gitlab: skipping MR from archived project (REST)", "iid", mr.IID, "project", mr.ProjectID)
-		}
-	}
-	logger.Info("gitlab: user source fetched (REST fallback)",
-		"username", username, "total", len(mrs), "active", len(active),
-		"duration", ilog.FmtDur(time.Since(start)))
-	return sourceResult{raw: active, errs: errs}
+	return a.fetchSourceViaREST(ctx, username, "user", a.client.ListUserMRs, logger, start)
 }
 
 // FetchMR implements mrsvc.MergeRequestSource.
@@ -517,6 +480,122 @@ func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) (do
 // GetFileContent implements mrsvc.MergeRequestSource.
 func (a *GitLabAdapter) GetFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error) {
 	return a.client.GetRawFileContent(ctx, projectID, path, ref)
+}
+
+// listReviewerMRs fetches MRs for all configured reviewer usernames in parallel.
+func (a *GitLabAdapter) listReviewerMRs(
+	ctx context.Context,
+) ([]*gl.BasicMergeRequest, []domain.MergeRequest, []error) {
+	logger := ilog.FromContext(ctx)
+	results := make([]sourceResult, len(a.cfg.ReviewerUsernames))
+	var wg sync.WaitGroup
+	for i, username := range a.cfg.ReviewerUsernames {
+		i, username := i, username
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = a.fetchReviewerSourceGraphQL(ctx, username, logger, time.Now())
+		}()
+	}
+	wg.Wait()
+
+	var allRaw []*gl.BasicMergeRequest
+	var allMapped []domain.MergeRequest
+	var errs []error
+	for _, r := range results {
+		allRaw = append(allRaw, r.raw...)
+		allMapped = append(allMapped, r.mapped...)
+		errs = append(errs, r.errs...)
+	}
+	return allRaw, allMapped, errs
+}
+
+// fetchReviewerSourceGraphQL fetches reviewer-requested MRs for username via GraphQL.
+// Falls back to REST on error.
+func (a *GitLabAdapter) fetchReviewerSourceGraphQL(
+	ctx context.Context, username string, logger *slog.Logger, start time.Time,
+) sourceResult {
+	return a.fetchSourceViaGQL(ctx, username, "reviewer",
+		a.client.FetchReviewerMRsGraphQL, a.fetchReviewerSourceREST, logger, start)
+}
+
+// fetchReviewerSourceREST is the REST fallback for reviewer-requested MRs.
+func (a *GitLabAdapter) fetchReviewerSourceREST(
+	ctx context.Context, username string, logger *slog.Logger, start time.Time,
+) sourceResult {
+	return a.fetchSourceViaREST(ctx, username, "reviewer", a.client.ListReviewerMRs, logger, start)
+}
+
+// fetchSourceViaGQL is the shared implementation for GQL-first fetches (user or reviewer).
+// label is used in log messages ("user" or "reviewer").
+func (a *GitLabAdapter) fetchSourceViaGQL(
+	ctx context.Context,
+	username, label string,
+	gqlFetch func(context.Context, string) ([]pkggitlab.GQLMergeRequest, error),
+	restFallback func(context.Context, string, *slog.Logger, time.Time) sourceResult,
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	gqlMRs, err := gqlFetch(ctx, username)
+	if err != nil {
+		logger.Warn("gitlab: graphql "+label+" fetch failed, falling back to REST", "username", username, "error", err)
+		return restFallback(ctx, username, logger, start)
+	}
+
+	var mapped []domain.MergeRequest
+	for _, mr := range gqlMRs {
+		if mr.Project.Archived {
+			logger.Debug("gitlab: skipping "+label+" MR from archived project (graphql)",
+				"iid", mr.IID, "project", mr.Project.FullPath)
+			continue
+		}
+		if mr.Discussions.PageInfo.HasNextPage {
+			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
+				"username", username, "mr_iid", mr.IID)
+		}
+		mapped = append(mapped, MapMRFromGraphQL(mr))
+	}
+	logger.Info("gitlab: "+label+" source fetched (graphql)",
+		"username", username, "total", len(gqlMRs), "active", len(mapped),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{mapped: mapped}
+}
+
+// fetchSourceViaREST is the shared REST-fallback implementation for user and reviewer sources.
+// label is used in log and error messages ("user" or "reviewer").
+func (a *GitLabAdapter) fetchSourceViaREST(
+	ctx context.Context,
+	username, label string,
+	restFetch func(context.Context, string) ([]*gl.BasicMergeRequest, error),
+	logger *slog.Logger,
+	start time.Time,
+) sourceResult {
+	mrs, err := restFetch(ctx, username)
+	if err != nil {
+		logger.Error("gitlab: list "+label+" MRs failed (REST)", "username", username, "error", err)
+		return sourceResult{errs: []error{fmt.Errorf("%s user=%q: %w", label, username, err)}}
+	}
+	var active []*gl.BasicMergeRequest
+	var errs []error
+	for _, mr := range mrs {
+		archived, err := a.client.IsProjectArchived(ctx, mr.ProjectID)
+		if err != nil {
+			logger.Error("gitlab: check project archived failed",
+				"username", username, "mr", mr.IID, "project", mr.ProjectID, "error", err)
+			errs = append(errs, fmt.Errorf("%s user=%q MR=%d: %w", label, username, mr.IID, err))
+			continue
+		}
+		if !archived {
+			active = append(active, mr)
+		} else {
+			logger.Debug("gitlab: skipping "+label+" MR from archived project (REST)",
+				"iid", mr.IID, "project", mr.ProjectID)
+		}
+	}
+	logger.Info("gitlab: "+label+" source fetched (REST fallback)",
+		"username", username, "total", len(mrs), "active", len(active),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return sourceResult{raw: active, errs: errs}
 }
 
 // countDiffLines counts added and removed lines in a unified diff string.

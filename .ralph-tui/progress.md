@@ -5,8 +5,21 @@ after each iteration and it's included in prompts for context.
 
 ## Codebase Patterns (Study These First)
 
-*Add reusable patterns discovered during development here.*
+### dupl-safe parallel fetchers in gitlabadpt
+When adding a second fetch method that mirrors an existing one (e.g. reviewer vs user), extract `fetchSourceViaGQL` and `fetchSourceViaREST` shared helpers parameterized by a `label string` and the fetch function. Thin wrapper methods call these. This satisfies the `dupl` linter without coupling the two code paths.
 
+---
+
+## 2026-05-28 - mrr-ypr.4
+- Renamed `_ mrsvc.FetchOptions` to `opts` in `gitlabadpt.FetchAll`
+- Added Phase 1b in `FetchAll`: when `opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0`, calls `listReviewerMRs` and merges raw+mapped results before the dedup phase
+- Added `listReviewerMRs` — parallel fetch over `ReviewerUsernames`, same structure as `listAllMRs`
+- Added thin wrappers `fetchReviewerSourceGraphQL` / `fetchReviewerSourceREST`
+- Extracted shared `fetchSourceViaGQL` and `fetchSourceViaREST` helpers (parameterized by `label string` + fetch func) to avoid `dupl` linter firing on the near-identical user/reviewer method pairs
+- Refactored `fetchUserSourceGraphQL` / `fetchUserSourceREST` to delegate to shared helpers
+- **Learnings:**
+  - `dupl` fires immediately when adding a second method structurally identical to an existing one — always extract a shared helper when the second method is added, not after the linter catches it
+  - `fetchSourceViaGQL` takes `gqlFetch func(context.Context, string) ([]pkggitlab.GQLMergeRequest, error)` and `restFallback func(context.Context, string, *slog.Logger, time.Time) sourceResult` — method values (`a.client.FetchReviewerMRsGraphQL`) satisfy these signatures directly
 ---
 
 ## 2026-05-28 - mrr-ypr.3

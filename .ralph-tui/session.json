@@ -3,10 +3,10 @@
   "sessionId": "3661ccfe-3868-4c29-8aa9-d3a72dac8a3d",
   "status": "running",
   "startedAt": "2026-05-28T15:40:41.596Z",
-  "updatedAt": "2026-05-28T15:47:43.064Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-05-28T15:51:40.293Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -29,8 +29,8 @@
       {
         "id": "mrr-ypr.3",
         "title": "pkg/gitlab: add GQL reviewRequestedMergeRequests query + REST fallback for reviewer MRs",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-ypr.4",
@@ -96,6 +96,16 @@
       "durationMs": 120426,
       "startedAt": "2026-05-28T15:43:16.102Z",
       "endedAt": "2026-05-28T15:45:16.528Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "mrr-ypr.3",
+      "taskTitle": "pkg/gitlab: add GQL reviewRequestedMergeRequests query + REST fallback for reviewer MRs",
+      "taskCompleted": true,
+      "durationMs": 144603,
+      "startedAt": "2026-05-28T15:45:18.370Z",
+      "endedAt": "2026-05-28T15:47:42.973Z"
     }
   ],
   "skippedTaskIds": [],
