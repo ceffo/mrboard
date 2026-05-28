@@ -141,6 +141,8 @@ type MergeRequest struct {
 
 	OpenThreads    int
 	RoundTripCount int
+
+	ReviewerSource bool // true when this MR came only from a reviewer-source fetch
 }
 
 // DisplayAuthor returns the human-readable author name, falling back to the username.

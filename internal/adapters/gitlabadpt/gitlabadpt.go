@@ -58,6 +58,15 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 		"duration", ilog.FmtDur(time.Since(listStart)))
 
 	// Phase 1b: reviewer MRs (when requested).
+	// Record primary keys before reviewer MRs are appended so we can mark reviewer-only MRs later.
+	primaryKeys := make(map[mrKey]bool, len(rawMRs)+len(mappedMRs))
+	for _, mr := range mappedMRs {
+		primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
+	}
+	for _, mr := range rawMRs {
+		primaryKeys[mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}] = true
+	}
+
 	if opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0 {
 		revStart := time.Now()
 		revRaw, revMapped, revErrs := a.listReviewerMRs(ctx)
@@ -150,6 +159,16 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger.Info("gitlab: enrichment done",
 		"enriched", len(unique)-enrichErrs, "enrich_errors", enrichErrs,
 		"duration", ilog.FmtDur(time.Since(enrichStart)))
+
+	// Mark MRs that came exclusively from the reviewer fetch.
+	if opts.IncludeReviewerMRs {
+		for i, mr := range finalMRs {
+			if !primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] {
+				finalMRs[i].ReviewerSource = true
+			}
+		}
+	}
+
 	logger.Info("gitlab: fetch done",
 		"mrs", len(finalMRs), "errors", len(errs),
 		"total_duration", ilog.FmtDur(time.Since(fetchStart)))

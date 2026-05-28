@@ -203,9 +203,6 @@ func (c cardWidget) renderPills(now time.Time) []string {
 	}
 	parts := make([]string, 0, len(sorted))
 	for _, r := range sorted {
-		if r.State == domain.ReviewerNotStarted && !r.IsApprover {
-			continue
-		}
 		parts = append(parts, c.renderPill(r, now))
 	}
 	return parts

@@ -204,6 +204,7 @@ type Model struct {
 	sortDesc           bool
 	filter             domain.FilterCriteria
 	includeReviewerMRs bool
+	reviewerMRsInStore bool // true once allMRs contains reviewer-source MRs
 	fetchCancel        context.CancelFunc
 	baseCtx            context.Context
 	logger             *slog.Logger
@@ -366,6 +367,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isRefreshing = false
 		m.allMRs = msg.MRs
 		m.errors = msg.Errors
+		m.reviewerMRsInStore = hasReviewerSourceMR(msg.MRs)
 		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
 		for _, e := range msg.Errors {
 			m.logger.Warn("tui: fetch partial error", "error", e)
@@ -755,6 +757,7 @@ func (m *Model) openSettings() {
 // handleSettingsApplied applies all live changes from the settings panel.
 func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd) {
 	m.filter = msg.Filter
+	reviewerFetchNeeded := msg.IncludeReviewerMRs && !m.includeReviewerMRs && !m.reviewerMRsInStore
 	m.includeReviewerMRs = msg.IncludeReviewerMRs
 
 	sortChanged := m.sortField.stateKey() != msg.SortField || m.sortDesc != msg.SortDesc
@@ -781,6 +784,11 @@ func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd
 
 	m.applyMRFilter()
 	m.saveState()
+
+	if reviewerFetchNeeded {
+		m.isRefreshing = true
+		return m, tea.Batch(m.sp.Init(), m.startFetch())
+	}
 	return m, nil
 }
 
@@ -987,7 +995,17 @@ func (m *Model) applyTheme() {
 
 func (m *Model) applyMRFilter() {
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
-	mrs := mrsvc.FilterAndSort(m.allMRs, mrsvc.FilterOptions{
+	src := m.allMRs
+	if !m.includeReviewerMRs {
+		filtered := make([]domain.MergeRequest, 0, len(src))
+		for _, mr := range src {
+			if !mr.ReviewerSource {
+				filtered = append(filtered, mr)
+			}
+		}
+		src = filtered
+	}
+	mrs := mrsvc.FilterAndSort(src, mrsvc.FilterOptions{
 		MyView:      m.viewMode == domain.ViewMine,
 		CurrentUser: m.currentUser,
 		SortField:   m.sortField.stateKey(),
@@ -1031,6 +1049,15 @@ func (m *Model) saveState() {
 	}); err != nil {
 		m.logger.Error("statestore: save failed", "err", err)
 	}
+}
+
+func hasReviewerSourceMR(mrs []domain.MergeRequest) bool {
+	for _, mr := range mrs {
+		if mr.ReviewerSource {
+			return true
+		}
+	}
+	return false
 }
 
 func openBrowser(url string) tea.Cmd {
