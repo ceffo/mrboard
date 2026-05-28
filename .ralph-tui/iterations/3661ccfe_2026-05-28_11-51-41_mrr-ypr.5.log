@@ -1,0 +1,65 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.5
+- **Task Title**: domain: move FilterCriteria to domain package with yaml tags
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:51:41.923Z
+- **Ended At**: 2026-05-28T15:53:18.456Z
+- **Duration**: 1m 36s
+- **Input Tokens**: 75
+- **Output Tokens**: 5135
+- **Total Tokens**: 5210
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Show bead details for mrr-ypr.5 $ br show mrr-ypr.5 --format toon 2>/dev/null || echo "Task not found"
+Let me find where `FilterCriteria` currently lives and understand the current domain structure.
+[94m[Grep][0m pattern: [96mFilterCriteria[0m
+[94m[Bash][0m Show epic details $ br show mrr-ypr --format toon 2>/dev/null | head -40
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui[0m pattern: [96mFilterCriteria[0m
+The task is clear. I'll:
+1. Add `FilterCriteria` to `internal/domain` with yaml tags
+2. Update `internal/tui/filter.go` to remove the type (keep the file as a type alias or delete it)
+3. Update all `tui` references to `domain.FilterCriteria`
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Glob][0m pattern: [96minternal/domain/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+Now I'll make the changes:
+1. Add `FilterCriteria` to `internal/domain/state.go` with yaml tags
+2. Replace `internal/tui/filter.go` with no content (just the package declaration since the type is gone)
+3. Update tui references to use `domain.FilterCriteria`
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m edit: "// ViewMode controls whether the board shows all M..." → "// FilterCriteria is the persisted filter state. Z..."
+Now replace `filter.go` in the tui package — remove the type definition since it's moved to domain:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter.go[0m "package tui
+"
+Now update references in `filter_popup.go` and `model.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	Criteria FilterCriteria" → "	Criteria domain.FilterCriteria"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filter             FilterCriteria" → "	filter             domain.FilterCriteria"
+Now the `filter_popup.go` function signature and struct literal at lines 209 and 342:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	current FilterCriteria," → "	current domain.FilterCriteria,"
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "		Criteria: FilterCriteria{" → "		Criteria: domain.FilterCriteria{"
+Now run the quality check:
+[94m[Bash][0m Run quality gates $ just check 2>&1
+All checks pass. Now close the bead and update progress:
+[94m[Bash][0m Close bead mrr-ypr.5 $ updated tui references"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.4" → "## 2026-05-28 - mrr-ypr.5
+- Moved `FilterCriteria`..."
+[94m[Bash][0m Sync beads to JSONL $ br sync --flush-only
+[94m[Bash][0m Flush beads state $ echo done
+All done. `FilterCriteria` is now in `internal/domain/state.go` with yaml tags, the tui package was updated to reference `domain.FilterCriteria`, and all checks pass.
+
+<promise>COMPLETE</promise>

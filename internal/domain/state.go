@@ -21,11 +21,13 @@ const (
 
 // AppState is the persisted subset of UI state — fields that survive across sessions.
 type AppState struct {
-	SortField string   `yaml:"sort_field"` // "repo_iid" | "author" | "age"
-	SortDesc  bool     `yaml:"sort_desc"`
-	ViewMode  ViewMode `yaml:"view_mode"`
-	ThemeName string   `yaml:"theme_name"` // "" means "default"
-	ThemeMode string   `yaml:"theme_mode"` // "" means "auto"
+	SortField          string         `yaml:"sort_field"` // "repo_iid" | "author" | "age"
+	SortDesc           bool           `yaml:"sort_desc"`
+	ViewMode           ViewMode       `yaml:"view_mode"`
+	ThemeName          string         `yaml:"theme_name"` // "" means "default"
+	ThemeMode          string         `yaml:"theme_mode"` // "" means "auto"
+	Filter             FilterCriteria `yaml:"filter,omitempty"`
+	IncludeReviewerMRs bool           `yaml:"include_reviewer_mrs,omitempty"`
 }
 
 // DefaultAppState returns the out-of-box persisted state.

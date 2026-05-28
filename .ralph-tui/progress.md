@@ -10,6 +10,14 @@ When adding a second fetch method that mirrors an existing one (e.g. reviewer vs
 
 ---
 
+## 2026-05-28 - mrr-ypr.6
+- Added `Filter FilterCriteria` and `IncludeReviewerMRs bool` to `AppState` in `internal/domain/state.go`
+- Both fields use `yaml:",omitempty"` so zero-value state files stay clean
+- **Learnings:**
+  - Scope was domain-only; TUI wiring (load/save) is mrr-ypr.7
+
+---
+
 ## 2026-05-28 - mrr-ypr.5
 - Moved `FilterCriteria` from `internal/tui/filter.go` to `internal/domain/state.go`
 - Added yaml tags: `Phases map[MRPhase]bool yaml:"phases,omitempty"`, `Authors []string yaml:"authors,omitempty"`, `Reviewers []string yaml:"reviewers,omitempty"`
