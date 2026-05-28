@@ -14,8 +14,7 @@ type KeyMap struct {
 	CloseDetail key.Binding
 	Sort        key.Binding
 	ToggleView  key.Binding
-	Filter      key.Binding
-	Theme       key.Binding
+	Settings    key.Binding
 	Approvers   key.Binding
 	Diff        key.Binding
 	Quit        key.Binding
@@ -25,7 +24,7 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Filter, k.Theme, k.Approvers, k.Diff, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Approvers, k.Diff, k.Quit,
 	}
 }
 
@@ -62,8 +61,7 @@ var DefaultKeyMap = KeyMap{
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
-	Filter:      key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
-	Theme:       key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
+	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
 	Approvers:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approvers")),
 	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -94,7 +92,7 @@ var DefaultFilterPopupKeyMap = FilterPopupKeyMap{
 	Toggle:    key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
 	FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next section")),
 	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev section")),
-	Close:     key.NewBinding(key.WithKeys("f", "esc"), key.WithHelp("f/esc", "close")),
+	Close:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
 }
 
 // ThemePickerKeyMap holds keybindings for the theme picker popup.
@@ -122,7 +120,7 @@ var DefaultThemePickerKeyMap = ThemePickerKeyMap{
 	FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
 	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev pane")),
 	Confirm:   key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("↵/space", "select")),
-	Close:     key.NewBinding(key.WithKeys("t", "esc"), key.WithHelp("t/esc", "close")),
+	Close:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
 }
 
 // ApproverEditorKeyMap holds keybindings for the approver editor overlay.
@@ -190,6 +188,36 @@ func (k DiffViewKeyMap) ShortHelp() []key.Binding {
 
 // FullHelp implements help.KeyMap.
 func (k DiffViewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// SettingsKeyMap holds keybindings for the settings panel.
+type SettingsKeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	PrevTab key.Binding
+	NextTab key.Binding
+	Toggle  key.Binding
+	Confirm key.Binding
+	Close   key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k SettingsKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.PrevTab, k.NextTab, k.Toggle, k.Confirm, k.Close}
+}
+
+// FullHelp implements help.KeyMap.
+func (k SettingsKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// DefaultSettingsKeyMap is the default keybinding set for the settings panel.
+var DefaultSettingsKeyMap = SettingsKeyMap{
+	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	PrevTab: key.NewBinding(key.WithKeys("shift+tab", "left", "h"), key.WithHelp("shift+tab", "prev tab")),
+	NextTab: key.NewBinding(key.WithKeys("tab", "right", "l"), key.WithHelp("tab", "next tab")),
+	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
+	Close:   key.NewBinding(key.WithKeys(",", "esc"), key.WithHelp(",/esc", "close")),
+}
 
 // DefaultDiffViewKeyMap is the default keybinding set for the diff view.
 var DefaultDiffViewKeyMap = DiffViewKeyMap{

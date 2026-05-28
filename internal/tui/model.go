@@ -186,6 +186,7 @@ type Model struct {
 	detailKeys         DetailKeyMap
 	filterKeys         FilterPopupKeyMap
 	themePickerKeys    ThemePickerKeyMap
+	settingsKeys       SettingsKeyMap
 	approverEditorKeys ApproverEditorKeyMap
 	styles             Styles
 	theme              theme.Theme[ColorKey]
@@ -287,6 +288,7 @@ func New(
 		detailKeys:         DefaultDetailKeyMap,
 		filterKeys:         DefaultFilterPopupKeyMap,
 		themePickerKeys:    DefaultThemePickerKeyMap,
+		settingsKeys:       DefaultSettingsKeyMap,
 		approverEditorKeys: DefaultApproverEditorKeyMap,
 		diffViewKeys:       DefaultDiffViewKeyMap,
 		diffView:           newDiffViewWidget(styles),
@@ -482,12 +484,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// 't' opens the theme picker from board or detail mode.
-	if key.Matches(msg, m.keys.Theme) {
-		m.openThemePicker()
-		return m, nil
-	}
-
 	if m.showDiffView {
 		return m.handleKeyDiff(msg)
 	}
@@ -602,13 +598,8 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.openDetail(mr)
 			return m, m.fetchDetailCmd(mr)
 		}
-	case key.Matches(msg, m.keys.Filter):
-		authors, reviewers := uniqueAuthorsReviewers(m.allMRs)
-		m.filterPopup = newFilterPopupWidget(
-			m.styles, m.filterKeys, authors, reviewers, m.userMap,
-			m.filter, m.currentUser,
-		)
-		m.showFilter = true
+	case key.Matches(msg, m.keys.Settings):
+		// settings widget wired in mrr-ypr.9
 		return m, nil
 	case key.Matches(msg, m.keys.Approvers):
 		if mr := m.board.FocusedMR(); mr != nil {
@@ -764,6 +755,7 @@ func (m Model) renderDiffScreen() string {
 	return headerStr + "\n" + body + "\n" + footerStr
 }
 
+//nolint:unused
 func (m *Model) openThemePicker() {
 	names, err := AllThemeNames()
 	if err != nil {

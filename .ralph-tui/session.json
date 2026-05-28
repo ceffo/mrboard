@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "sessionId": "3661ccfe-3868-4c29-8aa9-d3a72dac8a3d",
+  "sessionId": "2b3e2d89-34d6-4dea-8dd9-e1219e54c5bf",
   "status": "running",
-  "startedAt": "2026-05-28T15:40:41.596Z",
-  "updatedAt": "2026-05-28T15:56:32.938Z",
-  "currentIteration": 6,
+  "startedAt": "2026-05-28T17:06:49.182Z",
+  "updatedAt": "2026-05-28T17:10:22.086Z",
+  "currentIteration": 0,
   "maxIterations": 10,
-  "tasksCompleted": 6,
+  "tasksCompleted": 0,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -18,42 +18,42 @@
         "id": "mrr-ypr.1",
         "title": "mrsvc: add FetchOptions struct, change FetchAll signature, regenerate mocks",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.2",
         "title": "core+adapter: derive reviewer usernames from user sources + current_user, extend gitlabadpt.Config",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.3",
         "title": "pkg/gitlab: add GQL reviewRequestedMergeRequests query + REST fallback for reviewer MRs",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.4",
         "title": "gitlabadpt: wire reviewer fetch into FetchAll when opts.IncludeReviewerMRs",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.5",
         "title": "domain: move FilterCriteria to domain package with yaml tags",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.6",
         "title": "domain: extend AppState with Filter FilterCriteria + IncludeReviewerMRs bool",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-ypr.7",
         "title": "tui/model: load/save filter+reviewer from AppState, pass FetchOptions to FetchAll",
-        "status": "open",
+        "status": "completed",
         "completedInSession": false
       },
       {
@@ -76,68 +76,7 @@
       }
     ]
   },
-  "iterations": [
-    {
-      "iteration": 1,
-      "status": "completed",
-      "taskId": "mrr-ypr.1",
-      "taskTitle": "mrsvc: add FetchOptions struct, change FetchAll signature, regenerate mocks",
-      "taskCompleted": true,
-      "durationMs": 141932,
-      "startedAt": "2026-05-28T15:40:52.455Z",
-      "endedAt": "2026-05-28T15:43:14.387Z"
-    },
-    {
-      "iteration": 2,
-      "status": "completed",
-      "taskId": "mrr-ypr.2",
-      "taskTitle": "core+adapter: derive reviewer usernames from user sources + current_user, extend gitlabadpt.Config",
-      "taskCompleted": true,
-      "durationMs": 120426,
-      "startedAt": "2026-05-28T15:43:16.102Z",
-      "endedAt": "2026-05-28T15:45:16.528Z"
-    },
-    {
-      "iteration": 3,
-      "status": "completed",
-      "taskId": "mrr-ypr.3",
-      "taskTitle": "pkg/gitlab: add GQL reviewRequestedMergeRequests query + REST fallback for reviewer MRs",
-      "taskCompleted": true,
-      "durationMs": 144603,
-      "startedAt": "2026-05-28T15:45:18.370Z",
-      "endedAt": "2026-05-28T15:47:42.973Z"
-    },
-    {
-      "iteration": 4,
-      "status": "completed",
-      "taskId": "mrr-ypr.4",
-      "taskTitle": "gitlabadpt: wire reviewer fetch into FetchAll when opts.IncludeReviewerMRs",
-      "taskCompleted": true,
-      "durationMs": 235480,
-      "startedAt": "2026-05-28T15:47:44.756Z",
-      "endedAt": "2026-05-28T15:51:40.236Z"
-    },
-    {
-      "iteration": 5,
-      "status": "completed",
-      "taskId": "mrr-ypr.5",
-      "taskTitle": "domain: move FilterCriteria to domain package with yaml tags",
-      "taskCompleted": true,
-      "durationMs": 96533,
-      "startedAt": "2026-05-28T15:51:41.923Z",
-      "endedAt": "2026-05-28T15:53:18.456Z"
-    },
-    {
-      "iteration": 6,
-      "status": "completed",
-      "taskId": "mrr-ypr.6",
-      "taskTitle": "domain: extend AppState with Filter FilterCriteria + IncludeReviewerMRs bool",
-      "taskCompleted": true,
-      "durationMs": 87978,
-      "startedAt": "2026-05-28T15:53:20.264Z",
-      "endedAt": "2026-05-28T15:54:48.242Z"
-    }
-  ],
+  "iterations": [],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
   "activeTaskIds": [],

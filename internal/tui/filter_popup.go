@@ -33,14 +33,6 @@ const (
 
 var phaseLabels = [4]string{phaseLabelDraft, phaseLabelReview, phaseLabelAuthorAc, phaseLabelReady}
 
-// lookupName returns the full name for key from m, or key itself if not found.
-func lookupName(m map[string]string, key string) string {
-	if n, ok := m[key]; ok {
-		return n
-	}
-	return key
-}
-
 // --- filterStatusWidget ---
 
 // filterStatusWidget manages the Status (phase) section checkboxes.
@@ -90,11 +82,10 @@ type filterSelectItem struct {
 
 // filterSelectWidget manages a scrollable multi-select list.
 type filterSelectWidget struct {
-	items       []filterSelectItem
-	checked     map[string]bool // nil/empty = all shown (no filter)
-	cursor      int
-	scrollOff   int
-	currentUser string // when set, auto-pins this user when selecting others
+	items     []filterSelectItem
+	checked   map[string]bool // nil/empty = all shown (no filter)
+	cursor    int
+	scrollOff int
 }
 
 func (s *filterSelectWidget) moveCursor(delta int) {
@@ -196,92 +187,6 @@ type filterPopupWidget struct {
 	reviewer filterSelectWidget
 }
 
-// newFilterPopupWidget builds a popup pre-populated with the current filter state.
-// authors and reviewers are sorted unique usernames.
-// userMap maps username → display name for both authors and reviewers.
-// currentUser is pinned at the top of the author list.
-func newFilterPopupWidget(
-	styles Styles,
-	keys FilterPopupKeyMap,
-	authors []string,
-	reviewers []string,
-	userMap map[string]string,
-	current domain.FilterCriteria,
-	currentUser string,
-) filterPopupWidget {
-	// Status section.
-	var arr [4]bool
-	if len(current.Phases) == 0 {
-		arr = [4]bool{true, true, true, true}
-	} else {
-		for i := range arr {
-			arr[i] = current.Phases[domain.MRPhase(i)]
-		}
-	}
-
-	// Author section: current user pinned first.
-	orderedAuthors := make([]string, 0, len(authors))
-	if currentUser != "" {
-		orderedAuthors = append(orderedAuthors, currentUser)
-		for _, a := range authors {
-			if a != currentUser {
-				orderedAuthors = append(orderedAuthors, a)
-			}
-		}
-	} else {
-		orderedAuthors = append(orderedAuthors, authors...)
-	}
-
-	authorItems := make([]filterSelectItem, 0, 1+len(orderedAuthors))
-	authorItems = append(authorItems, filterSelectItem{value: "", label: "All authors"})
-	for _, a := range orderedAuthors {
-		lbl := lookupName(userMap, a)
-		if a == currentUser && currentUser != "" {
-			lbl += " (you)"
-		}
-		authorItems = append(authorItems, filterSelectItem{value: a, label: lbl})
-	}
-
-	var authorChecked map[string]bool
-	if len(current.Authors) > 0 {
-		authorChecked = make(map[string]bool, len(current.Authors))
-		for _, a := range current.Authors {
-			authorChecked[a] = true
-		}
-	}
-
-	// Reviewer section.
-	reviewerItems := make([]filterSelectItem, 0, 1+len(reviewers))
-	reviewerItems = append(reviewerItems, filterSelectItem{value: "", label: "All reviewers"})
-	for _, r := range reviewers {
-		reviewerItems = append(reviewerItems, filterSelectItem{value: r, label: lookupName(userMap, r)})
-	}
-
-	var reviewerChecked map[string]bool
-	if len(current.Reviewers) > 0 {
-		reviewerChecked = make(map[string]bool, len(current.Reviewers))
-		for _, r := range current.Reviewers {
-			reviewerChecked[r] = true
-		}
-	}
-
-	return filterPopupWidget{
-		styles: styles,
-		keys:   keys,
-		focus:  filterFocusStatus,
-		status: filterStatusWidget{phases: arr},
-		author: filterSelectWidget{
-			items:       authorItems,
-			checked:     authorChecked,
-			currentUser: currentUser,
-		},
-		reviewer: filterSelectWidget{
-			items:   reviewerItems,
-			checked: reviewerChecked,
-		},
-	}
-}
-
 func (p filterPopupWidget) Init() tea.Cmd { return nil }
 
 func (p filterPopupWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:ireturn
@@ -362,7 +267,7 @@ func (p filterPopupWidget) render() string {
 	sb.WriteString(renderSectionHeader("Reviewer", p.focus == filterFocusReviewer, p.styles) + "\n")
 	sb.WriteString(p.reviewer.render(p.focus == filterFocusReviewer, p.styles))
 
-	sb.WriteString("\n" + p.styles.PopupHint.Render("  ↑/↓ move  tab section  space toggle  f/esc close"))
+	sb.WriteString("\n" + p.styles.PopupHint.Render("  ↑/↓ move  tab section  space toggle  esc close"))
 	return p.styles.PopupBorder.Render(sb.String())
 }
 
@@ -375,29 +280,4 @@ func renderSectionHeader(title string, focused bool, styles Styles) string {
 
 func (p filterPopupWidget) View() tea.View {
 	return tea.NewView(p.render())
-}
-
-// uniqueAuthorsReviewers extracts sorted unique author usernames and reviewer usernames from mrs.
-func uniqueAuthorsReviewers(mrs []domain.MergeRequest) (authors, reviewers []string) {
-	authorSet := make(map[string]struct{})
-	reviewerSet := make(map[string]struct{})
-	for _, mr := range mrs {
-		if mr.Author != "" {
-			authorSet[mr.Author] = struct{}{}
-		}
-		for _, r := range mr.Reviewers {
-			if r.Username != "" {
-				reviewerSet[r.Username] = struct{}{}
-			}
-		}
-	}
-	for a := range authorSet {
-		authors = append(authors, a)
-	}
-	for r := range reviewerSet {
-		reviewers = append(reviewers, r)
-	}
-	sort.Strings(authors)
-	sort.Strings(reviewers)
-	return
 }

@@ -30,6 +30,40 @@ const (
 	pickerRadioPrefixLen = 2 // "● " or "○ "
 )
 
+// newThemePickerWidget creates a themePickerWidget with initial cursor positions matching
+// the currently selected theme name and mode.
+//
+//nolint:unused
+func newThemePickerWidget( //nolint:deadcode
+	themes []string, currentTheme, currentMode string, styles Styles, keys ThemePickerKeyMap,
+) themePickerWidget {
+	cursor := 0
+	for i, name := range themes {
+		if name == currentTheme {
+			cursor = i
+			break
+		}
+	}
+	modeCursor := 0
+	for i, m := range modeOptions {
+		if m == currentMode {
+			modeCursor = i
+			break
+		}
+	}
+	p := themePickerWidget{
+		themes:     themes,
+		cursor:     cursor,
+		modeCursor: modeCursor,
+		styles:     styles,
+		keys:       keys,
+	}
+	if cursor >= pickerMaxVisible {
+		p.scrollOff = cursor - pickerMaxVisible + 1
+	}
+	return p
+}
+
 // themePickerWidget is the overlay popup for live theme and mode selection.
 type themePickerWidget struct {
 	themes     []string
@@ -39,38 +73,6 @@ type themePickerWidget struct {
 	scrollOff  int
 	styles     Styles
 	keys       ThemePickerKeyMap
-}
-
-func newThemePickerWidget(
-	themes []string,
-	activeName, activeMode string,
-	styles Styles,
-	keys ThemePickerKeyMap,
-) themePickerWidget {
-	cursor := 0
-	for i, t := range themes {
-		if t == activeName {
-			cursor = i
-			break
-		}
-	}
-	modeCursor := 0
-	for i, m := range modeOptions {
-		if m == activeMode {
-			modeCursor = i
-			break
-		}
-	}
-	p := themePickerWidget{
-		themes:     themes,
-		cursor:     cursor,
-		modeCursor: modeCursor,
-		focus:      pickerFocusList,
-		styles:     styles,
-		keys:       keys,
-	}
-	p.adjustScroll()
-	return p
 }
 
 // Init implements tea.Model.
@@ -215,7 +217,7 @@ func (p themePickerWidget) render() string {
 
 	// --- Compose ---
 	body := lip.JoinHorizontal(lip.Top, listPane, divider, modePane)
-	hint := p.styles.PopupHint.Render("  ↑/↓ move  tab switch pane  t/esc close")
+	hint := p.styles.PopupHint.Render("  ↑/↓ move  tab switch pane  esc close")
 	content := p.styles.PopupTitle.Render("Themes") + "\n" + body + "\n" + hint
 	return p.styles.PopupBorder.Render(content)
 }

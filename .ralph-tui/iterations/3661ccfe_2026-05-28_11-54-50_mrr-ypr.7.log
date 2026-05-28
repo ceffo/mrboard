@@ -1,0 +1,66 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.7
+- **Task Title**: tui/model: load/save filter+reviewer from AppState, pass FetchOptions to FetchAll
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:54:50.022Z
+- **Ended At**: 2026-05-28T15:56:32.882Z
+- **Duration**: 1m 42s
+- **Input Tokens**: 54
+- **Output Tokens**: 5629
+- **Total Tokens**: 5683
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me look at the key files for this task.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+I have a clear picture of what's needed. The changes for mrr-ypr.7 are:
+
+1. Add `includeReviewerMRs bool` field to `Model`
+2. Load `Filter` and `IncludeReviewerMRs` from `AppState` in `New()`
+3. Pass `IncludeReviewerMRs` via `FetchOptions` in both `makeFetchCmd` and `startFetch`
+4. Save `Filter` and `IncludeReviewerMRs` in `saveState()`
+5. Call `saveState()` when `FilterAppliedMsg` is received
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filter             domain.FilterCriteria
+	fetchCa..." → "	filter             domain.FilterCriteria
+	include..."
+Now load the fields from `AppState` in `New()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		currentUser:        cfg.CurrentUser,
+		viewMode:..." → "		currentUser:        cfg.CurrentUser,
+		viewMode:..."
+Now update `makeFetchCmd` to accept and use `includeReviewerMRs`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// Init starts the spinner, fires the first data f..." → "// Init starts the spinner, fires the first data f..."
+Now update `startFetch` to pass `includeReviewerMRs`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	src := m.src
+	return func() tea.Msg {
+		defer can..." → "	src := m.src
+	includeReviewerMRs := m.includeRevi..."
+Now save filter + reviewer in `saveState()` and call `saveState()` on `FilterAppliedMsg`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FilterAppliedMsg:
+		m.filter = msg.Criteria
+..." → "	case FilterAppliedMsg:
+		m.filter = msg.Criteria
+..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) saveState() {
+	if err := m.store.S..." → "func (m *Model) saveState() {
+	if err := m.store.S..."
+Now run the quality checks:
+[94m[Bash][0m $ just check 2>&1
+All 0 lint issues, build passes, all tests pass. Now close the bead and update progress:
+[94m[Bash][0m $ br close mrr-ypr.7 --reason "Load Filter+IncludeReviewerMRs from AppState in New(), persist in saveS...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.6" → "## 2026-05-28 - mrr-ypr.7
+- Added `includeReviewer..."
+All done. `just check` passes (0 lint issues, build clean, all tests green). The changes wire `AppState.Filter` and `AppState.IncludeReviewerMRs` into the TUI model — loaded on startup, persisted on every `saveState()` call (sort, view toggle, theme change, filter apply), and forwarded as `FetchOptions` to every `FetchAll` invocation.
+
+<promise>COMPLETE</promise>

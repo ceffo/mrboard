@@ -1,0 +1,122 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.8
+- **Task Title**: tui/keys: remove f/t bindings, add comma for settings, add SettingsKeyMap
+- **Status**: failed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-05-28T15:56:34.672Z
+- **Ended At**: 2026-05-28T17:02:42.593Z
+- **Duration**: 1h 6m 7s
+- **Input Tokens**: 132
+- **Output Tokens**: 20769
+- **Total Tokens**: 20901
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me look at the current keys.go file to understand what exists.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+Let me check the bead details and the epic PRD for context.
+[94m[Bash][0m $ br show mrr-ypr.8 --format toon 2>/dev/null | head -80
+[94m[Bash][0m $ br show mrr-ypr --format toon 2>/dev/null | head -60
+Let me check how `Filter` and `Theme` keys are used in the model.
+[94m[Bash][0m $ rg "keyMap\.Filter|keyMap\.Theme|keys\.Filter|keys\.Theme|\.Filter\b|\.Theme\b" /Users/moncefnaji/co...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check what else uses `m.keys.Filter` and `m.keys.Theme` and the model fields.
+[94m[Bash][0m $ rg "keys\.Filter|keys\.Theme|filterKeys\b|themeKeys\b" /Users/moncefnaji/code/github.com/mrboard/int...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ rg "openThemePicker\|openFilter\|showFilter\|showTheme\|Settings\b" /Users/moncefnaji/code/github.co...
+[94m[Bash][0m $ rg "openThemePicker|showFilter|showTheme|themePicker\b" /Users/moncefnaji/code/github.com/mrboard/in...
+Now I have a complete picture. Let me implement the changes to `keys.go` and `model.go`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// KeyMap contains all keybindings for mrboard in ..." → "// KeyMap contains all keybindings for mrboard in ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "	Sort:        key.NewBinding(key.WithKeys("s"), ke..." → "	Sort:       key.NewBinding(key.WithKeys("s"), key..."
+Now add the `SettingsKeyMap` type at the end of the file.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// DefaultDiffViewKeyMap is the default keybinding..." → "// SettingsKeyMap holds keybindings for the settin..."
+Now update `model.go` — add `settingsKeys` field, remove `Theme`/`Filter` handlers, add `Settings` handler.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filterKeys         FilterPopupKeyMap
+	themePicker..." → "	filterKeys         FilterPopupKeyMap
+	themePicker..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		filterKeys:         DefaultFilterPopupKeyMap,
+		..." → "		filterKeys:         DefaultFilterPopupKeyMap,
+		..."
+Now remove the `Theme` key handler and the `Filter` key handler, and add a `Settings` no-op handler.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	// 't' opens the theme picker from board or detai..." → "	if m.showDiffView {"
+Now remove the `Filter` case and add a `Settings` case:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.Filter):
+		authors, ..." → "	case key.Matches(msg, m.keys.Settings):
+		// sett..."
+Now run `just check` to verify everything compiles and passes.
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/filter_popup.go:37:6: func lookupName is unused (unused)
+func lookupName(m map[string]string, key string) string {
+     ^
+internal/tui/filter_popup.go:97:2: field currentUser is unused (unused)
+	currentUser string // when set, auto-pins this user when selecting others
+	^
+internal/tui/filter_popup.go:203:6: func newFilterPopupWidget is unused (unused)
+func newFilterPopupWidget(
+     ^
+internal/tui/filter_popup.go:381:6: func uniqueAuthorsReviewers is unused (unused)
+func uniqueAuthorsReviewers(mrs []domain.MergeRequest) (authors, reviewers []string) {
+     ^
+internal/tui/model.go:758:17: func (*Model).openThemePicker is unused (unused)
+func (m *Model) openThemePicker() {
+                ^
+internal/tui/theme_picker.go:44:6: func newThemePickerWidget is unused (unused)
+func newThemePickerWidget(
+     ^
+6 issues:
+* unused: 6
+error: recipe `lint` failed on line 17 with exit code 1][0m
+The linter found unused functions. Let me check what's still referenced.
+[94m[Bash][0m $ rg "filterPopup\|showFilter\|showThemePicker\|openThemePicker\|newFilterPopup\|newThemePicker\|uniqu...
+[94m[Bash][0m $ rg "filterPopup|showFilter|showThemePicker|openThemePicker|newFilterPopup|newThemePicker|uniqueAutho...
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go /Users/moncefnaji/code/...
+[94m[Bash][0m $ rg "^func|currentUser\b" /Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go -n
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Bash][0m $ rg "^func newThemePickerWidget\|^func.*openThemePicker" /Users/moncefnaji/code/github.com/mrboard/in...
+[94m[Bash][0m $ grep -n "func newThemePickerWidget\|func.*openThemePicker" /Users/moncefnaji/code/github.com/mrboard...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/theme_picker.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ grep -n "filterKeys\|themePickerKeys" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.g...
+[94m[Bash][0m $ grep -n "sort\." /Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go
+[94m[Bash][0m $ grep -n "fmt\.\|strings\." /Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go | ...
+Good, `fmt` and `strings` are still used. Now let me make all the cleanup changes:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// lookupName returns the full name for key from m..." → "// --- filterStatusWidget ---"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "	cursor      int
+	scrollOff   int
+	currentUser str..." → "	cursor    int
+	scrollOff int
+}"
+Now remove `newFilterPopupWidget` and `uniqueAuthorsReviewers`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m edit: "// newFilterPopupWidget builds a popup pre-populat..." → "func (p filterPopupWidget) Init() tea.Cmd { return..."
+Now remove `uniqueAuthorsReviewers` from the end of filter_popup.go:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+Now remove `newThemePickerWidget` from theme_picker.go:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/theme_picker.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/theme_picker.go[0m edit: "func newThemePickerWidget(
+	themes []string,
+	acti..." → "// Init implements tea.Model."
+
+[91m[Error: unknown][0m
+Now remove `openThemePicker` from model.go and the unused fields `filterKeys` and `themePickerKeys`:
+API Error: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()
+
+[91m[Error: unknown][0m
