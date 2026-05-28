@@ -22,3 +22,14 @@ after each iteration and it's included in prompts for context.
   - Functions marked `//nolint:unused` can still cause lll violations if placed inline — break the directive onto its own line
 ---
 
+## 2026-05-28 - mrr-ypr.9
+- Created `internal/tui/settings_widget.go` — 4-tab settings panel (General / Filters / Sorting / Theme)
+- `SettingsAppliedMsg` and `SettingsClosedMsg` defined in the new file
+- Wired into `model.go`: `showSettings`/`settings` fields, `openSettings()`, `handleSettingsApplied()`, `handleMembersLoaded()` helper (extracted to keep cyclomatic complexity ≤ 30), key handler in `handleKey` and `handleKeyBoard`, overlay in `renderContent`, style propagation in `applyTheme`
+- Files changed: `internal/tui/settings_widget.go` (new), `internal/tui/model.go`
+- **Learnings:**
+  - `Update()` had cyclomatic complexity exactly 30; adding 2 new cases pushed it to 31. Fix: extract one existing inline case (`MembersLoadedMsg`) into `handleMembersLoaded()` to bring it back to 30.
+  - The `SettingsKeyMap.PrevTab/NextTab` uses `tab/right/l` and `shift+tab/left/h` — this conflicts with within-tab section navigation if reusing the filter popup's tab/shift+tab pattern. Solution: boundary-crossing up/down auto-switches sections instead.
+  - `settingsPickerMaxVisible` reuses the same two-pane layout as `themePickerWidget`; `pickerRadioPrefixLen` constant from `theme_picker.go` is reused for the mode column width calculation.
+---
+

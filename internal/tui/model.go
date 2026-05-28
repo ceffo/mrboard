@@ -177,6 +177,8 @@ type Model struct {
 	showFilter         bool
 	themePicker        themePickerWidget
 	showThemePicker    bool
+	settings           settingsWidget
+	showSettings       bool
 	approverEditor     *approverEditorWidget
 	showApproverEditor bool
 	diffView           diffViewWidget
@@ -418,11 +420,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showFilter = false
 		return m, nil
 
-	case MembersLoadedMsg:
-		if m.approverEditor != nil {
-			m.approverEditor.SetMembers(msg.Members, msg.Err)
-		}
+	case SettingsAppliedMsg:
+		return m.handleSettingsApplied(msg)
+
+	case SettingsClosedMsg:
+		m.showSettings = false
 		return m, nil
+
+	case MembersLoadedMsg:
+		return m.handleMembersLoaded(msg)
 
 	case ApproverEditorClosedMsg:
 		m.showApproverEditor = false
@@ -464,6 +470,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.state != stateBoard || m.isRefreshing {
 		return m, nil
+	}
+
+	if m.showSettings {
+		updated, cmd := m.settings.Update(msg)
+		m.settings = updated.(settingsWidget)
+		return m, cmd
 	}
 
 	if m.showApproverEditor && m.approverEditor != nil {
@@ -599,7 +611,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.fetchDetailCmd(mr)
 		}
 	case key.Matches(msg, m.keys.Settings):
-		// settings widget wired in mrr-ypr.9
+		m.openSettings()
 		return m, nil
 	case key.Matches(msg, m.keys.Approvers):
 		if mr := m.board.FocusedMR(); mr != nil {
@@ -755,6 +767,60 @@ func (m Model) renderDiffScreen() string {
 	return headerStr + "\n" + body + "\n" + footerStr
 }
 
+func (m *Model) openSettings() {
+	themes, err := AllThemeNames()
+	if err != nil {
+		m.logger.Error("theme: list theme names", "err", err)
+		themes = []string{m.themeName}
+	}
+	authors, reviewers := BuildAuthorsReviewers(m.allMRs)
+	m.settings = newSettingsWidget(
+		themes,
+		authors, reviewers,
+		m.userMap,
+		m.filter,
+		m.includeReviewerMRs,
+		m.sortField,
+		m.sortDesc,
+		m.themeName, m.themeMode,
+		m.styles,
+		m.settingsKeys,
+	)
+	m.showSettings = true
+}
+
+// handleSettingsApplied applies all live changes from the settings panel.
+func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd) {
+	m.filter = msg.Filter
+	m.includeReviewerMRs = msg.IncludeReviewerMRs
+
+	sortChanged := m.sortField.stateKey() != msg.SortField || m.sortDesc != msg.SortDesc
+	m.sortField = sortFieldFromState(msg.SortField)
+	m.sortDesc = msg.SortDesc
+	if sortChanged {
+		m.keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(m.sortField, m.sortDesc)))
+		m.footer.SetKeyMap(m.keys)
+	}
+
+	themeChanged := m.themeName != msg.ThemeName || m.themeMode != msg.ThemeMode
+	if themeChanged {
+		m.themeName = msg.ThemeName
+		m.themeMode = msg.ThemeMode
+		switch msg.ThemeMode {
+		case themeModeDark:
+			m.hasDarkBg = true
+		case themeModeLight:
+			m.hasDarkBg = false
+		}
+		m.theme = LoadThemeByName(msg.ThemeName)
+		m.applyTheme()
+	}
+
+	m.applyMRFilter()
+	m.saveState()
+	return m, nil
+}
+
 //nolint:unused
 func (m *Model) openThemePicker() {
 	names, err := AllThemeNames()
@@ -826,6 +892,9 @@ func (m Model) renderContent() string {
 			overlay := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
 			return m.renderWithOverlay(board, overlay)
 		}
+		if m.showSettings {
+			return m.renderWithOverlay(board, m.settings.render())
+		}
 		if m.showApproverEditor && m.approverEditor != nil {
 			return m.renderWithOverlay(board, m.approverEditor.render())
 		}
@@ -895,6 +964,14 @@ func (m Model) renderWithOverlay(board, popup string) string {
 	bgLayer := lip.NewLayer(bg)
 	popupLayer := lip.NewLayer(popup).X(x).Y(y).Z(1)
 	return lip.NewCompositor(bgLayer, popupLayer).Render()
+}
+
+// handleMembersLoaded forwards the members list to the approver editor if it is open.
+func (m Model) handleMembersLoaded(msg MembersLoadedMsg) (tea.Model, tea.Cmd) {
+	if m.approverEditor != nil {
+		m.approverEditor.SetMembers(msg.Members, msg.Err)
+	}
+	return m, nil
 }
 
 // handleApproversSaved handles ApproversSavedMsg: closes the editor and updates the in-place MR.
@@ -975,6 +1052,7 @@ func (m *Model) applyTheme() {
 	m.diffView.SetStyles(m.styles)
 	m.filterPopup.styles = m.styles
 	m.themePicker.styles = m.styles
+	m.settings.styles = m.styles
 	if m.approverEditor != nil {
 		m.approverEditor.styles = m.styles
 	}
