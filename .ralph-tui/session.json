@@ -3,10 +3,10 @@
   "sessionId": "3661ccfe-3868-4c29-8aa9-d3a72dac8a3d",
   "status": "running",
   "startedAt": "2026-05-28T15:40:41.596Z",
-  "updatedAt": "2026-05-28T15:43:14.428Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-05-28T15:45:16.607Z",
+  "currentIteration": 1,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "mrr-ypr.1",
         "title": "mrsvc: add FetchOptions struct, change FetchAll signature, regenerate mocks",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-ypr.2",
@@ -76,7 +76,18 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "mrr-ypr.1",
+      "taskTitle": "mrsvc: add FetchOptions struct, change FetchAll signature, regenerate mocks",
+      "taskCompleted": true,
+      "durationMs": 141932,
+      "startedAt": "2026-05-28T15:40:52.455Z",
+      "endedAt": "2026-05-28T15:43:14.387Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
   "activeTaskIds": [],

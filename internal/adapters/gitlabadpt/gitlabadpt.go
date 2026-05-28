@@ -22,8 +22,9 @@ const enrichConcurrency = 10
 
 // Config holds the adapter-specific configuration.
 type Config struct {
-	Sources         []mrsvc.Source
-	ExcludedAuthors []string
+	Sources           []mrsvc.Source
+	ExcludedAuthors   []string
+	ReviewerUsernames []string
 }
 
 // GitLabAdapter implements mrsvc.MergeRequestSource using a live GitLab client.

@@ -9,6 +9,16 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-28 - mrr-ypr.2
+- Added `ReviewerUsernames []string` to `gitlabadpt.Config` in `internal/adapters/gitlabadpt/gitlabadpt.go`
+- Added `CurrentUser string` to `config.GitLabAdapterConfig` and updated `AppConfig.GitLabAdapterConfig()` accessor in `internal/config/config.go`
+- Added `deriveReviewerUsernames(sources []mrsvc.Source, currentUser string) []string` to `internal/core/core.go` — collects IDs from user-type sources, appends currentUser, deduplicates
+- Wired `ReviewerUsernames` into `gitlabadpt.Config` construction in `core.New`
+- **Learnings:**
+  - `config.GitLabAdapterConfig` is the typed bridge between full AppConfig and gitlabadpt — add fields there when adapter needs config values that aren't already exposed
+  - Derivation logic (merging sources + currentUser) lives in `core.go` since that's the composition root with access to both; keeps adapters and config packages dumb
+---
+
 ## 2026-05-28 - mrr-ypr.1
 - Added `FetchOptions` struct to `internal/domain/service/mrsvc/mrsvc.go` with `IncludeReviewerMRs bool` field
 - Changed `FetchAll(ctx context.Context)` → `FetchAll(ctx context.Context, opts FetchOptions)` in `MergeRequestSource` interface

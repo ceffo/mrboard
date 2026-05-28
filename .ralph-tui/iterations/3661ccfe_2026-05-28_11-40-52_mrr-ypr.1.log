@@ -1,0 +1,116 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.1
+- **Task Title**: mrsvc: add FetchOptions struct, change FetchAll signature, regenerate mocks
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:40:52.455Z
+- **Ended At**: 2026-05-28T15:43:14.387Z
+- **Duration**: 2m 21s
+- **Input Tokens**: 96
+- **Output Tokens**: 7106
+- **Total Tokens**: 7202
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context and understanding what needs to be implemented.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Let me look at the current mrsvc interface and the bead details.
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mFetchOptions FetchAll mrsvc signature[0m
+[94m[Bash][0m $ br show mrr-ypr --format toon 2>/dev/null
+Now let me read the current mrsvc interface and related files.
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/domain/service/mrsvc/**/*.go[0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/service/**/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+Now let me check all current callers of `FetchAll` to understand the impact.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96mFetchAll[0m
+Let me check the relevant callers before making changes.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m
+Now let me check the adapter and model test:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+Now I have everything I need. Let me make all the changes:
+
+1. Add `FetchOptions` struct and update `FetchAll` signature in mrsvc
+2. Update the adapter implementation
+3. Update all callers
+4. Regenerate mocks
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m edit: "// MergeRequestSource is the driven port for fetch..." → "// FetchOptions controls what FetchAll returns.
+ty..."
+Now update the adapter:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// FetchAll implements mrsvc.MergeRequestSource.
+f..." → "// FetchAll implements mrsvc.MergeRequestSource.
+f..."
+Now check if gitlabadpt.go imports mrsvc:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m pattern: [96mmrsvc[0m
+Good, mrsvc is already imported. Now update the two TUI model callers and the fetch command:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		mrs, errs := src.FetchAll(ctx)
+		return FetchRes..." → "		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOption..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m edit: "	mrs, errs := c.MRSource.FetchAll(fetchCtx)" → "	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc...."
+Now check if fetch.go imports mrsvc:
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m pattern: [96mimport[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mmrsvc[0m
+model.go already imports mrsvc. Now I need to add mrsvc import to fetch.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/fetch.go[0m edit: "import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+..." → "import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+..."
+Now regenerate mocks and run quality checks:
+[94m[Bash][0m $ just generate 2>&1
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/approver_editor.go:1: : # github.com/ceffo/mrboard/internal/tui [github.com/ceffo/mrboard/internal/tui.test]
+internal/tui/model_test.go:28:24: not enough arguments in call to src.EXPECT().FetchAll
+	have (string)
+	want (interface{}, interface{})
+internal/tui/model_test.go:72:24: not enough arguments in call to src.EXPECT().FetchAll
+	have (string)
+	want (interface{}, interface{})
+internal/tui/model_test.go:90:24: not enough arguments in call to src.EXPECT().FetchAll
+	have (string)
+	want (interface{}, interface{}) (typecheck)
+package tui
+1 issues:
+* typecheck: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Need to update the model_test.go mock expectations to pass two arguments:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "src.EXPECT().FetchAll(mock.Anything).Return(initia..." → "src.EXPECT().FetchAll(mock.Anything, mock.Anything..."
+Now also fix the other two occurrences:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "src.EXPECT().FetchAll(mock.Anything).Return(nil, n..." → "src.EXPECT().FetchAll(mock.Anything, mock.Anything..."
+[94m[Bash][0m $ just check 2>&1
+All checks pass. Now close the bead and update progress:
+[94m[Bash][0m $ br close mrr-ypr.1 --reason "Added FetchOptions struct, updated FetchAll signature across interface/...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+*Add reu..."
+All done. `just check` passes with 0 issues and all tests green.
+
+**Summary:**
+- Added `FetchOptions{IncludeReviewerMRs bool}` struct to `mrsvc.go`
+- Changed `FetchAll` signature in the interface, adapter (opts ignored with `_`), and all 3 callers
+- Added missing `mrsvc` import to `fetch.go`
+- Updated `model_test.go` mock expectations from `(mock.Anything)` → `(mock.Anything, mock.Anything)`
+- Regenerated mocks via `just generate`
+
+<promise>COMPLETE</promise>

@@ -57,8 +57,9 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		}
 	}
 	adapter := gitlabadpt.New(client, gitlabadpt.Config{
-		Sources:         sources,
-		ExcludedAuthors: adptCfg.ExcludedAuthors,
+		Sources:           sources,
+		ExcludedAuthors:   adptCfg.ExcludedAuthors,
+		ReviewerUsernames: deriveReviewerUsernames(sources, adptCfg.CurrentUser),
 	})
 
 	// 4. State store
@@ -83,4 +84,27 @@ func (c *Core) Close(_ context.Context) error {
 		return c.logCloser.Close()
 	}
 	return nil
+}
+
+// deriveReviewerUsernames collects usernames from user-type sources and appends
+// currentUser, deduplicating across both sets.
+func deriveReviewerUsernames(sources []mrsvc.Source, currentUser string) []string {
+	seen := map[string]struct{}{}
+	var names []string
+	for _, src := range sources {
+		if src.Type == mrsvc.SourceTypeUser {
+			for _, id := range src.IDs {
+				if _, ok := seen[id]; !ok {
+					seen[id] = struct{}{}
+					names = append(names, id)
+				}
+			}
+		}
+	}
+	if currentUser != "" {
+		if _, ok := seen[currentUser]; !ok {
+			names = append(names, currentUser)
+		}
+	}
+	return names
 }

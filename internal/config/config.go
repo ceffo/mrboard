@@ -68,6 +68,7 @@ type GitLabClientConfig struct {
 type GitLabAdapterConfig struct {
 	Sources         []Source
 	ExcludedAuthors []string
+	CurrentUser     string
 }
 
 // MRServiceConfig is the configuration consumed by internal/domain/service/mrsvc.
@@ -99,6 +100,7 @@ func (c *AppConfig) GitLabAdapterConfig() GitLabAdapterConfig {
 	return GitLabAdapterConfig{
 		Sources:         c.Sources,
 		ExcludedAuthors: c.ExcludedAuthors,
+		CurrentUser:     c.CurrentUser,
 	}
 }
 
