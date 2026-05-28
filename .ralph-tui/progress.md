@@ -9,6 +9,17 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-05-28 - mrr-ypr.3
+- Added `gqlReviewerMRsQuery` const + `gqlReviewerMRsResponse` type to `pkg/gitlab/graphql.go`
+- Added `FetchReviewerMRsGraphQL(ctx, username)` method that calls `reviewRequestedMergeRequests` GQL field
+- Added `ListReviewerMRs(ctx, username)` REST fallback to `pkg/gitlab/client.go` using `ReviewerUsername` filter
+- Refactored `ListUserMRs` to use shared `listMRsPaged` private helper (required by dupl linter — both methods are near-identical paged loops)
+- **Learnings:**
+  - `dupl` linter fires when two functions are structurally identical even with different log strings. Extract a private paged-list helper when adding a second method that calls `ListMergeRequests` with different opts.
+  - `lll` linter enforces 120-char line limit — slog calls with many args need variables to hold computed values first
+  - GitLab GQL `User.reviewRequestedMergeRequests` mirrors `authoredMergeRequests` — same fields, same pagination args
+---
+
 ## 2026-05-28 - mrr-ypr.2
 - Added `ReviewerUsernames []string` to `gitlabadpt.Config` in `internal/adapters/gitlabadpt/gitlabadpt.go`
 - Added `CurrentUser string` to `config.GitLabAdapterConfig` and updated `AppConfig.GitLabAdapterConfig()` accessor in `internal/config/config.go`

@@ -83,23 +83,13 @@ func (c *Client) ListGroupMRs(ctx context.Context, groupID, excludedAuthor strin
 	return all, nil
 }
 
-// ListUserMRs returns all open merge requests authored by the given username.
-func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicMergeRequest, error) {
-	start := time.Now()
-	c.logger.Debug("gitlab: list user MRs", "username", username)
+// listMRsPaged paginates through all open MRs matching opts and returns them.
+func (c *Client) listMRsPaged(ctx context.Context, opts *gl.ListMergeRequestsOptions) ([]*gl.BasicMergeRequest, error) {
 	var all []*gl.BasicMergeRequest
-	opts := &gl.ListMergeRequestsOptions{
-		AuthorUsername: gl.Ptr(username),
-		State:          gl.Ptr("opened"),
-		Scope:          gl.Ptr("all"),
-		ListOptions:    gl.ListOptions{PerPage: perPage},
-	}
 	for {
 		mrs, resp, err := c.gl.MergeRequests.ListMergeRequests(opts, gl.WithContext(ctx))
 		if err != nil {
-			elapsed := time.Since(start)
-			c.logger.Error("gitlab: list user MRs error", "username", username, "duration", ilog.FmtDur(elapsed), "error", err)
-			return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
+			return nil, err
 		}
 		all = append(all, mrs...)
 		if resp.NextPage == 0 {
@@ -107,9 +97,46 @@ func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicM
 		}
 		opts.Page = resp.NextPage
 	}
-	elapsed := time.Since(start)
-	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(all), "duration", ilog.FmtDur(elapsed))
 	return all, nil
+}
+
+// ListUserMRs returns all open merge requests authored by the given username.
+func (c *Client) ListUserMRs(ctx context.Context, username string) ([]*gl.BasicMergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list user MRs", "username", username)
+	mrs, err := c.listMRsPaged(ctx, &gl.ListMergeRequestsOptions{
+		AuthorUsername: gl.Ptr(username),
+		State:          gl.Ptr("opened"),
+		Scope:          gl.Ptr("all"),
+		ListOptions:    gl.ListOptions{PerPage: perPage},
+	})
+	elapsed := ilog.FmtDur(time.Since(start))
+	if err != nil {
+		c.logger.Error("gitlab: list user MRs error", "username", username, "duration", elapsed, "error", err)
+		return nil, fmt.Errorf("gitlab: list user MRs for %q: %w", username, err)
+	}
+	c.logger.Debug("gitlab: list user MRs done", "username", username, "count", len(mrs), "duration", elapsed)
+	return mrs, nil
+}
+
+// ListReviewerMRs returns all open MRs where username is a requested reviewer.
+// This is the REST fallback for FetchReviewerMRsGraphQL.
+func (c *Client) ListReviewerMRs(ctx context.Context, username string) ([]*gl.BasicMergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list reviewer MRs", "username", username)
+	mrs, err := c.listMRsPaged(ctx, &gl.ListMergeRequestsOptions{
+		ReviewerUsername: gl.Ptr(username),
+		State:            gl.Ptr("opened"),
+		Scope:            gl.Ptr("all"),
+		ListOptions:      gl.ListOptions{PerPage: perPage},
+	})
+	elapsed := ilog.FmtDur(time.Since(start))
+	if err != nil {
+		c.logger.Error("gitlab: list reviewer MRs error", "username", username, "duration", elapsed, "error", err)
+		return nil, fmt.Errorf("gitlab: list reviewer MRs for %q: %w", username, err)
+	}
+	c.logger.Debug("gitlab: list reviewer MRs done", "username", username, "count", len(mrs), "duration", elapsed)
+	return mrs, nil
 }
 
 // GetMRDiscussions returns all discussions (threaded notes) for an MR.

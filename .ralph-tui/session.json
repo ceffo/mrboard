@@ -3,10 +3,10 @@
   "sessionId": "3661ccfe-3868-4c29-8aa9-d3a72dac8a3d",
   "status": "running",
   "startedAt": "2026-05-28T15:40:41.596Z",
-  "updatedAt": "2026-05-28T15:45:16.607Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-05-28T15:47:43.064Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -23,8 +23,8 @@
       {
         "id": "mrr-ypr.2",
         "title": "core+adapter: derive reviewer usernames from user sources + current_user, extend gitlabadpt.Config",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-ypr.3",
@@ -86,6 +86,16 @@
       "durationMs": 141932,
       "startedAt": "2026-05-28T15:40:52.455Z",
       "endedAt": "2026-05-28T15:43:14.387Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-ypr.2",
+      "taskTitle": "core+adapter: derive reviewer usernames from user sources + current_user, extend gitlabadpt.Config",
+      "taskCompleted": true,
+      "durationMs": 120426,
+      "startedAt": "2026-05-28T15:43:16.102Z",
+      "endedAt": "2026-05-28T15:45:16.528Z"
     }
   ],
   "skippedTaskIds": [],

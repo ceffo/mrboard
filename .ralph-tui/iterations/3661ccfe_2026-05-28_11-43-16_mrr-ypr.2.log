@@ -1,0 +1,76 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.2
+- **Task Title**: core+adapter: derive reviewer usernames from user sources + current_user, extend gitlabadpt.Config
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:43:16.102Z
+- **Ended At**: 2026-05-28T15:45:16.528Z
+- **Duration**: 2m 0s
+- **Input Tokens**: 201
+- **Output Tokens**: 7506
+- **Total Tokens**: 7707
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me start by loading session context and reading the progress file.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-ypr reviewer usernames current_user FetchOptions[0m
+[94m[Bash][0m Show bead mrr-ypr.2 details $ br show mrr-ypr.2 --format toon 2>/dev/null | head -100
+[94m[Bash][0m Show parent epic details $ br show mrr-ypr --format toon 2>/dev/null
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/session-meta.json[0m
+Let me explore the relevant files to understand what needs to be done.
+[94m[Bash][0m Check file sizes $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go /Users/mo...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/core'][0m
+[94m[Glob][0m [95m/Users/moncefnaji/code/github.com/mrboard[0m pattern: [96minternal/core/*.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Now I have a clear picture. The task requires:
+1. Add `ReviewerUsernames []string` to `gitlabadpt.Config`
+2. Add `CurrentUser string` to `config.GitLabAdapterConfig` and update its accessor
+3. In `core.go`, derive reviewer usernames from user-type sources + current_user and populate the adapter config
+
+Let me implement these changes:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "// GitLabAdapterConfig is the configuration consum..." → "// GitLabAdapterConfig is the configuration consum..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "// GitLabAdapterConfig extracts the configuration ..." → "// GitLabAdapterConfig extracts the configuration ..."
+Now add `ReviewerUsernames` to `gitlabadpt.Config`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// Config holds the adapter-specific configuration..." → "// Config holds the adapter-specific configuration..."
+Now update `core.go` to derive reviewer usernames and pass them to the adapter:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	// 3. GitLab adapter
+	adptCfg := cfg.GitLabAdapte..." → "	// 3. GitLab adapter
+	adptCfg := cfg.GitLabAdapte..."
+Now add the `deriveReviewerUsernames` helper to `core.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "// Close releases resources held by Core (e.g. the..." → "// Close releases resources held by Core (e.g. the..."
+Now remove the comment from `gitlabadpt.Config` since it violates the no-comments rule for obvious things:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// Config holds the adapter-specific configuration..." → "// Config holds the adapter-specific configuration..."
+Now run quality checks:
+[94m[Bash][0m Run quality checks $ just check 2>&1
+All checks pass. Now close the bead, flush, and update progress:
+[94m[Bash][0m Close bead mrr-ypr.2 $ deriveReviewerUsernames in core" 2>&1
+[94m[Bash][0m Flush beads to JSONL $ br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## 2026-05-28 - mrr-ypr.1" → "---
+
+## 2026-05-28 - mrr-ypr.2
+- Added `ReviewerUs..."
+<promise>COMPLETE</promise>
+
+**mrr-ypr.2 done.** Three small changes across three files:
+
+1. **`config/config.go`** — added `CurrentUser string` to `GitLabAdapterConfig` and updated its accessor to include it
+2. **`gitlabadpt/gitlabadpt.go`** — added `ReviewerUsernames []string` to `Config`  
+3. **`core/core.go`** — added `deriveReviewerUsernames` helper (user-type source IDs + currentUser, deduplicated) and wired it into adapter construction
+
+All tests pass. The `ReviewerUsernames` field is now populated at startup and available for mrr-ypr.4 to use when `opts.IncludeReviewerMRs == true`.

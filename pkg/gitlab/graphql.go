@@ -154,6 +154,116 @@ func (c *Client) FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQ
 	return mrs, nil
 }
 
+// gqlReviewerMRsQuery fetches open MRs where the user is a requested reviewer.
+const gqlReviewerMRsQuery = `
+query($username: String!) {
+  user(username: $username) {
+    reviewRequestedMergeRequests(state: opened, first: 100) {
+      nodes {
+        id
+        iid
+        title
+        draft
+        createdAt
+        updatedAt
+        webUrl
+        detailedMergeStatus
+        author { username name }
+        reviewers { nodes { username name } }
+        project { id fullPath archived }
+        approvedBy { nodes { username } }
+        approvalState {
+          rules {
+            name
+            eligibleApprovers { username }
+          }
+        }
+        discussions(first: 100) {
+          pageInfo { hasNextPage }
+          nodes {
+            notes(first: 100) {
+              nodes {
+                author { username name }
+                body
+                system
+                resolvable
+                resolved
+                createdAt
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+
+type gqlReviewerMRsResponse struct {
+	Data struct {
+		User *struct {
+			ReviewRequestedMergeRequests struct {
+				Nodes []GQLMergeRequest `json:"nodes"`
+			} `json:"reviewRequestedMergeRequests"`
+		} `json:"user"`
+	} `json:"data"`
+	Errors []gqlError `json:"errors"`
+}
+
+// FetchReviewerMRsGraphQL fetches all open MRs where username is a requested reviewer.
+func (c *Client) FetchReviewerMRsGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: graphql reviewer MRs", "username", username)
+
+	payload := struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables"`
+	}{
+		Query:     gqlReviewerMRsQuery,
+		Variables: map[string]interface{}{"username": username},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: graphql marshal reviewer MRs request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/api/graphql", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: graphql build reviewer MRs request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("PRIVATE-TOKEN", c.token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: graphql reviewer MRs request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gitlab: graphql reviewer MRs HTTP %d for user %q", resp.StatusCode, username)
+	}
+
+	var result gqlReviewerMRsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("gitlab: graphql decode reviewer MRs response: %w", err)
+	}
+	if result.Data.User == nil && len(result.Errors) == 0 {
+		c.logger.Warn("gitlab: graphql user not found for reviewer MRs", "username", username)
+		return nil, nil
+	}
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("gitlab: graphql reviewer MRs errors for user %q: %s", username, result.Errors[0].Message)
+	}
+	if result.Data.User == nil {
+		return nil, nil
+	}
+
+	mrs := result.Data.User.ReviewRequestedMergeRequests.Nodes
+	c.logger.Debug("gitlab: graphql reviewer MRs done",
+		"username", username, "count", len(mrs), "duration", ilog.FmtDur(time.Since(start)))
+	return mrs, nil
+}
+
 // doGQLUserMRs executes a GraphQL query and returns the raw MR nodes, any GQL-level errors,
 // and any transport/decoding error. It does not interpret GQL errors.
 func (c *Client) doGQLUserMRs(
