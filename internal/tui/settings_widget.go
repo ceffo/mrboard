@@ -12,6 +12,168 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
+// --- Phase/filter sub-widget helpers ---
+
+const (
+	phaseLabelDraft    = "Draft"
+	phaseLabelReview   = "Needs Review"
+	phaseLabelAuthorAc = "Needs Author Action"
+	phaseLabelReady    = "Approved"
+
+	markerChecked   = "[x]"
+	markerUnchecked = "[ ]"
+
+	filterSelectMaxVisible = 8
+)
+
+var phaseLabels = [4]string{phaseLabelDraft, phaseLabelReview, phaseLabelAuthorAc, phaseLabelReady}
+
+// --- Theme mode helpers ---
+
+var modeOptions = []string{themeModeAuto, themeModeDark, themeModeLight}
+
+const pickerRadioPrefixLen = 2 // "● " or "○ "
+
+// filterFocus identifies which section of the Filters tab owns keyboard focus.
+type filterFocus int
+
+const (
+	filterFocusStatus filterFocus = iota
+	filterFocusAuthor
+	filterFocusReviewer
+	filterNumSections
+)
+
+// filterStatusWidget manages the Status (phase) section checkboxes.
+type filterStatusWidget struct {
+	phases [4]bool
+	cursor int
+}
+
+func (s *filterStatusWidget) toggle() {
+	if s.cursor < len(s.phases) {
+		s.phases[s.cursor] = !s.phases[s.cursor]
+	}
+}
+
+func (s filterStatusWidget) render(focused bool, styles Styles) string {
+	var sb strings.Builder
+	for i, lbl := range phaseLabels {
+		var markerStyled string
+		if s.phases[i] {
+			markerStyled = styles.PopupItemMarkerOn.Render(markerChecked)
+		} else {
+			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
+		}
+		if focused && i == s.cursor {
+			sb.WriteString("  " + markerStyled + " " + styles.PopupItemFocused.Render(lbl) + "\n")
+		} else {
+			sb.WriteString("  " + markerStyled + " " + styles.PopupItem.Render(lbl) + "\n")
+		}
+	}
+	return sb.String()
+}
+
+// filterSelectItem is a single entry in a multi-select list (Author or Reviewer).
+type filterSelectItem struct {
+	value string // "" means "All"
+	label string
+}
+
+// filterSelectWidget manages a scrollable multi-select list.
+type filterSelectWidget struct {
+	items     []filterSelectItem
+	checked   map[string]bool // nil/empty = all shown (no filter)
+	cursor    int
+	scrollOff int
+}
+
+func (s *filterSelectWidget) moveCursor(delta int) {
+	next := s.cursor + delta
+	if next >= 0 && next < len(s.items) {
+		s.cursor = next
+		s.adjustScroll()
+	}
+}
+
+func (s *filterSelectWidget) adjustScroll() {
+	if s.cursor < s.scrollOff {
+		s.scrollOff = s.cursor
+	} else if s.cursor >= s.scrollOff+filterSelectMaxVisible {
+		s.scrollOff = s.cursor - filterSelectMaxVisible + 1
+	}
+}
+
+func (s *filterSelectWidget) toggle() {
+	if s.cursor >= len(s.items) {
+		return
+	}
+	item := s.items[s.cursor]
+	if item.value == "" {
+		s.checked = nil
+		return
+	}
+	if s.checked == nil {
+		s.checked = make(map[string]bool)
+	}
+	if s.checked[item.value] {
+		delete(s.checked, item.value)
+		if len(s.checked) == 0 {
+			s.checked = nil
+		}
+	} else {
+		s.checked[item.value] = true
+	}
+}
+
+func (s filterSelectWidget) selectedSlice() []string {
+	result := make([]string, 0, len(s.checked))
+	for v := range s.checked {
+		result = append(result, v)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (s filterSelectWidget) render(focused bool, styles Styles) string {
+	var sb strings.Builder
+	end := min(s.scrollOff+filterSelectMaxVisible, len(s.items))
+	for i := s.scrollOff; i < end; i++ {
+		item := s.items[i]
+		var checked bool
+		if item.value == "" {
+			checked = len(s.checked) == 0
+		} else {
+			checked = s.checked[item.value]
+		}
+		var markerStyled string
+		if checked {
+			markerStyled = styles.PopupItemMarkerOn.Render(markerChecked)
+		} else {
+			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
+		}
+		if focused && i == s.cursor {
+			sb.WriteString("  " + markerStyled + " " + styles.PopupItemFocused.Render(item.label) + "\n")
+		} else {
+			sb.WriteString("  " + markerStyled + " " + styles.PopupItem.Render(item.label) + "\n")
+		}
+	}
+	if len(s.items) > filterSelectMaxVisible {
+		shown := min(s.scrollOff+filterSelectMaxVisible, len(s.items))
+		sb.WriteString(styles.PopupHint.Render(fmt.Sprintf("  %d–%d / %d", s.scrollOff+1, shown, len(s.items))) + "\n")
+	}
+	return sb.String()
+}
+
+func renderSectionHeader(title string, focused bool, styles Styles) string {
+	if focused {
+		return styles.PopupSectionFocused.Render("▶ " + title)
+	}
+	return styles.PopupSection.Render("  " + title)
+}
+
+// --- SettingsAppliedMsg / SettingsClosedMsg ---
+
 // SettingsAppliedMsg is emitted on every live change in the settings panel.
 type SettingsAppliedMsg struct {
 	Filter             domain.FilterCriteria

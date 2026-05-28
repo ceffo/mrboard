@@ -1,0 +1,169 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.9
+- **Task Title**: tui: new settings_widget.go — 4-tab panel (General/Filters/Sorting/Theme)
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T17:10:23.836Z
+- **Ended At**: 2026-05-28T17:17:11.219Z
+- **Duration**: 6m 47s
+- **Input Tokens**: 138
+- **Output Tokens**: 24260
+- **Total Tokens**: 24398
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+Now let me look at the bead details and existing TUI code.
+[94m[Bash][0m $ br show mrr-ypr.9 --format toon
+[94m[Bash][0m $ \ls internal/tui/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/theme_picker.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the epic details and domain/state to understand what fields the settings widget needs:
+[94m[Bash][0m $ br show mrr-ypr --format toon 2>&1 | head -60
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m $ grep -n "AppState\|FilterCriteria\|IncludeReviewerMRs\|SortField\|SortDesc\|ThemeName\|ThemeMode\|Vi...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go[0m
+[94m[Bash][0m $ grep -n "showFilter\|openFilter\|FilterPopup\|showThemePicker\|openThemePicker" /Users/moncefnaji/co...
+[94m[Bash][0m $ grep -rn "showFilter\|openFilter\|showThemePicker" /Users/moncefnaji/code/github.com/mrboard/interna...
+[94m[Bash][0m $ grep -n "showFilter = true\|filterPopup =\|openFilter" /Users/moncefnaji/code/github.com/mrboard/int...
+[94m[Bash][0m $ grep -rn "BuildUserMap\|userMap" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m $ grep -rn "BuildUserMap\|userMap\|filterSelectWidget\|phaseLabels" /Users/moncefnaji/code/github.com/...
+[94m[Bash][0m $ grep -rn "BuildUserMap\|func Build" /Users/moncefnaji/code/github.com/mrboard/internal/domain/servic...
+Now I have enough context. Let me implement `settings_widget.go`. The widget needs:
+1. 4 tabs: General, Filters, Sorting, Theme
+2. Reuse the sub-widgets from `filter_popup.go` (filterStatusWidget, filterSelectWidget) and theme picker internals
+3. Emit `SettingsAppliedMsg` on every change (live preview) 
+4. Wire into model (opening `settingsWidget` when `,` is pressed)
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/filter.go[0m
+[94m[Bash][0m $ grep -rn "filterPopup\b" /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+Now I have a full picture. Let me implement `settings_widget.go` and wire it into `model.go`.
+[94m[Bash][0m $ grep -n "sort\b\|\"sort\"" /Users/moncefnaji/code/github.com/mrboard/internal/tui/filter_popup.go | ...
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/settings_widget.go[0m "package tui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	lip "charm.land/lipgloss/v2"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// SettingsAp... (16155 chars)"
+Now wire the settings widget into `model.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	filterPopup        filterPopupWidget
+	showFilter ..." → "	filterPopup        filterPopupWidget
+	showFilter ..."
+Now add `SettingsAppliedMsg` and `SettingsClosedMsg` handling to `Update`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FilterAppliedMsg:
+		m.filter = msg.Criteria
+..." → "	case FilterAppliedMsg:
+		m.filter = msg.Criteria
+..."
+Now add the settings widget to the key handler chain in `handleKey`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if m.showApproverEditor && m.approverEditor != ni..." → "	if m.showSettings {
+		updated, cmd := m.settings...."
+Now replace the placeholder settings key handler in `handleKeyBoard`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.Settings):
+		// sett..." → "	case key.Matches(msg, m.keys.Settings):
+		m.openS..."
+Now add `openSettings()`, `handleSettingsApplied()` methods and update `applyTheme()` to propagate styles. First let me find a good place to add `openSettings()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "//nolint:unused
+func (m *Model) openThemePicker() ..." → "func (m *Model) openSettings() {
+	themes, err := A..."
+Now update `applyTheme` to propagate styles to the settings widget, and add the settings overlay to `renderContent`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	m.filterPopup.styles = m.styles
+	m.themePicker.st..." → "	m.filterPopup.styles = m.styles
+	m.themePicker.st..."
+Now add the settings overlay to `renderContent`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		if m.showApproverEditor && m.approverEditor != n..." → "		if m.showSettings {
+			return m.renderWithOverla..."
+Now let's run `just check` to see if it compiles:
+[94m[Bash][0m $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+level=warning msg="[runner/nolint_filter] Found unknown linters in //nolint directives: deadcode"
+internal/tui/model.go:355:1: cyclomatic complexity 31 of func `(Model).Update` is high (> 30) (gocyclo)
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+^
+1 issues:
+* gocyclo: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+The cyclomatic complexity of `Update` is at 31 (limit 30). I need to extract one case into a helper:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case MembersLoadedMsg:
+		if m.approverEditor != n..." → "	case MembersLoadedMsg:
+		return m.handleMembersLo..."
+Now add the `handleMembersLoaded` method. Let me find a good location near the other handle* methods:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// handleApproversSaved handles ApproversSavedMsg:..." → "// handleMembersLoaded forwards the members list t..."
+[94m[Bash][0m $ just check 2>&1
+All 0 lint issues, builds clean, all tests pass. Now let's do a quick visual verification with agent-tui:
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ agent-tui wait --stable && agent-tui screenshot
+Board loads. Now press `,` to open settings:
+[94m[Bash][0m $ agent-tui type "," && sleep 0.5 && agent-tui screenshot
+Settings panel opens on General tab. Let me navigate to other tabs:
+[94m[Bash][0m $ agent-tui press Tab && sleep 0.3 && agent-tui screenshot
+Filters tab works perfectly — shows Status, Author, Reviewer sections with real data. Let me check Sorting and Theme:
+[94m[Bash][0m $ agent-tui press Tab && sleep 0.3 && agent-tui screenshot
+Sorting tab shows correctly with current state (age, ascending). Now Theme:
+[94m[Bash][0m $ agent-tui press Tab && sleep 0.3 && agent-tui screenshot
+Theme tab works — shows theme list with current theme (nord) selected, mode section with "auto" selected. Let me verify close works:
+[94m[Bash][0m $ agent-tui press Escape && sleep 0.3 && agent-tui screenshot && agent-tui kill
+All 4 tabs work correctly and Escape closes the panel. Now close the bead, sync, and update progress:
+[94m[Bash][0m $ wired into model.go" && br sync --flush-only
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/settings_widget.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/settings_widget.go[0m edit: "package tui" → "package tui"
+
+[91m[Error: <tool_use_error>No changes to make: old_string and new_string are exactly the same.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/../../../.ralph-tui/progress.md[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard. Did you mean /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md?][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+" → "---
+
+## 2026-05-28 - mrr-ypr.9
+- Created `internal..."
+
+[91m[Error: <tool_use_error>Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - Functions marked `//nolint:unused` can still c..." → "  - Functions marked `//nolint:unused` can still c..."
+<promise>COMPLETE</promise>
+
+The bead is done. Here's what was implemented:
+
+**`internal/tui/settings_widget.go`** (new file):
+- `settingsWidget` with 4 tabs: General / Filters / Sorting / Theme
+- **General**: toggle for `IncludeReviewerMRs`
+- **Filters**: reuses `filterStatusWidget` + `filterSelectWidget` with boundary-crossing up/down for section navigation (since tab is reserved for tab switching)
+- **Sorting**: radio buttons for sort field (repo·id/author/age) and direction (↑/↓)
+- **Theme**: two-pane layout matching the existing theme picker (theme list + mode)
+- `SettingsAppliedMsg` emitted live on every change; `SettingsClosedMsg` on close
+- `BuildAuthorsReviewers()` helper to extract unique authors/reviewers from MR list
+
+**`internal/tui/model.go`** changes:
+- `showSettings`/`settings` fields added
+- `,` key opens settings via `openSettings()`  
+- `handleSettingsApplied()` applies all live changes (filter, sort, theme, includeReviewerMRs)
+- `handleMembersLoaded()` extracted from inline to keep `Update()` cyclomatic complexity at ≤ 30
+- Settings overlay rendered in `renderContent`, styles propagated in `applyTheme`

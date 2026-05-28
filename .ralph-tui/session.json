@@ -3,10 +3,10 @@
   "sessionId": "2b3e2d89-34d6-4dea-8dd9-e1219e54c5bf",
   "status": "running",
   "startedAt": "2026-05-28T17:06:49.182Z",
-  "updatedAt": "2026-05-28T17:17:11.271Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-05-28T17:23:05.247Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -65,8 +65,8 @@
       {
         "id": "mrr-ypr.9",
         "title": "tui: new settings_widget.go — 4-tab panel (General/Filters/Sorting/Theme)",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-ypr.10",
@@ -86,6 +86,16 @@
       "durationMs": 208937,
       "startedAt": "2026-05-28T17:06:53.097Z",
       "endedAt": "2026-05-28T17:10:22.034Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-ypr.9",
+      "taskTitle": "tui: new settings_widget.go — 4-tab panel (General/Filters/Sorting/Theme)",
+      "taskCompleted": true,
+      "durationMs": 407383,
+      "startedAt": "2026-05-28T17:10:23.836Z",
+      "endedAt": "2026-05-28T17:17:11.219Z"
     }
   ],
   "skippedTaskIds": [],

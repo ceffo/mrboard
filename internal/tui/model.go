@@ -173,10 +173,6 @@ type Model struct {
 	sp                 spinnerWidget
 	detail             detailWidget
 	showDetail         bool
-	filterPopup        filterPopupWidget
-	showFilter         bool
-	themePicker        themePickerWidget
-	showThemePicker    bool
 	settings           settingsWidget
 	showSettings       bool
 	approverEditor     *approverEditorWidget
@@ -186,8 +182,6 @@ type Model struct {
 	showDiffView       bool
 	keys               KeyMap
 	detailKeys         DetailKeyMap
-	filterKeys         FilterPopupKeyMap
-	themePickerKeys    ThemePickerKeyMap
 	settingsKeys       SettingsKeyMap
 	approverEditorKeys ApproverEditorKeyMap
 	styles             Styles
@@ -288,8 +282,6 @@ func New(
 		detail:             newDetailWidget(styles),
 		keys:               keys,
 		detailKeys:         DefaultDetailKeyMap,
-		filterKeys:         DefaultFilterPopupKeyMap,
-		themePickerKeys:    DefaultThemePickerKeyMap,
 		settingsKeys:       DefaultSettingsKeyMap,
 		approverEditorKeys: DefaultApproverEditorKeyMap,
 		diffViewKeys:       DefaultDiffViewKeyMap,
@@ -410,16 +402,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FileRenderResultMsg:
 		return m.handleFileRenderResult(msg)
 
-	case FilterAppliedMsg:
-		m.filter = msg.Criteria
-		m.applyMRFilter()
-		m.saveState()
-		return m, nil
-
-	case FilterClosedMsg:
-		m.showFilter = false
-		return m, nil
-
 	case SettingsAppliedMsg:
 		return m.handleSettingsApplied(msg)
 
@@ -436,13 +418,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ApproversSavedMsg:
 		return m.handleApproversSaved(msg)
-
-	case ThemePickerClosedMsg:
-		m.showThemePicker = false
-		return m, nil
-
-	case ThemeChangedMsg:
-		return m.handleThemeChanged(msg)
 
 	case tickMsg:
 		return m, tickCmd()
@@ -481,18 +456,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.showApproverEditor && m.approverEditor != nil {
 		updated, cmd := m.approverEditor.Update(msg)
 		m.approverEditor = updated.(*approverEditorWidget)
-		return m, cmd
-	}
-
-	if m.showFilter {
-		updated, cmd := m.filterPopup.Update(msg)
-		m.filterPopup = updated.(filterPopupWidget)
-		return m, cmd
-	}
-
-	if m.showThemePicker {
-		updated, cmd := m.themePicker.Update(msg)
-		m.themePicker = updated.(themePickerWidget)
 		return m, cmd
 	}
 
@@ -821,17 +784,6 @@ func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
-//nolint:unused
-func (m *Model) openThemePicker() {
-	names, err := AllThemeNames()
-	if err != nil {
-		m.logger.Error("theme: list theme names", "err", err)
-		names = []string{m.themeName}
-	}
-	m.themePicker = newThemePickerWidget(names, m.themeName, m.themeMode, m.styles, m.themePickerKeys)
-	m.showThemePicker = true
-}
-
 func (m *Model) resizeBoard() {
 	if m.showDetail {
 		detailW := m.width * detailWidthRatio / detailWidthDivisor
@@ -897,12 +849,6 @@ func (m Model) renderContent() string {
 		}
 		if m.showApproverEditor && m.approverEditor != nil {
 			return m.renderWithOverlay(board, m.approverEditor.render())
-		}
-		if m.showFilter {
-			return m.renderWithOverlay(board, m.filterPopup.render())
-		}
-		if m.showThemePicker {
-			return m.renderWithOverlay(board, m.themePicker.render())
 		}
 		return board
 	}
@@ -1018,23 +964,6 @@ func (m Model) handleFileRenderResult(msg FileRenderResultMsg) (tea.Model, tea.C
 	return m, nil
 }
 
-// handleThemeChanged handles ThemeChangedMsg: updates theme state and propagates styles.
-func (m Model) handleThemeChanged(msg ThemeChangedMsg) (tea.Model, tea.Cmd) {
-	m.themeName = msg.Name
-	m.themeMode = msg.Mode
-	switch msg.Mode {
-	case themeModeDark:
-		m.hasDarkBg = true
-	case themeModeLight:
-		m.hasDarkBg = false
-		// themeModeAuto or "": keep current hasDarkBg from last BackgroundColorMsg
-	}
-	m.theme = LoadThemeByName(msg.Name)
-	m.applyTheme()
-	m.saveState()
-	return m, nil
-}
-
 // applyTheme regenerates all styles from the current theme and dark-mode flag,
 // then propagates them to all widgets including open overlays.
 func (m *Model) applyTheme() {
@@ -1050,8 +979,6 @@ func (m *Model) applyTheme() {
 	m.footer.SetStyles(m.styles)
 	m.detail.SetStyles(m.styles)
 	m.diffView.SetStyles(m.styles)
-	m.filterPopup.styles = m.styles
-	m.themePicker.styles = m.styles
 	m.settings.styles = m.styles
 	if m.approverEditor != nil {
 		m.approverEditor.styles = m.styles
