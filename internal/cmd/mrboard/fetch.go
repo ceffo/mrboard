@@ -11,6 +11,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/core"
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 func buildFetchCmd() *cobra.Command {
@@ -34,7 +35,7 @@ func execFetch(ctx context.Context) error {
 	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	mrs, errs := c.MRSource.FetchAll(fetchCtx)
+	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{})
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}

@@ -322,7 +322,7 @@ func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource) tea.Cmd {
 	ctx, cancel := context.WithTimeout(base, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx)
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{})
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }
@@ -338,7 +338,7 @@ func (m *Model) startFetch() tea.Cmd {
 	src := m.src
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx)
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{})
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }

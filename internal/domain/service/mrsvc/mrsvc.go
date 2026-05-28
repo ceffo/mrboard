@@ -9,11 +9,18 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
+// FetchOptions controls what FetchAll returns.
+type FetchOptions struct {
+	// IncludeReviewerMRs, when true, also fetches MRs where the current user
+	// is a reviewer (in addition to MRs authored by configured sources).
+	IncludeReviewerMRs bool
+}
+
 // MergeRequestSource is the driven port for fetching MR data.
 type MergeRequestSource interface {
 	// FetchAll retrieves all open MRs from all configured sources.
 	// Partial results are valid: non-nil MRs may accompany non-nil errors.
-	FetchAll(ctx context.Context) ([]domain.MergeRequest, []error)
+	FetchAll(ctx context.Context, opts FetchOptions) ([]domain.MergeRequest, []error)
 
 	// GetDetail fetches the description and discussion threads for a single MR.
 	GetDetail(ctx context.Context, projectID, mrIID int64) (description string, threads []domain.Thread, err error)

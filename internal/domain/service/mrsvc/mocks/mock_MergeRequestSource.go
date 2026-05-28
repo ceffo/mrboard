@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,8 +40,8 @@ func (_m *MockMergeRequestSource) EXPECT() *MockMergeRequestSource_Expecter {
 }
 
 // FetchAll provides a mock function for the type MockMergeRequestSource
-func (_mock *MockMergeRequestSource) FetchAll(ctx context.Context) ([]domain.MergeRequest, []error) {
-	ret := _mock.Called(ctx)
+func (_mock *MockMergeRequestSource) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) ([]domain.MergeRequest, []error) {
+	ret := _mock.Called(ctx, opts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FetchAll")
@@ -48,18 +49,18 @@ func (_mock *MockMergeRequestSource) FetchAll(ctx context.Context) ([]domain.Mer
 
 	var r0 []domain.MergeRequest
 	var r1 []error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]domain.MergeRequest, []error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.FetchOptions) ([]domain.MergeRequest, []error)); ok {
+		return returnFunc(ctx, opts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []domain.MergeRequest); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.FetchOptions) []domain.MergeRequest); ok {
+		r0 = returnFunc(ctx, opts)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.MergeRequest)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) []error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, mrsvc.FetchOptions) []error); ok {
+		r1 = returnFunc(ctx, opts)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]error)
@@ -75,18 +76,24 @@ type MockMergeRequestSource_FetchAll_Call struct {
 
 // FetchAll is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockMergeRequestSource_Expecter) FetchAll(ctx interface{}) *MockMergeRequestSource_FetchAll_Call {
-	return &MockMergeRequestSource_FetchAll_Call{Call: _e.mock.On("FetchAll", ctx)}
+//   - opts mrsvc.FetchOptions
+func (_e *MockMergeRequestSource_Expecter) FetchAll(ctx interface{}, opts interface{}) *MockMergeRequestSource_FetchAll_Call {
+	return &MockMergeRequestSource_FetchAll_Call{Call: _e.mock.On("FetchAll", ctx, opts)}
 }
 
-func (_c *MockMergeRequestSource_FetchAll_Call) Run(run func(ctx context.Context)) *MockMergeRequestSource_FetchAll_Call {
+func (_c *MockMergeRequestSource_FetchAll_Call) Run(run func(ctx context.Context, opts mrsvc.FetchOptions)) *MockMergeRequestSource_FetchAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
+		var arg1 mrsvc.FetchOptions
+		if args[1] != nil {
+			arg1 = args[1].(mrsvc.FetchOptions)
+		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -97,7 +104,7 @@ func (_c *MockMergeRequestSource_FetchAll_Call) Return(mergeRequests []domain.Me
 	return _c
 }
 
-func (_c *MockMergeRequestSource_FetchAll_Call) RunAndReturn(run func(ctx context.Context) ([]domain.MergeRequest, []error)) *MockMergeRequestSource_FetchAll_Call {
+func (_c *MockMergeRequestSource_FetchAll_Call) RunAndReturn(run func(ctx context.Context, opts mrsvc.FetchOptions) ([]domain.MergeRequest, []error)) *MockMergeRequestSource_FetchAll_Call {
 	_c.Call.Return(run)
 	return _c
 }

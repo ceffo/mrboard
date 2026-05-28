@@ -38,7 +38,7 @@ func New(client *pkggitlab.Client, cfg Config) *GitLabAdapter {
 }
 
 // FetchAll implements mrsvc.MergeRequestSource.
-func (a *GitLabAdapter) FetchAll(ctx context.Context) ([]domain.MergeRequest, []error) {
+func (a *GitLabAdapter) FetchAll(ctx context.Context, _ mrsvc.FetchOptions) ([]domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 	fetchStart := time.Now()
 	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors)
