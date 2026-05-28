@@ -206,6 +206,7 @@ type Model struct {
 	sortField          sortField
 	sortDesc           bool
 	filter             domain.FilterCriteria
+	includeReviewerMRs bool
 	fetchCancel        context.CancelFunc
 	baseCtx            context.Context
 	logger             *slog.Logger
@@ -301,6 +302,8 @@ func New(
 		viewMode:           viewMode,
 		sortField:          sf,
 		sortDesc:           st.SortDesc,
+		filter:             st.Filter,
+		includeReviewerMRs: st.IncludeReviewerMRs,
 		baseCtx:            ctx,
 		logger:             logger,
 	}
@@ -313,16 +316,16 @@ func New(
 
 // Init starts the spinner, fires the first data fetch, and schedules the minute ticker.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Init(), makeFetchCmd(m.baseCtx, m.src), tickCmd())
+	return tea.Batch(m.sp.Init(), makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs), tickCmd())
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
 // The cancel is also called via defer inside the goroutine once the fetch finishes.
-func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource) tea.Cmd {
+func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource, includeReviewerMRs bool) tea.Cmd {
 	ctx, cancel := context.WithTimeout(base, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{})
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs})
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }
@@ -336,9 +339,10 @@ func (m *Model) startFetch() tea.Cmd {
 	}
 	m.fetchCancel = cancel
 	src := m.src
+	includeReviewerMRs := m.includeReviewerMRs
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{})
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs})
 		return FetchResultMsg{MRs: mrs, Errors: errs}
 	}
 }
@@ -405,6 +409,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FilterAppliedMsg:
 		m.filter = msg.Criteria
 		m.applyMRFilter()
+		m.saveState()
 		return m, nil
 
 	case FilterClosedMsg:
@@ -1019,11 +1024,13 @@ func (m *Model) isFilterActive() bool {
 
 func (m *Model) saveState() {
 	if err := m.store.Save(domain.AppState{
-		SortField: m.sortField.stateKey(),
-		SortDesc:  m.sortDesc,
-		ViewMode:  m.viewMode,
-		ThemeName: m.themeName,
-		ThemeMode: m.themeMode,
+		SortField:          m.sortField.stateKey(),
+		SortDesc:           m.sortDesc,
+		ViewMode:           m.viewMode,
+		ThemeName:          m.themeName,
+		ThemeMode:          m.themeMode,
+		Filter:             m.filter,
+		IncludeReviewerMRs: m.includeReviewerMRs,
 	}); err != nil {
 		m.logger.Error("statestore: save failed", "err", err)
 	}

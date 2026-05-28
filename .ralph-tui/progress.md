@@ -10,6 +10,20 @@ When adding a second fetch method that mirrors an existing one (e.g. reviewer vs
 
 ---
 
+## 2026-05-28 - mrr-ypr.7
+- Added `includeReviewerMRs bool` field to `Model` in `internal/tui/model.go`
+- Loaded `st.Filter` → `m.filter` and `st.IncludeReviewerMRs` → `m.includeReviewerMRs` in `New()`
+- Updated `makeFetchCmd` to accept `includeReviewerMRs bool` and pass `mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs}`
+- Updated `Init()` to pass `m.includeReviewerMRs` to `makeFetchCmd`
+- Updated `startFetch()` to capture `m.includeReviewerMRs` and pass it in `FetchOptions`
+- Updated `saveState()` to include `Filter` and `IncludeReviewerMRs` in persisted `AppState`
+- Added `m.saveState()` call in `FilterAppliedMsg` handler so filter changes persist across sessions
+- **Learnings:**
+  - `makeFetchCmd` is a package-level func (not a method), so `includeReviewerMRs` must be passed as a param — capture before the closure
+  - `startFetch` is a method but the closure runs in a goroutine; always capture `m.includeReviewerMRs` into a local before the func literal to avoid data races on the model value
+
+---
+
 ## 2026-05-28 - mrr-ypr.6
 - Added `Filter FilterCriteria` and `IncludeReviewerMRs bool` to `AppState` in `internal/domain/state.go`
 - Both fields use `yaml:",omitempty"` so zero-value state files stay clean

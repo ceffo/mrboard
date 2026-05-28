@@ -1,0 +1,52 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-ypr.6
+- **Task Title**: domain: extend AppState with Filter FilterCriteria + IncludeReviewerMRs bool
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-05-28T15:53:20.264Z
+- **Ended At**: 2026-05-28T15:54:48.242Z
+- **Duration**: 1m 27s
+- **Input Tokens**: 68
+- **Output Tokens**: 5054
+- **Total Tokens**: 5122
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-ypr
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me check the current state of the domain and AppState.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain[0m pattern: [96mAppState[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal[0m pattern: [96mFilterCriteria|IncludeReviewerMRs[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+Now let me check how AppState is used in the model to understand the full scope.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mAppState|\.filter|IncludeReviewerMRs[0m
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96msaveState|m\.store\.Save|m\.store\.Load|AppState\{[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check how state is loaded and applied in the model.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mstore\.Load|\.SortField|\.ViewMode|\.ThemeName|\.ThemeMode|m\.viewMode\s*=|m\.filter\s*=|m\.sortField[0m
+Now let me check how the Model is initialized to see what fields are set from `st` (the loaded state).
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check how FetchAll is called with FetchOptions in the model.
+[94m[Grep][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m pattern: [96mFetchAll|FetchOptions|IncludeReviewerMRs|startFetch|makeFetchCmd[0m
+Let me check the remaining beads in the epic to understand scope.
+[94m[Bash][0m $ br list --status=open --format toon 2>/dev/null | head -60
+The TUI wiring is mrr-ypr.7. This bead is only the domain layer change — adding two fields to `AppState`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m edit: "// AppState is the persisted subset of UI state — ..." → "// AppState is the persisted subset of UI state — ..."
+Now run the quality checks:
+[94m[Bash][0m $ just check 2>&1
+All checks pass. Now close the bead, flush, and update progress.
+[94m[Bash][0m $ br close mrr-ypr.6 --reason "Added Filter FilterCriteria and IncludeReviewerMRs bool to AppState in ...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-05-28 - mrr-ypr.5" → "## 2026-05-28 - mrr-ypr.6
+- Added `Filter FilterCr..."
+Done. Added `Filter FilterCriteria` and `IncludeReviewerMRs bool` to `AppState` in `internal/domain/state.go` with `yaml:",omitempty"` tags. All checks pass. Bead closed.
+
+<promise>COMPLETE</promise>

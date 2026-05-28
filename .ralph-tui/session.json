@@ -3,10 +3,10 @@
   "sessionId": "3661ccfe-3868-4c29-8aa9-d3a72dac8a3d",
   "status": "running",
   "startedAt": "2026-05-28T15:40:41.596Z",
-  "updatedAt": "2026-05-28T15:54:48.297Z",
-  "currentIteration": 5,
+  "updatedAt": "2026-05-28T15:56:32.938Z",
+  "currentIteration": 6,
   "maxIterations": 10,
-  "tasksCompleted": 5,
+  "tasksCompleted": 6,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -47,8 +47,8 @@
       {
         "id": "mrr-ypr.6",
         "title": "domain: extend AppState with Filter FilterCriteria + IncludeReviewerMRs bool",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-ypr.7",
@@ -126,6 +126,16 @@
       "durationMs": 96533,
       "startedAt": "2026-05-28T15:51:41.923Z",
       "endedAt": "2026-05-28T15:53:18.456Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "mrr-ypr.6",
+      "taskTitle": "domain: extend AppState with Filter FilterCriteria + IncludeReviewerMRs bool",
+      "taskCompleted": true,
+      "durationMs": 87978,
+      "startedAt": "2026-05-28T15:53:20.264Z",
+      "endedAt": "2026-05-28T15:54:48.242Z"
     }
   ],
   "skippedTaskIds": [],
