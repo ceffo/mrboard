@@ -17,8 +17,7 @@ anywhere you like):
 ```yaml
 gitlab:
   url: https://gitlab.example.com
-  token: glpat-xxx        # or set $GITLAB_TOKEN env var
-  required_approvals: 2   # default: 2
+  token: glpat-xxx        # or set $GITLAB_TOKEN env var; needs api scope for write operations
   timeout: 30s            # default: 30s
 
 sources:
@@ -49,7 +48,7 @@ and deduplicated.
 | **Draft** | MRs marked as draft |
 | **Needs Review** | Waiting for reviewer feedback |
 | **Needs Author Action** | Reviewer left comments; author needs to respond |
-| **Ready to Merge** | Has the required number of approvals |
+| **Approved** | GitLab reports `detailed_merge_status == mergeable` (all approvals, CI, branch protection satisfied) |
 
 ## Theming
 
@@ -75,7 +74,7 @@ the picker automatically. A file with the same name as a built-in overrides it. 
 
 **Authentication failed**
 
-- Make sure your token has `api` and `read_api` scopes
+- Make sure your token has `api` scope (`read_api` is not sufficient — the approver editor writes back to GitLab)
 - Check it hasn't expired: `echo $GITLAB_TOKEN`
 
 **No MRs showing**

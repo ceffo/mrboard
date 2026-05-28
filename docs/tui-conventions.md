@@ -122,14 +122,24 @@ func (m footerModel) View() tea.View {
 
 | File | Owns |
 |---|---|
-| `keys.go` | All keybindings — one `KeyMap` struct, nowhere else |
+| `keys.go` | All keybindings — all `KeyMap` types, nowhere else |
 | `styles.go` | All lipgloss styles — one `Styles` struct, nowhere else |
 | `model.go` | Root `tea.Model` — program state, child composition, message routing |
 | `board.go` | Board widget — column layout, cross-column focus |
 | `column.go` | Column widget — one per `MRPhase`, owns its card list |
 | `card.go` | Card widget — renders one `domain.MergeRequest` |
+| `detail.go` | Detail panel widget — MR description + discussion threads |
+| `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
+| `approver_editor.go` | Approver editor overlay (`a`) — read/write "Approvers" rule |
+| `filter_popup.go` | Filter popup overlay (`f`) |
+| `theme_picker.go` | Theme picker overlay (`t`) |
 | `footer.go` | Footer bar — renders active keybindings via `help.Model` |
+| `header.go` | Header bar — title + MR stats |
 | `spinner.go` | Loading overlay |
+| `state.go` | Shared TUI state types |
+| `viewport.go` | Viewport helper |
+| `theme.go` | Maps a `pkg/theme.Theme` to a `Styles` instance |
+| `themes.go` | Built-in theme definitions |
 
 ## Widget contract
 
@@ -152,61 +162,76 @@ down to children. Widgets never call `tea.WindowSize()` themselves.
 
 ## Keybindings — keys.go
 
-Use `charm.land/bubbles/v2/key` (verify path — see import table above):
+Use `charm.land/bubbles/v2/key` (verify path — see import table above).
+
+There is one `KeyMap` type per mode. All are defined in `keys.go` — no other file may use raw
+string key checks (`msg.String() == "r"`). Always use `key.Matches`.
+
+Board mode (`KeyMap`), detail panel (`DetailKeyMap`), diff view (`DiffViewKeyMap`), filter popup
+(`FilterPopupKeyMap`), theme picker (`ThemePickerKeyMap`), and approver editor
+(`ApproverEditorKeyMap`) each have their own type and `Default*KeyMap` var.
+
+Example (board):
 
 ```go
 type KeyMap struct {
-    Up      key.Binding
-    Down    key.Binding
-    Left    key.Binding
-    Right   key.Binding
-    Refresh key.Binding
-    Open    key.Binding
-    Quit    key.Binding
-}
-
-var DefaultKeyMap = KeyMap{
-    Up:      key.NewBinding(key.WithKeys("up", "k"),   key.WithHelp("↑/k", "up")),
-    Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-    Left:    key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
-    Right:   key.NewBinding(key.WithKeys("right", "l"),key.WithHelp("→/l", "right")),
-    Refresh: key.NewBinding(key.WithKeys("r"),         key.WithHelp("r", "refresh")),
-    Open:    key.NewBinding(key.WithKeys("o"),         key.WithHelp("o", "open in browser")),
-    Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c"),key.WithHelp("q", "quit")),
+    Up, Down, Left, Right key.Binding
+    Refresh, Open         key.Binding
+    Detail, CloseDetail   key.Binding
+    Sort, ToggleView       key.Binding
+    Filter, Theme         key.Binding
+    Approvers, Diff       key.Binding
+    Quit                  key.Binding
 }
 ```
 
-No other file may use raw string key checks (`msg.String() == "r"`). Always use `key.Matches`.
-
 ## Styles — styles.go
+
+`Styles` is instantiated once by `NewStyles(theme)` and passed into every widget at
+construction time. All fields use `charm.land/lipgloss/v2`. No inline `lipgloss.NewStyle()`
+calls are permitted outside `styles.go`.
+
+The struct is the source of truth — see `styles.go` for the full field list. Representative
+groups:
 
 ```go
 type Styles struct {
     // Column
-    ColumnHeader         lipgloss.Style
-    ColumnBorder         lipgloss.Style
-    ColumnBorderFocused  lipgloss.Style
+    ColumnHeader, ColumnBorder, ColumnBorderFocused, ColumnBorderFocusedInactive lip.Style
 
     // Card
-    Card                 lipgloss.Style
-    CardFocused          lipgloss.Style
-    CardTitle            lipgloss.Style
-    CardMeta             lipgloss.Style
+    Card, CardFocused, CardFocusedInactive lip.Style
+    CardTitle, CardTitleMergeable          lip.Style  // CardTitleMergeable = title when MR is in Approved column and GitLab says mergeable
+    CardMeta, CardAuthor                  lip.Style
+    CardFocusedBg                         lip.Style  // background fill for focused card whitespace
 
     // Reviewer pills
-    PillNotStarted       lipgloss.Style
-    PillCommented        lipgloss.Style
-    PillReReview         lipgloss.Style
-    PillApproved         lipgloss.Style
+    PillNotStarted, PillCommented, PillReReview, PillApproved lip.Style
+    PillBracket                                               lip.Style
+    ReviewerName, ApproverName                                lip.Style  // ApproverName uses ColorApprover token
 
-    // Status
-    DurationUrgent       lipgloss.Style  // > 2 days
-    DurationWarning      lipgloss.Style  // > 1 day
-    DurationOk           lipgloss.Style
+    // Detail panel
+    DetailPanel, DetailTitle, DetailMeta, DetailBody, DetailSectionHeader lip.Style
+
+    // Popup (filter / theme picker / approver editor)
+    PopupBorder, PopupTitle, PopupDivider, PopupHint lip.Style
+    PopupItem, PopupItemFocused                      lip.Style
+    PopupItemMarkerOn, PopupItemMarkerOff            lip.Style
+    PopupSection, PopupSectionFocused                lip.Style
+
+    // Status / duration
+    DurationUrgent, DurationWarning, DurationOk lip.Style
+
+    // Misc
+    Header, HeaderTitle, HeaderStats lip.Style
+    Footer, FooterVersion            lip.Style
+    EmptyColumn                      lip.Style
+    ErrorMsg                         lip.Style
+    FilterActive                     lip.Style
+    ScrollIndicator                  lip.Style
+    MRNumberBang                     lip.Style
 }
 ```
-
-Instantiated once in `NewStyles()` and passed into every widget at construction time.
 
 ## Message types
 
@@ -227,7 +252,7 @@ The refresh `tea.Cmd` returns one of these. Widgets receive them via the normal 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Draft (0)   │  Needs Review (2)  │  Needs Author (1)  │  Ready (1)  │
+│  Draft (0)   │  Needs Review (2)  │  Needs Author (1)  │  Approved (1)  │
 │              │  ┌──────────────┐  │  ┌──────────────┐  │  ┌───────┐  │
 │  (empty)     │  │ MR title...  │  │  │ MR title...  │  │  │ ...   │  │
 │              │  │ @author  2d  │  │  │ @author  4h  │  │  └───────┘  │
