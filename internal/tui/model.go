@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
+	"go.dalton.dog/bubbleup"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -95,6 +96,9 @@ const (
 	detailWidthRatio   = 40  // percent of total width for the detail panel
 	detailWidthDivisor = 100 // divisor for percentage calculation
 	fetchTimeout       = 60 * time.Second
+	toastWidth         = 50
+	toastMinWidth      = 30
+	toastDuration      = 4 * time.Second
 )
 
 type appState int
@@ -162,9 +166,6 @@ type NotifyResultMsg struct {
 	Err error
 }
 
-// notifyStatusResetMsg clears the transient notification status from the header.
-type notifyStatusResetMsg struct{}
-
 // Options are session-scoped overrides passed via CLI flags.
 // They are not persisted to the state file.
 type Options struct {
@@ -219,7 +220,7 @@ type Model struct {
 	isRefreshing       bool
 	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
 	notifier           domain.Notifier
-	notifyStatus       string // transient flash shown in header stats
+	alerts             bubbleup.AlertModel
 	jiraBaseURL        string
 }
 
@@ -321,6 +322,10 @@ func New(
 		logger:             logger,
 		notifier:           notifier,
 		jiraBaseURL:        cfg.Jira.InstanceURL,
+		alerts: bubbleup.NewAlertModel(toastWidth, false, toastDuration).
+			WithPosition(bubbleup.TopRightPosition).
+			WithUnicodePrefix().
+			WithMinWidth(toastMinWidth),
 	}
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -362,8 +367,30 @@ func (m *Model) startFetch() tea.Cmd {
 	}
 }
 
-// Update handles all incoming messages.
+// Update handles all incoming messages, driving BubbleUp alert animation for every tick.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	result, cmd := m.coreUpdate(msg)
+	rm := result.(Model)
+
+	rawAlerts, buCmd := rm.alerts.Update(msg)
+	rm.alerts = rawAlerts.(bubbleup.AlertModel)
+
+	var alertCmd tea.Cmd
+	if buCmd != nil {
+		c := buCmd
+		alertCmd = func() tea.Msg { return c() }
+	}
+	return rm, tea.Batch(cmd, alertCmd)
+}
+
+// toast returns a Cmd that triggers a BubbleUp notification popup.
+func (m Model) toast(level, text string) tea.Cmd {
+	cmd := m.alerts.NewAlertCmd(level, text)
+	return func() tea.Msg { return cmd() }
+}
+
+// coreUpdate is the main message dispatch logic.
+func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		if m.themeMode == themeModeAuto || m.themeMode == "" {
@@ -442,11 +469,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
-
-	case notifyStatusResetMsg:
-		m.notifyStatus = ""
-		m.header.SetStats("")
-		return m, nil
 
 	case tickMsg:
 		return m, tickCmd()
@@ -882,14 +904,10 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.logger.Error("tui: notification failed", "err", msg.Err)
 		m.errors = append(m.errors, fmt.Errorf("notify: %w", msg.Err))
-		return m, nil
+		return m, m.toast(bubbleup.ErrorKey, "Notify failed")
 	}
 	m.logger.Info("tui: notification delivered")
-	m.notifyStatus = "notified ✓"
-	m.header.SetStats(m.notifyStatus)
-	return m, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg { //nolint:mnd
-		return notifyStatusResetMsg{}
-	})
+	return m, m.toast(bubbleup.InfoKey, "Teams notified ✓")
 }
 
 // updateJiraKey enables or disables the Jira key based on whether the focused
@@ -904,7 +922,7 @@ func (m *Model) updateJiraKey() {
 
 // View renders the full screen. Only the root model sets AltScreen.
 func (m Model) View() tea.View {
-	content := m.renderContent()
+	content := m.alerts.Render(m.renderContent())
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
@@ -1005,21 +1023,30 @@ func (m Model) handleMembersLoaded(msg MembersLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleApproversSaved handles ApproversSavedMsg: closes the editor and updates the in-place MR.
+// handleApproversSaved closes the editor, updates the MR in-place, and fires
+// a Teams notification automatically if a notifier is configured.
 func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) {
 	m.showApproverEditor = false
 	if msg.Err != nil {
+		m.logger.Error("tui: approvers save failed", "err", msg.Err)
 		m.errors = append(m.errors, msg.Err)
-		return m, nil
+		return m, m.toast(bubbleup.ErrorKey, "Save failed")
 	}
+	updatedMR := msg.MR
 	for i, mr := range m.allMRs {
-		if mr.ProjectID == msg.MR.ProjectID && mr.IID == msg.MR.IID {
-			m.allMRs[i] = msg.MR
+		if mr.ProjectID == updatedMR.ProjectID && mr.IID == updatedMR.IID {
+			m.allMRs[i] = updatedMR
 			break
 		}
 	}
 	m.applyMRFilter()
-	return m, nil
+	m.updateJiraKey()
+
+	cmds := []tea.Cmd{m.toast(bubbleup.InfoKey, "Approvers saved")}
+	if m.notifier != nil {
+		cmds = append(cmds, m.notifyCmd(&updatedMR))
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.

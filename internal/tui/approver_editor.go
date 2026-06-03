@@ -46,6 +46,7 @@ type approverEditorWidget struct {
 	userIDByName   map[string]int64 // username → GitLab user ID (from members list)
 	members        []domain.ProjectMember
 	loading        bool
+	saving         bool // true while SaveApprovers is in flight — blocks all key input
 	membersErr     error
 	section        int // 0=Reviewers, 1=All Members
 	reviewerCursor int
@@ -100,6 +101,10 @@ func (w *approverEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //noli
 		return w, nil
 	}
 
+	if w.saving {
+		return w, nil // block all input while save is in flight
+	}
+
 	switch {
 	case key.Matches(kMsg, w.keys.Close):
 		return w, func() tea.Msg { return ApproverEditorClosedMsg{} }
@@ -124,6 +129,7 @@ func (w *approverEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //noli
 		w.toggleCurrent()
 
 	case key.Matches(kMsg, w.keys.Confirm):
+		w.saving = true
 		return w, w.saveCmd()
 	}
 
@@ -281,7 +287,11 @@ func (w *approverEditorWidget) render() string {
 		w.renderMembers(&sb)
 	}
 
-	sb.WriteString("\n" + w.styles.PopupHint.Render("  ↑/↓ move  tab:all members  space:toggle  ↵:save  a/esc:close"))
+	if w.saving {
+		sb.WriteString("\n" + w.styles.PopupHint.Render("  Saving…"))
+	} else {
+		sb.WriteString("\n" + w.styles.PopupHint.Render("  ↑/↓ move  tab:all members  space:toggle  ↵:save  a/esc:close"))
+	}
 	return w.styles.PopupBorder.Render(sb.String())
 }
 
