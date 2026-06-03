@@ -10,6 +10,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
 	"github.com/ceffo/mrboard/internal/adapters/statestore"
+	"github.com/ceffo/mrboard/internal/adapters/teamsnotify"
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -21,6 +22,7 @@ import (
 type Core struct {
 	MRSource   mrsvc.MergeRequestSource
 	StateStore domain.StateStore
+	Notifier   domain.Notifier
 	Config     *config.AppConfig
 	Logger     *slog.Logger
 	logCloser  io.Closer
@@ -69,9 +71,19 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		return nil, err
 	}
 
+	var notifier domain.Notifier
+	if teamsCfg := cfg.Notifications.Teams; teamsCfg.WebhookURL != "" {
+		notifier = teamsnotify.New(teamsnotify.Config{
+			WebhookURL:   teamsCfg.WebhookURL,
+			UserMappings: teamsCfg.UserMappings,
+			UserIDs:      teamsCfg.UserIDs,
+		}, logger)
+	}
+
 	return &Core{
 		MRSource:   adapter,
 		StateStore: store,
+		Notifier:   notifier,
 		Config:     cfg,
 		Logger:     logger,
 		logCloser:  closer,

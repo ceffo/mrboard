@@ -157,6 +157,14 @@ type FileRenderResultMsg struct {
 	Err       error
 }
 
+// NotifyResultMsg carries the result of a webhook notification attempt.
+type NotifyResultMsg struct {
+	Err error
+}
+
+// notifyStatusResetMsg clears the transient notification status from the header.
+type notifyStatusResetMsg struct{}
+
 // Options are session-scoped overrides passed via CLI flags.
 // They are not persisted to the state file.
 type Options struct {
@@ -210,6 +218,8 @@ type Model struct {
 	logger             *slog.Logger
 	isRefreshing       bool
 	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
+	notifier           domain.Notifier
+	notifyStatus       string // transient flash shown in header stats
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -219,6 +229,7 @@ func New(
 	cfg *config.Config,
 	src mrsvc.MergeRequestSource,
 	store domain.StateStore,
+	notifier domain.Notifier,
 	version string,
 	opts Options,
 ) Model {
@@ -273,6 +284,9 @@ func New(
 	if cfg.CurrentUser == "" {
 		keys.ToggleView.SetEnabled(false)
 	}
+	if notifier == nil {
+		keys.Notify.SetEnabled(false)
+	}
 
 	m := Model{
 		state:              stateLoading,
@@ -303,6 +317,7 @@ func New(
 		includeReviewerMRs: st.IncludeReviewerMRs,
 		baseCtx:            ctx,
 		logger:             logger,
+		notifier:           notifier,
 	}
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -420,6 +435,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ApproversSavedMsg:
 		return m.handleApproversSaved(msg)
+
+	case NotifyResultMsg:
+		return m.handleNotifyResult(msg)
+
+	case notifyStatusResetMsg:
+		m.notifyStatus = ""
+		m.header.SetStats("")
+		return m, nil
 
 	case tickMsg:
 		return m, tickCmd()
@@ -590,6 +613,11 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if mr := m.board.FocusedMR(); mr != nil {
 			m.openDiffView(mr)
 			return m, m.fetchDiffCmd(mr)
+		}
+	case key.Matches(msg, m.keys.Notify):
+		if mr := m.board.FocusedMR(); mr != nil && m.notifier != nil {
+			m.logger.Info("tui: notify key pressed", "mr_iid", mr.IID, "mr_title", mr.Title)
+			return m, m.notifyCmd(mr)
 		}
 	}
 	return m, nil
@@ -823,6 +851,31 @@ func (m Model) fetchDetailCmd(mr *domain.MergeRequest) tea.Cmd {
 			Err:         err,
 		}
 	}
+}
+
+func (m Model) notifyCmd(mr *domain.MergeRequest) tea.Cmd {
+	notifier := m.notifier
+	base := m.baseCtx
+	snapshot := *mr
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+		return NotifyResultMsg{Err: notifier.Notify(ctx, snapshot)}
+	}
+}
+
+func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Error("tui: notification failed", "err", msg.Err)
+		m.errors = append(m.errors, fmt.Errorf("notify: %w", msg.Err))
+		return m, nil
+	}
+	m.logger.Info("tui: notification delivered")
+	m.notifyStatus = "notified ✓"
+	m.header.SetStats(m.notifyStatus)
+	return m, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg { //nolint:mnd
+		return notifyStatusResetMsg{}
+	})
 }
 
 // View renders the full screen. Only the root model sets AltScreen.

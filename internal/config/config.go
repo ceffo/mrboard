@@ -36,6 +36,18 @@ type logSection struct {
 	Level string `mapstructure:"level"`
 }
 
+// TeamsConfig holds configuration for Microsoft Teams webhook notifications.
+type TeamsConfig struct {
+	WebhookURL   string            `mapstructure:"webhook_url"`
+	UserMappings map[string]string `mapstructure:"user_mappings"` // gitlab username → Teams display name
+	UserIDs      map[string]string `mapstructure:"user_ids"`      // gitlab username → Teams UPN/email for @mention pings
+}
+
+// Notifications mirrors the [notifications] YAML section.
+type Notifications struct {
+	Teams TeamsConfig `mapstructure:"teams"`
+}
+
 // AppConfig is the top-level application configuration.
 // Field access patterns (e.g. cfg.GitLab.URL, cfg.Sources) are intentionally
 // preserved from the previous Config type so existing call-sites keep working
@@ -48,6 +60,7 @@ type AppConfig struct {
 	Log                logSection    `mapstructure:"log"`
 	LifetimeWarnAfter  time.Duration `mapstructure:"lifetime_warn_after"`
 	LifetimeErrorAfter time.Duration `mapstructure:"lifetime_error_after"`
+	Notifications      Notifications `mapstructure:"notifications"`
 }
 
 // Config is a backward-compatible alias for AppConfig.
