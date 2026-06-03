@@ -48,6 +48,11 @@ type Notifications struct {
 	Teams TeamsConfig `mapstructure:"teams"`
 }
 
+// Jira holds configuration for JIRA integration.
+type Jira struct {
+	InstanceURL string `mapstructure:"instance_url"` // e.g. "https://northstar.atlassian.net"
+}
+
 // AppConfig is the top-level application configuration.
 // Field access patterns (e.g. cfg.GitLab.URL, cfg.Sources) are intentionally
 // preserved from the previous Config type so existing call-sites keep working
@@ -61,6 +66,7 @@ type AppConfig struct {
 	LifetimeWarnAfter  time.Duration `mapstructure:"lifetime_warn_after"`
 	LifetimeErrorAfter time.Duration `mapstructure:"lifetime_error_after"`
 	Notifications      Notifications `mapstructure:"notifications"`
+	Jira               Jira          `mapstructure:"jira"`
 }
 
 // Config is a backward-compatible alias for AppConfig.

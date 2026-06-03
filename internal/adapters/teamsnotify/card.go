@@ -123,14 +123,19 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		msTeams = &msTeamsExt{Entities: entities}
 	}
 
+	actions := []openURLAction{
+		{Type: typeActionOpen, Title: "Open MR", URL: mr.WebURL},
+	}
+	if jiraURL := domain.JiraIssueURL(cfg.JiraBaseURL, domain.ExtractJiraID(mr.Title)); jiraURL != "" {
+		actions = append(actions, openURLAction{Type: typeActionOpen, Title: "Open JIRA", URL: jiraURL})
+	}
+
 	return adaptiveCard{
 		Type:    typeAdaptive,
 		Schema:  schemaAdaptive,
 		Version: versionAdaptive,
 		Body:    body,
-		Actions: []openURLAction{
-			{Type: typeActionOpen, Title: "Open MR", URL: mr.WebURL},
-		},
+		Actions: actions,
 		MsTeams: msTeams,
 	}
 }

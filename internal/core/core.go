@@ -77,6 +77,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			WebhookURL:   teamsCfg.WebhookURL,
 			UserMappings: teamsCfg.UserMappings,
 			UserIDs:      teamsCfg.UserIDs,
+			JiraBaseURL:  cfg.Jira.InstanceURL,
 		}, logger)
 	}
 

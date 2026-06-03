@@ -18,6 +18,7 @@ type KeyMap struct {
 	Approvers   key.Binding
 	Diff        key.Binding
 	Notify      key.Binding
+	Jira        key.Binding
 	Quit        key.Binding
 }
 
@@ -25,7 +26,7 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Approvers, k.Diff, k.Notify, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Approvers, k.Diff, k.Notify, k.Jira, k.Quit,
 	}
 }
 
@@ -66,6 +67,7 @@ var DefaultKeyMap = KeyMap{
 	Approvers:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approvers")),
 	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Notify:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "notify")),
+	Jira:        key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "jira")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }
 

@@ -220,6 +220,7 @@ type Model struct {
 	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
 	notifier           domain.Notifier
 	notifyStatus       string // transient flash shown in header stats
+	jiraBaseURL        string
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -287,6 +288,7 @@ func New(
 	if notifier == nil {
 		keys.Notify.SetEnabled(false)
 	}
+	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
 
 	m := Model{
 		state:              stateLoading,
@@ -318,6 +320,7 @@ func New(
 		baseCtx:            ctx,
 		logger:             logger,
 		notifier:           notifier,
+		jiraBaseURL:        cfg.Jira.InstanceURL,
 	}
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -393,6 +396,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.board.TryRestoreFocus(int(m.prevFocusMR.Phase), m.prevFocusMR.IID)
 			m.prevFocusMR = nil
 		}
+		m.updateJiraKey()
 		return m, nil
 
 	case FetchErrMsg:
@@ -553,12 +557,16 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Up):
 		m.board.MoveUp()
+		m.updateJiraKey()
 	case key.Matches(msg, m.keys.Down):
 		m.board.MoveDown()
+		m.updateJiraKey()
 	case key.Matches(msg, m.keys.Left):
 		m.board.MoveLeft()
+		m.updateJiraKey()
 	case key.Matches(msg, m.keys.Right):
 		m.board.MoveRight()
+		m.updateJiraKey()
 	case key.Matches(msg, m.keys.Refresh):
 		if m.showDetail {
 			m.closeDetail()
@@ -618,6 +626,12 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if mr := m.board.FocusedMR(); mr != nil && m.notifier != nil {
 			m.logger.Info("tui: notify key pressed", "mr_iid", mr.IID, "mr_title", mr.Title)
 			return m, m.notifyCmd(mr)
+		}
+	case key.Matches(msg, m.keys.Jira):
+		if mr := m.board.FocusedMR(); mr != nil {
+			if url := domain.JiraIssueURL(m.jiraBaseURL, domain.ExtractJiraID(mr.Title)); url != "" {
+				return m, openBrowser(url)
+			}
 		}
 	}
 	return m, nil
@@ -876,6 +890,16 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg { //nolint:mnd
 		return notifyStatusResetMsg{}
 	})
+}
+
+// updateJiraKey enables or disables the Jira key based on whether the focused
+// MR has a detectable JIRA ID and jiraBaseURL is configured. Call after any
+// navigation that may change the focused card.
+func (m *Model) updateJiraKey() {
+	mr := m.board.FocusedMR()
+	enabled := m.jiraBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
+	m.keys.Jira.SetEnabled(enabled)
+	m.footer.SetKeyMap(m.keys)
 }
 
 // View renders the full screen. Only the root model sets AltScreen.

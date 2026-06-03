@@ -16,6 +16,7 @@ type Config struct {
 	WebhookURL   string
 	UserMappings map[string]string // gitlab username → Teams display name
 	UserIDs      map[string]string // gitlab username → Teams UPN/email for @mention pings
+	JiraBaseURL  string            // e.g. "https://northstar.atlassian.net"; empty disables JIRA action
 }
 
 // TeamsNotifier delivers MR notifications to a Microsoft Teams channel.
