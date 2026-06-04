@@ -1124,17 +1124,8 @@ func (m *Model) applyMRFilter() {
 	m.header.SetFilterActive(m.isFilterActive())
 }
 
-// visibleMRs returns only the MRs that the board will display: those with at
-// least one assigned reviewer, plus any MR authored by currentUser (so the
-// current user's own drafts-without-reviewers are always visible).
-func visibleMRs(mrs []domain.MergeRequest, currentUser string) []domain.MergeRequest {
-	out := make([]domain.MergeRequest, 0, len(mrs))
-	for _, mr := range mrs {
-		if hasAssignedReviewer(mr) || mr.Author == currentUser {
-			out = append(out, mr)
-		}
-	}
-	return out
+func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
+	return mrs
 }
 
 func (m *Model) isFilterActive() bool {

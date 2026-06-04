@@ -116,16 +116,6 @@ func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
 	b.setInitialFocus()
 }
 
-// hasAssignedReviewer reports whether mr has at least one reviewer with a non-empty username.
-func hasAssignedReviewer(mr domain.MergeRequest) bool {
-	for _, r := range mr.Reviewers {
-		if r.Username != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func (b *boardWidget) setInitialFocus() {
 	for i := range b.columns {
 		if len(b.columns[i].cards) > 0 {
