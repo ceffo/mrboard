@@ -141,6 +141,8 @@ func (k DiffViewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.Sh
 type SettingsKeyMap struct {
 	Up      key.Binding
 	Down    key.Binding
+	Left    key.Binding
+	Right   key.Binding
 	PrevTab key.Binding
 	NextTab key.Binding
 	Toggle  key.Binding
@@ -150,7 +152,7 @@ type SettingsKeyMap struct {
 
 // ShortHelp implements help.KeyMap.
 func (k SettingsKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.PrevTab, k.NextTab, k.Toggle, k.Confirm, k.Close}
+	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PrevTab, k.NextTab, k.Toggle, k.Confirm, k.Close}
 }
 
 // FullHelp implements help.KeyMap.
@@ -160,6 +162,8 @@ func (k SettingsKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.Sh
 var DefaultSettingsKeyMap = SettingsKeyMap{
 	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Left:    key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev section")),
+	Right:   key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next section")),
 	PrevTab: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev tab")),
 	NextTab: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
 	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),

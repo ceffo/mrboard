@@ -231,9 +231,10 @@ type settingsWidget struct {
 	filterFocused  filterFocus
 
 	// Sorting tab
-	sortCursor int // 0–4
-	sortField  sortField
-	sortDesc   bool
+	sortCursor  int // 0–4
+	sortSection int // 0 = field, 1 = direction
+	sortField   sortField
+	sortDesc    bool
 
 	// Theme tab
 	themes          []string
@@ -404,6 +405,12 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	case key.Matches(kMsg, w.keys.Down):
 		w.moveCursor(1)
 		return w, w.emitApplied()
+	case key.Matches(kMsg, w.keys.Left):
+		w.moveSection(-1)
+		return w, w.emitApplied()
+	case key.Matches(kMsg, w.keys.Right):
+		w.moveSection(1)
+		return w, w.emitApplied()
 	case key.Matches(kMsg, w.keys.Toggle), key.Matches(kMsg, w.keys.Confirm):
 		w.activate()
 		return w, w.emitApplied()
@@ -418,8 +425,14 @@ func (w *settingsWidget) moveCursor(delta int) {
 	case tabFilters:
 		w.moveCursorFilters(delta)
 	case tabSorting:
+		var lo, hi int
+		if w.sortSection == 0 {
+			lo, hi = sortCursorRepoIID, sortCursorAge
+		} else {
+			lo, hi = sortCursorAscending, sortCursorDescending
+		}
 		next := w.sortCursor + delta
-		if next >= 0 && next < sortNumCursors {
+		if next >= lo && next <= hi {
 			w.sortCursor = next
 		}
 	case tabTheme:
@@ -427,43 +440,46 @@ func (w *settingsWidget) moveCursor(delta int) {
 	}
 }
 
+func (w *settingsWidget) moveSection(delta int) {
+	switch w.tab {
+	case tabFilters:
+		next := int(w.filterFocused) + delta
+		if next >= 0 && next < int(filterNumSections) {
+			w.filterFocused = filterFocus(next)
+		}
+	case tabSorting:
+		next := w.sortSection + delta
+		if next >= 0 && next <= 1 {
+			w.sortSection = next
+			if w.sortSection == 0 && w.sortCursor > sortCursorAge {
+				w.sortCursor = sortCursorAge
+			} else if w.sortSection == 1 && w.sortCursor < sortCursorAscending {
+				w.sortCursor = sortCursorAscending
+			}
+		}
+	case tabTheme:
+		next := w.themeSection + delta
+		if next >= 0 && next <= 1 {
+			w.themeSection = next
+		}
+	}
+}
+
 func (w *settingsWidget) moveCursorFilters(delta int) {
 	switch w.filterFocused {
 	case filterFocusStatus:
 		next := w.filterStatus.cursor + delta
-		if next < 0 {
-			w.filterFocused = filterFocusReviewer
-			w.filterReviewer.cursor = len(w.filterReviewer.items) - 1
-			w.filterReviewer.adjustScroll()
-		} else if next >= len(w.filterStatus.phases) {
-			w.filterFocused = filterFocusAuthor
-			w.filterAuthor.cursor = 0
-			w.filterAuthor.scrollOff = 0
-		} else {
+		if next >= 0 && next < len(w.filterStatus.phases) {
 			w.filterStatus.cursor = next
 		}
 	case filterFocusAuthor:
 		next := w.filterAuthor.cursor + delta
-		if next < 0 {
-			w.filterFocused = filterFocusStatus
-			w.filterStatus.cursor = len(w.filterStatus.phases) - 1
-		} else if next >= len(w.filterAuthor.items) {
-			w.filterFocused = filterFocusReviewer
-			w.filterReviewer.cursor = 0
-			w.filterReviewer.scrollOff = 0
-		} else {
+		if next >= 0 && next < len(w.filterAuthor.items) {
 			w.filterAuthor.moveCursor(delta)
 		}
 	case filterFocusReviewer:
 		next := w.filterReviewer.cursor + delta
-		if next < 0 {
-			w.filterFocused = filterFocusAuthor
-			w.filterAuthor.cursor = len(w.filterAuthor.items) - 1
-			w.filterAuthor.adjustScroll()
-		} else if next >= len(w.filterReviewer.items) {
-			w.filterFocused = filterFocusStatus
-			w.filterStatus.cursor = 0
-		} else {
+		if next >= 0 && next < len(w.filterReviewer.items) {
 			w.filterReviewer.moveCursor(delta)
 		}
 	}
@@ -472,28 +488,14 @@ func (w *settingsWidget) moveCursorFilters(delta int) {
 func (w *settingsWidget) moveCursorTheme(delta int) {
 	if w.themeSection == 0 {
 		next := w.themeCursor + delta
-		if next < 0 {
-			w.themeSection = 1
-			w.themeModeCursor = len(modeOptions) - 1
-		} else if next >= len(w.themes) {
-			w.themeSection = 1
-			w.themeModeCursor = 0
-		} else {
+		if next >= 0 && next < len(w.themes) {
 			w.themeCursor = next
 			w.adjustThemeScroll()
 			w.themeName = w.themes[w.themeCursor]
 		}
 	} else {
 		next := w.themeModeCursor + delta
-		if next < 0 {
-			w.themeSection = 0
-			w.themeCursor = len(w.themes) - 1
-			w.adjustThemeScroll()
-		} else if next >= len(modeOptions) {
-			w.themeSection = 0
-			w.themeCursor = 0
-			w.themeScrollOff = 0
-		} else {
+		if next >= 0 && next < len(modeOptions) {
 			w.themeModeCursor = next
 			w.themeMode = modeOptions[w.themeModeCursor]
 		}
@@ -588,7 +590,9 @@ func (w settingsWidget) render() string {
 	case tabTheme:
 		sb.WriteString(w.renderTheme())
 	}
-	sb.WriteString("\n" + w.styles.PopupHint.Render("  tab/shift+tab switch tab  ↑/k ↓/j move  space toggle  ,/esc close"))
+	sb.WriteString("\n" + w.styles.PopupHint.Render(
+		"  tab/shift+tab tabs  ↑/k ↓/j within section  ←/h →/l sections  space toggle  ,/esc close",
+	))
 	return w.styles.PopupBorder.Render(sb.String())
 }
 
