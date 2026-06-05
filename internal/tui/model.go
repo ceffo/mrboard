@@ -12,7 +12,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
-	"go.dalton.dog/bubbleup"
+
+	"github.com/ceffo/toast"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -220,7 +221,7 @@ type Model struct {
 	isRefreshing       bool
 	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
 	notifier           domain.Notifier
-	alerts             bubbleup.AlertModel
+	alerts             toast.Model
 	jiraBaseURL        string
 }
 
@@ -322,9 +323,8 @@ func New(
 		logger:             logger,
 		notifier:           notifier,
 		jiraBaseURL:        cfg.Jira.InstanceURL,
-		alerts: bubbleup.NewAlertModel(toastWidth, false, toastDuration).
-			WithPosition(bubbleup.TopRightPosition).
-			WithUnicodePrefix().
+		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
+			WithPosition(toast.TopRight).
 			WithMinWidth(toastMinWidth),
 	}
 	if viewMode == domain.ViewMine {
@@ -367,26 +367,20 @@ func (m *Model) startFetch() tea.Cmd {
 	}
 }
 
-// Update handles all incoming messages, driving BubbleUp alert animation for every tick.
+// Update handles all incoming messages, driving toast alert animation for every tick.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	result, cmd := m.coreUpdate(msg)
 	rm := result.(Model)
 
-	rawAlerts, buCmd := rm.alerts.Update(msg)
-	rm.alerts = rawAlerts.(bubbleup.AlertModel)
-
 	var alertCmd tea.Cmd
-	if buCmd != nil {
-		c := buCmd
-		alertCmd = func() tea.Msg { return c() }
-	}
+	rm.alerts, alertCmd = rm.alerts.Update(msg)
+
 	return rm, tea.Batch(cmd, alertCmd)
 }
 
-// toast returns a Cmd that triggers a BubbleUp notification popup.
-func (m Model) toast(level, text string) tea.Cmd {
-	cmd := m.alerts.NewAlertCmd(level, text)
-	return func() tea.Msg { return cmd() }
+// toast returns a Cmd that triggers a toast notification popup.
+func (m Model) toast(def toast.AlertDefinition, text string) tea.Cmd {
+	return m.alerts.NewAlertCmd(def, text)
 }
 
 // coreUpdate is the main message dispatch logic.
@@ -904,10 +898,10 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.logger.Error("tui: notification failed", "err", msg.Err)
 		m.errors = append(m.errors, fmt.Errorf("notify: %w", msg.Err))
-		return m, m.toast(bubbleup.ErrorKey, "Notify failed")
+		return m, m.toast(toast.ErrorAlertUnicode, "Notify failed")
 	}
 	m.logger.Info("tui: notification delivered")
-	return m, m.toast(bubbleup.InfoKey, "Teams notified ✓")
+	return m, m.toast(toast.InfoAlertUnicode, "Teams notified ✓")
 }
 
 // updateJiraKey enables or disables the Jira key based on whether the focused
@@ -1030,7 +1024,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	if msg.Err != nil {
 		m.logger.Error("tui: approvers save failed", "err", msg.Err)
 		m.errors = append(m.errors, msg.Err)
-		return m, m.toast(bubbleup.ErrorKey, "Save failed")
+		return m, m.toast(toast.ErrorAlertUnicode, "Save failed")
 	}
 	updatedMR := msg.MR
 	for i, mr := range m.allMRs {
@@ -1042,7 +1036,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	m.applyMRFilter()
 	m.updateJiraKey()
 
-	cmds := []tea.Cmd{m.toast(bubbleup.InfoKey, "Approvers saved")}
+	cmds := []tea.Cmd{m.toast(toast.InfoAlertUnicode, "Approvers saved")}
 	if m.notifier != nil {
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
