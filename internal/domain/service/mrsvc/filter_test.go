@@ -180,7 +180,7 @@ func TestFilterAndSort_SortAge_Ascending(t *testing.T) {
 		mr(3, userCarol, "repo/c", 3, t1),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAge})
-	wantIDs := []int{2, 3, 1} // t0, t1, t2
+	wantIDs := []int{1, 3, 2} // t2, t1, t0 — youngest (smallest age) first
 	for i, mr := range got {
 		if mr.ID != wantIDs[i] {
 			t.Fatalf("pos %d: want ID %d, got %d", i, wantIDs[i], mr.ID)
@@ -195,7 +195,7 @@ func TestFilterAndSort_SortAge_Descending(t *testing.T) {
 		mr(3, userCarol, "repo/c", 3, t1),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAge, SortDesc: true})
-	wantIDs := []int{1, 3, 2} // t2, t1, t0
+	wantIDs := []int{2, 3, 1} // t0, t1, t2 — oldest (largest age) first
 	for i, mr := range got {
 		if mr.ID != wantIDs[i] {
 			t.Fatalf("pos %d: want ID %d, got %d", i, wantIDs[i], mr.ID)

@@ -129,7 +129,7 @@ func sortedMRs(mrs []domain.MergeRequest, field string, desc bool) []domain.Merg
 		case "author":
 			less, equal = a.Author < b.Author, a.Author == b.Author
 		case "age":
-			less, equal = a.CreatedAt.Before(b.CreatedAt), a.CreatedAt.Equal(b.CreatedAt)
+			less, equal = b.CreatedAt.Before(a.CreatedAt), a.CreatedAt.Equal(b.CreatedAt)
 		default: // "repo_iid"
 			if a.ProjectPath != b.ProjectPath {
 				less = a.ProjectPath < b.ProjectPath

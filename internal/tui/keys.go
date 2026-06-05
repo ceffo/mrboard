@@ -160,8 +160,8 @@ func (k SettingsKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.Sh
 var DefaultSettingsKeyMap = SettingsKeyMap{
 	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	PrevTab: key.NewBinding(key.WithKeys("shift+tab", "left", "h"), key.WithHelp("shift+tab", "prev tab")),
-	NextTab: key.NewBinding(key.WithKeys("tab", "right", "l"), key.WithHelp("tab", "next tab")),
+	PrevTab: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev tab")),
+	NextTab: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
 	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
 	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
 	Close:   key.NewBinding(key.WithKeys(",", "esc"), key.WithHelp(",/esc", "close")),

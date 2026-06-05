@@ -588,7 +588,7 @@ func (w settingsWidget) render() string {
 	case tabTheme:
 		sb.WriteString(w.renderTheme())
 	}
-	sb.WriteString("\n" + w.styles.PopupHint.Render("  tab next-tab  ↑/↓ move  space toggle  ,/esc close"))
+	sb.WriteString("\n" + w.styles.PopupHint.Render("  tab/shift+tab switch tab  ↑/k ↓/j move  space toggle  ,/esc close"))
 	return w.styles.PopupBorder.Render(sb.String())
 }
 
