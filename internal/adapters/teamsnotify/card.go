@@ -52,6 +52,7 @@ type textBlock struct {
 	Wrap   bool   `json:"wrap,omitempty"`
 	Weight string `json:"weight,omitempty"`
 	Size   string `json:"size,omitempty"`
+	Color  string `json:"color,omitempty"`
 }
 
 type openURLAction struct {
@@ -68,7 +69,17 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		projectName = mr.ProjectPath[i+1:]
 	}
 
+	authorName := mr.Author
+	if name, ok := cfg.UserMappings[mr.Author]; ok {
+		authorName = name
+	}
 	body := []any{
+		textBlock{
+			Type:  typeTextBlock,
+			Text:  authorName,
+			Size:  "medium",
+			Color: "accent",
+		},
 		textBlock{
 			Type:   typeTextBlock,
 			Text:   mr.Title,
