@@ -184,12 +184,10 @@ type Model struct {
 	detail             detailWidget
 	showDetail         bool
 	settings           settingsWidget
-	showSettings       bool
 	approverEditor     *approverEditorWidget
-	showApproverEditor bool
 	diffView           diffViewWidget
 	diffViewKeys       DiffViewKeyMap
-	showDiffView       bool
+	overlay            overlayRouter
 	keys               KeyMap
 	detailKeys         DetailKeyMap
 	settingsKeys       SettingsKeyMap
@@ -448,14 +446,14 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSettingsApplied(msg)
 
 	case SettingsClosedMsg:
-		m.showSettings = false
+		m.overlay.closeOverlay()
 		return m, nil
 
 	case MembersLoadedMsg:
 		return m.handleMembersLoaded(msg)
 
 	case ApproverEditorClosedMsg:
-		m.showApproverEditor = false
+		m.overlay.closeOverlay()
 		return m, nil
 
 	case ApproversSavedMsg:
@@ -492,19 +490,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.showSettings {
+	switch m.overlay.active() {
+	case overlayKindSettings:
 		updated, cmd := m.settings.Update(msg)
 		m.settings = updated.(settingsWidget)
 		return m, cmd
-	}
-
-	if m.showApproverEditor && m.approverEditor != nil {
-		updated, cmd := m.approverEditor.Update(msg)
-		m.approverEditor = updated.(*approverEditorWidget)
-		return m, cmd
-	}
-
-	if m.showDiffView {
+	case overlayKindApproverEditor:
+		if m.approverEditor != nil {
+			updated, cmd := m.approverEditor.Update(msg)
+			m.approverEditor = updated.(*approverEditorWidget)
+			return m, cmd
+		}
+	case overlayKindDiffView:
 		return m.handleKeyDiff(msg)
 	}
 
@@ -630,7 +627,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.approverEditor = newApproverEditorWidget(
 				m.baseCtx, *mr, m.styles, m.approverEditorKeys, m.src,
 			)
-			m.showApproverEditor = true
+			m.overlay.openOverlay(overlayKindApproverEditor)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.Diff):
@@ -669,7 +666,7 @@ func (m *Model) closeDetail() {
 }
 
 func (m *Model) openDiffView(mr *domain.MergeRequest) {
-	m.showDiffView = true
+	m.overlay.openOverlay(overlayKindDiffView)
 	m.diffView.SetMR(mr)
 	bodyH := m.height - chromeHeight
 	m.diffView.SetSize(m.width, bodyH)
@@ -679,7 +676,7 @@ func (m *Model) openDiffView(mr *domain.MergeRequest) {
 }
 
 func (m *Model) closeDiffView() {
-	m.showDiffView = false
+	m.overlay.closeOverlay()
 	m.header.SetTitle("mrboard")
 	m.header.SetStats("")
 	if m.showDetail {
@@ -762,7 +759,7 @@ func (m Model) fetchFileRenderCmd(fileIdx int) tea.Cmd {
 // maybeRenderCurrentFile dispatches a render cmd for the current file if it hasn't
 // been rendered yet. For the fallback path (no difft), rendering is synchronous.
 func (m *Model) maybeRenderCurrentFile() tea.Cmd {
-	if !m.showDiffView || len(m.diffView.files) == 0 {
+	if !m.overlay.isDiffView() || len(m.diffView.files) == 0 {
 		return nil
 	}
 	idx := m.diffView.fileIdx
@@ -809,7 +806,7 @@ func (m *Model) openSettings() {
 		m.styles,
 		m.settingsKeys,
 	)
-	m.showSettings = true
+	m.overlay.openOverlay(overlayKindSettings)
 }
 
 // handleSettingsApplied applies all live changes from the settings panel.
@@ -859,7 +856,7 @@ func (m *Model) resizeBoard() {
 	} else {
 		m.board.SetSize(m.width, m.height-chromeHeight)
 	}
-	if m.showDiffView {
+	if m.overlay.isDiffView() {
 		m.diffView.SetSize(m.width, m.height-chromeHeight)
 	}
 }
@@ -933,19 +930,21 @@ func (m Model) renderContent() string {
 		return lip.Place(m.width, m.height, lip.Center, lip.Center, body)
 
 	case stateBoard:
-		if m.showDiffView {
+		if m.overlay.isDiffView() {
 			return m.renderDiffScreen()
 		}
 		board := m.renderBoard()
 		if m.isRefreshing {
-			overlay := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
-			return m.renderWithOverlay(board, overlay)
+			spinner := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
+			return m.renderWithOverlay(board, spinner)
 		}
-		if m.showSettings {
+		switch m.overlay.active() {
+		case overlayKindSettings:
 			return m.renderWithOverlay(board, m.settings.render())
-		}
-		if m.showApproverEditor && m.approverEditor != nil {
-			return m.renderWithOverlay(board, m.approverEditor.render())
+		case overlayKindApproverEditor:
+			if m.approverEditor != nil {
+				return m.renderWithOverlay(board, m.approverEditor.render())
+			}
 		}
 		return board
 	}
@@ -1020,7 +1019,7 @@ func (m Model) handleMembersLoaded(msg MembersLoadedMsg) (tea.Model, tea.Cmd) {
 // handleApproversSaved closes the editor, updates the MR in-place, and fires
 // a Teams notification automatically if a notifier is configured.
 func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) {
-	m.showApproverEditor = false
+	m.overlay.closeOverlay()
 	if msg.Err != nil {
 		m.logger.Error("tui: approvers save failed", "err", msg.Err)
 		m.errors = append(m.errors, msg.Err)
@@ -1045,7 +1044,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 
 // handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.
 func (m Model) handleDiffFetchResult(msg DiffFetchResultMsg) (tea.Model, tea.Cmd) {
-	if !m.showDiffView || m.diffView.mr == nil ||
+	if !m.overlay.isDiffView() || m.diffView.mr == nil ||
 		m.diffView.mr.ProjectID != msg.ProjectID || m.diffView.mr.IID != msg.MRIID {
 		return m, nil
 	}
@@ -1062,7 +1061,7 @@ func (m Model) handleDiffFetchResult(msg DiffFetchResultMsg) (tea.Model, tea.Cmd
 
 // handleFileRenderResult stores rendered lines in the diff view cache.
 func (m Model) handleFileRenderResult(msg FileRenderResultMsg) (tea.Model, tea.Cmd) {
-	if !m.showDiffView || m.diffView.mr == nil ||
+	if !m.overlay.isDiffView() || m.diffView.mr == nil ||
 		m.diffView.mr.ProjectID != msg.ProjectID || m.diffView.mr.IID != msg.MRIID {
 		return m, nil
 	}
