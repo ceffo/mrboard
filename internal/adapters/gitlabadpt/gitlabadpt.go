@@ -27,14 +27,23 @@ type Config struct {
 	ReviewerUsernames []string
 }
 
+// gitLabClient is the set of pkg/gitlab.Client capabilities used by the adapter.
+// Declaring it as an interface here lets callers (and tests) substitute a fake
+// that implements only the sub-interfaces they need.
+type gitLabClient interface {
+	pkggitlab.MRLister
+	pkggitlab.MREnricher
+	pkggitlab.MRWriter
+}
+
 // GitLabAdapter implements mrsvc.MergeRequestSource using a live GitLab client.
 type GitLabAdapter struct {
-	client *pkggitlab.Client
+	client gitLabClient
 	cfg    Config
 }
 
 // New constructs a GitLabAdapter.
-func New(client *pkggitlab.Client, cfg Config) *GitLabAdapter {
+func New(client gitLabClient, cfg Config) *GitLabAdapter {
 	return &GitLabAdapter{client: client, cfg: cfg}
 }
 
