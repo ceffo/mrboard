@@ -19,6 +19,7 @@ const (
 	cardBorderAndPad = 4 // 1 border + 1 padding on each side
 	minInnerWidth    = 8
 	minEllipsisWidth = 3
+	cardTitleLines   = 3
 
 	detailedMergeStatusMergeable = "mergeable"
 )
@@ -50,12 +51,11 @@ func (c cardWidget) measureHeight(w int) int {
 	innerWidth := max(w-cardBorderAndPad, minInnerWidth)
 	now := time.Now()
 
-	titleWidth := max(innerWidth-1, 0)
-	nTitle := len(wrapTitleLines(c.mr.Title, titleWidth))
+	nTitle := len(wrapLines(c.mr.Title, innerWidth, cardTitleLines))
 	nPills := len(c.wrapPills(now, innerWidth))
 
-	// line1(1) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
-	return 5 + nTitle + nPills
+	// line1(1) + line2(1) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
+	return 6 + nTitle + nPills
 }
 
 func (c cardWidget) render() string {
@@ -85,11 +85,11 @@ func (c cardWidget) render() string {
 	}
 
 	rawLines := []string{c.renderLine1(authorLabel, openDur, innerWidth)}
+	rawLines = append(rawLines, c.renderLine2(innerWidth))
 	rawLines = append(rawLines, "") // blank line before title
-	titleWidth := max(innerWidth-1, 0)
+	titleWidth := innerWidth
 	titleStyle := c.titleStyle()
-	for _, tl := range wrapTitleLines(c.mr.Title, titleWidth) {
-		tl = " " + tl
+	for _, tl := range wrapLines(c.mr.Title, titleWidth, cardTitleLines) {
 		if w := lip.Width(tl); w < innerWidth {
 			tl += strings.Repeat(" ", innerWidth-w)
 		}
@@ -131,13 +131,8 @@ func (c cardWidget) render() string {
 	return style.Render(strings.Join(padded, "\n"))
 }
 
-// renderLine1 builds the first card line: !IID + author left, duration right.
-// The MR ref prefix has its own style so it can't go through renderHeaderLine.
+// renderLine1 builds the first card line: author left, duration right.
 func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width int) string {
-	mrRef := c.styles.MRNumberBang.Render("!") +
-		c.styles.CardMeta.Render(fmt.Sprintf("%d ", c.mr.IID))
-	mrRefW := lip.Width(mrRef)
-
 	rightRendered := ""
 	rightW := 0
 	if openDur > 0 {
@@ -146,16 +141,28 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 		rightW = lip.Width(rightRendered)
 	}
 
-	availAuthorW := max(width-mrRefW-rightW, 0)
+	availAuthorW := max(width-rightW, 0)
 	authorTrunc := truncateWidth(authorLabel, availAuthorW)
 	authorStyled := c.styles.CardAuthor.Render(authorTrunc)
 	authorW := lip.Width(authorStyled)
 
-	pad := width - mrRefW - authorW - rightW
+	pad := width - authorW - rightW
 	if pad < 0 {
 		pad = 0
 	}
-	return mrRef + authorStyled + strings.Repeat(" ", pad) + rightRendered
+	return authorStyled + strings.Repeat(" ", pad) + rightRendered
+}
+
+// renderLine2 builds the second card line: !IID + last path segment of ProjectPath.
+func (c cardWidget) renderLine2(_ int) string {
+	mrRef := c.styles.MRNumberBang.Render("!") +
+		c.styles.CardMeta.Render(fmt.Sprintf("%d", c.mr.IID))
+
+	repoName := c.mr.ProjectPath
+	if i := strings.LastIndex(repoName, "/"); i >= 0 {
+		repoName = repoName[i+1:]
+	}
+	return mrRef + c.styles.CardMeta.Render(" "+repoName)
 }
 
 // titleStyle returns the appropriate style for the card title.
@@ -282,20 +289,6 @@ func (c cardWidget) wrapPills(now time.Time, width int) []string {
 	return lines
 }
 
-// approvalCounts returns (required, given) from a reviewer list.
-// required = number of IsApprover reviewers; given = those who also Approved.
-func approvalCounts(reviewers []domain.ReviewerInfo) (required, given int) {
-	for _, r := range reviewers {
-		if r.IsApprover {
-			required++
-			if r.State == domain.ReviewerApproved {
-				given++
-			}
-		}
-	}
-	return
-}
-
 func reviewerIcon(s domain.ReviewerState) string {
 	switch s {
 	case domain.ReviewerNotStarted:
@@ -322,43 +315,46 @@ func withNBSP(s string) string {
 	}, s)
 }
 
-// wrapTitleLines wraps title into at most two lines within width display columns.
-// Line 1 breaks at the last word boundary that fits; line 2 is hard-truncated with "…".
-func wrapTitleLines(title string, width int) []string {
-	if width <= 0 {
+// wrapLines wraps s into at most maxLines lines of width display columns,
+// breaking at word boundaries. The final line is hard-truncated with "…"
+// if content remains after maxLines.
+func wrapLines(s string, width, maxLines int) []string {
+	if width <= 0 || maxLines <= 0 {
 		return []string{""}
 	}
-	if lip.Width(title) <= width {
-		return []string{title}
-	}
-	words := strings.Fields(title)
+	words := strings.Fields(s)
 	if len(words) == 0 {
-		return []string{truncateWidth(title, width)}
+		return []string{truncateWidth(s, width)}
 	}
-	line1 := ""
-	splitAt := 0
-	for i, w := range words {
-		candidate := line1
-		if candidate != "" {
-			candidate += " "
+	var lines []string
+	for len(words) > 0 {
+		if len(lines) == maxLines-1 {
+			lines = append(lines, truncateWidth(strings.Join(words, " "), width))
+			return lines
 		}
-		candidate += w
-		if lip.Width(candidate) <= width {
-			line1 = candidate
-			splitAt = i + 1
-		} else {
-			break
+		line := ""
+		splitAt := 0
+		for i, w := range words {
+			candidate := line
+			if candidate != "" {
+				candidate += " "
+			}
+			candidate += w
+			if lip.Width(candidate) <= width {
+				line = candidate
+				splitAt = i + 1
+			} else {
+				break
+			}
 		}
+		if splitAt == 0 {
+			lines = append(lines, truncateWidth(strings.Join(words, " "), width))
+			return lines
+		}
+		lines = append(lines, line)
+		words = words[splitAt:]
 	}
-	if splitAt == 0 {
-		// Even the first word is wider than the column — hard-truncate to one line.
-		return []string{truncateWidth(title, width)}
-	}
-	if splitAt >= len(words) {
-		return []string{line1}
-	}
-	remaining := strings.Join(words[splitAt:], " ")
-	return []string{line1, truncateWidth(remaining, width)}
+	return lines
 }
 
 // truncateWidth truncates s to fit within maxWidth display columns using

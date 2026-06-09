@@ -18,6 +18,7 @@ const (
 	detailMinInnerWidth = 20
 	maxThreadBodyLines  = 10
 	threadBodyIndent    = 2
+	detailTitleLines    = 5
 )
 
 // detailWidget renders a single MR's description and discussion threads in a
@@ -120,23 +121,16 @@ func (d detailWidget) render() string {
 	return panelStyle.Render(content)
 }
 
-// renderHeader builds the fixed title line with the scroll indicator
-// right-aligned, mirroring how columnWidget places its scroll indicator.
+// renderHeader renders a thin fixed line that anchors the scroll indicator.
+// All MR content lives in the scrollable body below.
 func (d detailWidget) renderHeader(innerWidth int, hasAbove, hasBelow bool) string {
 	ind := d.styles.ScrollIndicator.Render(scrollIndicator(hasAbove, hasBelow))
 	indW := lip.Width(ind)
-	availW := innerWidth - indW
-	if availW < 0 {
-		availW = 0
-	}
-	title := truncateWidth(d.mr.Title, availW)
-	titleStyled := d.styles.DetailTitle.Render(title)
-	titleW := lip.Width(titleStyled)
-	pad := innerWidth - titleW - indW
+	pad := innerWidth - indW
 	if pad < 0 {
 		pad = 0
 	}
-	return titleStyled + strings.Repeat(" ", pad) + ind
+	return strings.Repeat(" ", pad) + ind
 }
 
 // buildLines produces the full scrollable content as a flat []string of
@@ -152,7 +146,12 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 		out = append(out, strings.Split(rendered, "\n")...)
 	}
 
-	// MR ref + project path
+	// author · phase
+	phaseLbl := mrPhaseLabel(d.mr.Phase)
+	add(d.styles.CardAuthor.Render(d.mr.DisplayAuthor()) +
+		d.styles.DetailMeta.Render("  ·  "+phaseLbl))
+
+	// !IID  full project path
 	mrRef := d.styles.MRNumberBang.Render("!") +
 		d.styles.DetailMeta.Render(fmt.Sprintf("%d", d.mr.IID))
 	if d.mr.ProjectPath != "" {
@@ -160,21 +159,23 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 	}
 	add(mrRef)
 
-	// author · phase
-	phaseLbl := mrPhaseLabel(d.mr.Phase)
-	add(d.styles.DetailMeta.Render(
-		fmt.Sprintf("%s  ·  %s", d.mr.DisplayAuthor(), phaseLbl)))
+	add("") // blank
+
+	// full title, wrapped
+	for _, tl := range wrapLines(d.mr.Title, innerWidth, detailTitleLines) {
+		add(d.styles.DetailTitle.Render(tl))
+	}
+
+	add("") // blank
+
+	// reviewers / approvers — one per line, name + icon, approvers first
+	for _, r := range d.detailReviewerLines() {
+		add(r)
+	}
 	if d.mr.Phase == domain.PhaseReadyToMerge &&
 		d.mr.DetailedMergeStatus != detailedMergeStatusMergeable &&
 		d.mr.DetailedMergeStatus != "" {
 		add(d.styles.ErrorMsg.Render("⚠ " + mergeBlockReason(d.mr.DetailedMergeStatus)))
-	}
-
-	if len(d.mr.Reviewers) > 0 {
-		add(d.styles.DetailMeta.Render(buildReviewerLine(d.mr.Reviewers)))
-		if required, given := approvalCounts(d.mr.Reviewers); required > 0 {
-			add(d.styles.DetailMeta.Render(fmt.Sprintf("✓ %d/%d approvals", given, required)))
-		}
 	}
 
 	add("") // blank separator
@@ -269,25 +270,39 @@ func mrPhaseLabel(p domain.MRPhase) string {
 	}
 }
 
-func buildReviewerLine(reviewers []domain.ReviewerInfo) string {
-	parts := make([]string, 0, len(reviewers))
-	for _, r := range reviewers {
-		parts = append(parts, detailReviewerIcon(r.State)+" "+r.Name)
+// detailReviewerLines renders one line per reviewer/approver: approvers first,
+// then plain reviewers. Each line is "Full Name <icon>" using the same name and
+// pill colour styles as card pills.
+func (d detailWidget) detailReviewerLines() []string {
+	if len(d.mr.Reviewers) == 0 {
+		return nil
 	}
-	return strings.Join(parts, "  ")
-}
-
-func detailReviewerIcon(s domain.ReviewerState) string {
-	switch s {
-	case domain.ReviewerApproved:
-		return "✓"
-	case domain.ReviewerCommented:
-		return "💬"
-	case domain.ReviewerReReviewRequested:
-		return "↩"
-	default:
-		return "○"
+	sorted := make([]domain.ReviewerInfo, 0, len(d.mr.Reviewers))
+	for _, r := range d.mr.Reviewers {
+		if r.IsApprover {
+			sorted = append(sorted, r)
+		}
 	}
+	for _, r := range d.mr.Reviewers {
+		if !r.IsApprover {
+			sorted = append(sorted, r)
+		}
+	}
+	lines := make([]string, 0, len(sorted))
+	for _, r := range sorted {
+		nameStyle := d.styles.ReviewerName
+		if r.IsApprover {
+			nameStyle = d.styles.ApproverName
+		}
+		name := r.Name
+		if name == "" {
+			name = r.Username
+		}
+		icon := reviewerIcon(r.State)
+		iconStyled := pillStyle(r.State, d.styles).Render(icon)
+		lines = append(lines, nameStyle.Render(name)+" "+iconStyled)
+	}
+	return lines
 }
 
 // wordWrap wraps text at width characters, preserving existing newlines.
