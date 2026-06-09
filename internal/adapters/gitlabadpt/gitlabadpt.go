@@ -45,21 +45,59 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors,
 		"include_reviewer_mrs", opts.IncludeReviewerMRs)
 
+	// Stage 1: list — fetch all sources, return raw stubs, mapped MRs, and primary-source keys.
+	rawMRs, mappedMRs, primaryKeys, errs := a.listStage(ctx, opts)
+
+	// Stage 2: dedup — combine, apply exclusions, split survivors back into
+	// already-mapped (no enrichment needed) and raw stubs (need enrichment).
+	finalMRs, toEnrich := dedupStage(rawMRs, mappedMRs, a.cfg.ExcludedAuthors, logger)
+
+	// Stage 3: enrich — fetch full details for every raw stub in parallel.
+	enrichStart := time.Now()
+	enriched, enrichErrs := a.enrichStage(ctx, toEnrich)
+	finalMRs = append(finalMRs, enriched...)
+	errs = append(errs, enrichErrs...)
+	logger.Info("gitlab: enrichment done",
+		"enriched", len(enriched), "enrich_errors", len(enrichErrs),
+		"duration", ilog.FmtDur(time.Since(enrichStart)))
+
+	// Mark MRs that came exclusively from the reviewer fetch.
+	if opts.IncludeReviewerMRs {
+		for i, mr := range finalMRs {
+			if !primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] {
+				finalMRs[i].ReviewerSource = true
+			}
+		}
+	}
+
+	logger.Info("gitlab: fetch done",
+		"mrs", len(finalMRs), "errors", len(errs),
+		"total_duration", ilog.FmtDur(time.Since(fetchStart)))
+	return finalMRs, errs
+}
+
+// listStage fetches all configured sources (primary + reviewer) in parallel.
+// primaryKeys contains the keys of MRs from primary sources only, used later to
+// identify reviewer-only MRs.
+func (a *GitLabAdapter) listStage(
+	ctx context.Context,
+	opts mrsvc.FetchOptions,
+) (rawMRs []*gl.BasicMergeRequest, mappedMRs []domain.MergeRequest, primaryKeys map[mrKey]bool, errs []error) {
+	logger := ilog.FromContext(ctx)
+
 	var primaryExclusion string
 	if len(a.cfg.ExcludedAuthors) > 0 {
 		primaryExclusion = a.cfg.ExcludedAuthors[0]
 	}
 
-	// Phase 1: fetch all sources in parallel.
 	listStart := time.Now()
-	rawMRs, mappedMRs, errs := a.listAllMRs(ctx, primaryExclusion)
+	rawMRs, mappedMRs, errs = a.listAllMRs(ctx, primaryExclusion)
 	logger.Info("gitlab: source listing done",
 		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
 		"duration", ilog.FmtDur(time.Since(listStart)))
 
-	// Phase 1b: reviewer MRs (when requested).
-	// Record primary keys before reviewer MRs are appended so we can mark reviewer-only MRs later.
-	primaryKeys := make(map[mrKey]bool, len(rawMRs)+len(mappedMRs))
+	// Capture keys before appending reviewer MRs so we can distinguish them later.
+	primaryKeys = make(map[mrKey]bool, len(rawMRs)+len(mappedMRs))
 	for _, mr := range mappedMRs {
 		primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
 	}
@@ -77,11 +115,19 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 		mappedMRs = append(mappedMRs, revMapped...)
 		errs = append(errs, revErrs...)
 	}
+	return rawMRs, mappedMRs, primaryKeys, errs
+}
 
-	// Phase 2: deduplicate — build a combined slice (mapped first so they win
-	// on collision, then raw stubs with just key fields), run a single
-	// dedup+exclusion pass, then separate survivors by source.
-	deduper := MRDeduplicator{ExcludedAuthors: a.cfg.ExcludedAuthors}
+// dedupStage builds a combined slice (mapped first so they win on collision),
+// runs the dedup+exclusion pass, then separates survivors into already-mapped
+// MRs (returned as finalMRs) and raw stubs that still need enrichment (toEnrich).
+func dedupStage(
+	rawMRs []*gl.BasicMergeRequest,
+	mappedMRs []domain.MergeRequest,
+	excludedAuthors []string,
+	logger *slog.Logger,
+) (finalMRs []domain.MergeRequest, toEnrich []*gl.BasicMergeRequest) {
+	deduper := MRDeduplicator{ExcludedAuthors: excludedAuthors}
 
 	rawByKey := make(map[mrKey]*gl.BasicMergeRequest, len(rawMRs))
 	combined := make([]domain.MergeRequest, 0, len(mappedMRs)+len(rawMRs))
@@ -108,31 +154,38 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 		mappedKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
 	}
 
-	var finalMRs []domain.MergeRequest
-	var unique []*gl.BasicMergeRequest
 	for _, mr := range deduped {
 		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
 		if mappedKeys[k] {
 			finalMRs = append(finalMRs, mr)
 		} else if raw, ok := rawByKey[k]; ok {
-			unique = append(unique, raw)
+			toEnrich = append(toEnrich, raw)
 		}
 	}
 	logger.Info("gitlab: dedup summary",
 		"raw", len(rawMRs), "mapped", len(mappedMRs),
-		"unique_to_enrich", len(unique), "already_mapped", len(finalMRs))
+		"unique_to_enrich", len(toEnrich), "already_mapped", len(finalMRs))
+	return finalMRs, toEnrich
+}
+
+// enrichStage fetches full details for each raw MR stub in parallel, bounded by
+// enrichConcurrency. Errors are collected and returned alongside successful results.
+func (a *GitLabAdapter) enrichStage(
+	ctx context.Context,
+	toEnrich []*gl.BasicMergeRequest,
+) ([]domain.MergeRequest, []error) {
+	logger := ilog.FromContext(ctx)
 
 	type result struct {
 		mr  domain.MergeRequest
 		err error
 	}
 
-	enrichStart := time.Now()
-	results := make([]result, len(unique))
+	results := make([]result, len(toEnrich))
 	sem := make(chan struct{}, enrichConcurrency)
 	var wg sync.WaitGroup
 
-	for i, mr := range unique {
+	for i, mr := range toEnrich {
 		i, mr := i, mr
 		sem <- struct{}{}
 		wg.Add(1)
@@ -145,34 +198,17 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	}
 	wg.Wait()
 
-	var enrichErrs int
+	var mrs []domain.MergeRequest
+	var errs []error
 	for _, r := range results {
 		if r.err != nil {
 			logger.Error("gitlab: enrich MR failed", "error", r.err)
 			errs = append(errs, r.err)
-			enrichErrs++
 			continue
 		}
-		finalMRs = append(finalMRs, r.mr)
+		mrs = append(mrs, r.mr)
 	}
-
-	logger.Info("gitlab: enrichment done",
-		"enriched", len(unique)-enrichErrs, "enrich_errors", enrichErrs,
-		"duration", ilog.FmtDur(time.Since(enrichStart)))
-
-	// Mark MRs that came exclusively from the reviewer fetch.
-	if opts.IncludeReviewerMRs {
-		for i, mr := range finalMRs {
-			if !primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] {
-				finalMRs[i].ReviewerSource = true
-			}
-		}
-	}
-
-	logger.Info("gitlab: fetch done",
-		"mrs", len(finalMRs), "errors", len(errs),
-		"total_duration", ilog.FmtDur(time.Since(fetchStart)))
-	return finalMRs, errs
+	return mrs, errs
 }
 
 // GetDetail implements mrsvc.MergeRequestSource.
