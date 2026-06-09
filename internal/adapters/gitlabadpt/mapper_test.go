@@ -80,82 +80,6 @@ func mr(reviewers ...*gl.BasicUser) *gl.BasicMergeRequest {
 	}
 }
 
-// TestDeriveReviewerState exercises the pure classifier with pre-filtered event slices.
-func TestDeriveReviewerState(t *testing.T) {
-	cases := []struct {
-		name     string
-		approved bool
-		events   []DiscussionEvent
-		want     domain.ReviewerState
-	}{
-		{
-			name:   "not started - no events",
-			events: nil,
-			want:   domain.ReviewerNotStarted,
-		},
-		{
-			name:     "approved flag with no events",
-			approved: true,
-			events:   nil,
-			want:     domain.ReviewerApproved,
-		},
-		{
-			name:   "commented",
-			events: []DiscussionEvent{{Kind: KindComment, Timestamp: t1}},
-			want:   domain.ReviewerCommented,
-		},
-		{
-			name: "re-review after comment → re-review requested",
-			events: []DiscussionEvent{
-				{Kind: KindComment, Timestamp: t1},
-				{Kind: KindReReviewRequest, Timestamp: t2},
-			},
-			want: domain.ReviewerReReviewRequested,
-		},
-		{
-			name: "comment after re-review → still commented",
-			events: []DiscussionEvent{
-				{Kind: KindReReviewRequest, Timestamp: t1},
-				{Kind: KindComment, Timestamp: t2},
-			},
-			want: domain.ReviewerCommented,
-		},
-		{
-			name:     "approved overrides comment",
-			approved: true,
-			events:   []DiscussionEvent{{Kind: KindComment, Timestamp: t1}},
-			want:     domain.ReviewerApproved,
-		},
-		{
-			name:     "approved overrides re-review request",
-			approved: true,
-			events:   []DiscussionEvent{{Kind: KindReReviewRequest, Timestamp: t1}},
-			want:     domain.ReviewerApproved,
-		},
-		{
-			// KindApproval events carry the timestamp but state comes from the approved flag.
-			name:   "approval event alone does not change state (approved=false)",
-			events: []DiscussionEvent{{Kind: KindApproval, Timestamp: t1}},
-			want:   domain.ReviewerNotStarted,
-		},
-		{
-			name: "re-review only → re-review requested",
-			events: []DiscussionEvent{
-				{Kind: KindReReviewRequest, Timestamp: t1},
-			},
-			want: domain.ReviewerReReviewRequested,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := deriveReviewerState(tc.approved, tc.events)
-			if got != tc.want {
-				t.Errorf("want %v, got %v", tc.want, got)
-			}
-		})
-	}
-}
-
 func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	result := DeriveReviewerStates(m, nil, approvals())
@@ -344,8 +268,8 @@ func TestCountRoundTripsFromEvents(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			events := normalizeDiscussionEventsREST(tc.discussions)
-			if got := countRoundTripsFromEvents(events); got != tc.want {
-				t.Errorf("countRoundTripsFromEvents: want %d, got %d", tc.want, got)
+			if got := domain.CountRoundTrips(events); got != tc.want {
+				t.Errorf("CountRoundTrips: want %d, got %d", tc.want, got)
 			}
 		})
 	}
