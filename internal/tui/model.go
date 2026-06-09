@@ -99,6 +99,7 @@ const (
 	fetchTimeout       = 60 * time.Second
 	toastWidth         = 50
 	toastMinWidth      = 30
+	toastQueueDepth    = 16
 	toastDuration      = 4 * time.Second
 )
 
@@ -323,7 +324,8 @@ func New(
 		jiraBaseURL:        cfg.Jira.InstanceURL,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
-			WithMinWidth(toastMinWidth),
+			WithMinWidth(toastMinWidth).
+			WithQueueDepth(toastQueueDepth),
 	}
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
@@ -377,7 +379,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // toast returns a Cmd that triggers a toast notification popup.
-func (m Model) toast(def toast.AlertDefinition, text string) tea.Cmd {
+func (m Model) toast(def toast.AlertSpec, text string) tea.Cmd {
 	return m.alerts.NewAlertCmd(def, text)
 }
 
@@ -895,10 +897,10 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.logger.Error("tui: notification failed", "err", msg.Err)
 		m.errors = append(m.errors, fmt.Errorf("notify: %w", msg.Err))
-		return m, m.toast(toast.ErrorAlertUnicode, "Notify failed")
+		return m, m.toast(toast.ErrorAlert, "Notify failed")
 	}
 	m.logger.Info("tui: notification delivered")
-	return m, m.toast(toast.InfoAlertUnicode, "Teams notified ✓")
+	return m, m.toast(toast.InfoAlert, "Teams notified ✓")
 }
 
 // updateJiraKey enables or disables the Jira key based on whether the focused
@@ -1023,7 +1025,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	if msg.Err != nil {
 		m.logger.Error("tui: approvers save failed", "err", msg.Err)
 		m.errors = append(m.errors, msg.Err)
-		return m, m.toast(toast.ErrorAlertUnicode, "Save failed")
+		return m, m.toast(toast.ErrorAlert, "Save failed")
 	}
 	updatedMR := msg.MR
 	for i, mr := range m.allMRs {
@@ -1035,7 +1037,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	m.applyMRFilter()
 	m.updateJiraKey()
 
-	cmds := []tea.Cmd{m.toast(toast.InfoAlertUnicode, "Approvers saved")}
+	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Approvers saved")}
 	if m.notifier != nil {
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
