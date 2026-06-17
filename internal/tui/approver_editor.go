@@ -29,7 +29,6 @@ type ReviewerEditorClosedMsg struct{}
 
 const (
 	reviewerEditorMaxVisible = 8
-	reviewerApproverStar     = "★"
 )
 
 // reviewerEditorMode distinguishes the main reviewer list from the search sub-mode.
@@ -224,7 +223,10 @@ func (w *reviewerEditorWidget) updateSearch(kMsg tea.KeyPressMsg) (tea.Model, te
 		w.searchSel = make(map[int64]bool)
 
 	case key.Matches(kMsg, w.keys.Confirm):
-		// Enter: add all selected members to staged list.
+		// Enter: add selected members; no-op if nothing selected (keeps search open).
+		if len(w.searchSel) == 0 {
+			break
+		}
 		for _, m := range w.searchResults {
 			if !w.searchSel[m.UserID] {
 				continue
@@ -323,7 +325,8 @@ func (w *reviewerEditorWidget) isAlreadyStaged(username string) bool {
 	return false
 }
 
-// refreshSearchResults filters w.members by searchQuery, excluding author and already-staged.
+// refreshSearchResults filters w.members by searchQuery (substring of full name),
+// excluding the MR author and already-staged reviewers.
 func (w *reviewerEditorWidget) refreshSearchResults() {
 	q := strings.ToLower(w.searchQuery)
 	w.searchResults = w.searchResults[:0]
@@ -334,8 +337,11 @@ func (w *reviewerEditorWidget) refreshSearchResults() {
 		if w.isAlreadyStaged(m.Username) {
 			continue
 		}
-		label := strings.ToLower(m.Username + " " + m.Name)
-		if q == "" || strings.Contains(label, q) {
+		name := m.Name
+		if name == "" {
+			name = m.Username
+		}
+		if q == "" || strings.Contains(strings.ToLower(name), q) {
 			w.searchResults = append(w.searchResults, m)
 		}
 	}
@@ -454,20 +460,6 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 	}
 }
 
-// reviewerStateLabel returns a short annotation for a reviewer's state.
-func reviewerStateLabel(state domain.ReviewerState) string {
-	switch state {
-	case domain.ReviewerApproved:
-		return " (approved)"
-	case domain.ReviewerCommented:
-		return " (commented)"
-	case domain.ReviewerReReviewRequested:
-		return " (re-review)"
-	default:
-		return ""
-	}
-}
-
 func (w *reviewerEditorWidget) render() string {
 	var sb strings.Builder
 
@@ -490,22 +482,21 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 		end := min(w.scrollOff+reviewerEditorMaxVisible, len(w.staged))
 		for i := w.scrollOff; i < end; i++ {
 			s := w.staged[i]
-			prefix := "  "
-			if i == w.cursor {
-				prefix = "> "
-			}
-			label := s.Username
-			if s.Name != "" && s.Name != s.Username {
-				label += " (" + s.Name + ")"
-			}
+			var markerStyled string
 			if s.IsApprover {
-				label += "   " + reviewerApproverStar + " approver"
-			}
-			label += reviewerStateLabel(s.State)
-			if i == w.cursor {
-				sb.WriteString(prefix + w.styles.PopupItemFocused.Render(label) + "\n")
+				markerStyled = w.styles.PopupItemMarkerOn.Render(markerChecked)
 			} else {
-				sb.WriteString(prefix + w.styles.PopupItem.Render(label) + "\n")
+				markerStyled = w.styles.PopupItemMarkerOff.Render(markerUnchecked)
+			}
+			name := s.Name
+			if name == "" {
+				name = s.Username
+			}
+			label := name + " " + reviewerIcon(s.State)
+			if i == w.cursor {
+				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItemFocused.Render(label) + "\n")
+			} else {
+				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItem.Render(label) + "\n")
 			}
 		}
 		if len(w.staged) > reviewerEditorMaxVisible {
@@ -542,9 +533,9 @@ func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) {
 			} else {
 				markerStyled = w.styles.PopupItemMarkerOff.Render(markerUnchecked)
 			}
-			label := m.Username
-			if m.Name != "" && m.Name != m.Username {
-				label += " (" + m.Name + ")"
+			label := m.Name
+			if label == "" {
+				label = m.Username
 			}
 			if i == w.cursor {
 				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItemFocused.Render(label) + "\n")
