@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	lip "charm.land/lipgloss/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -463,8 +464,24 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 func (w *reviewerEditorWidget) render() string {
 	var sb strings.Builder
 
-	title := fmt.Sprintf("Edit Reviewers — !%d %s", w.mr.IID, w.mr.Title)
-	sb.WriteString(w.styles.PopupTitle.Render(title) + "\n\n")
+	// Line 1: "!IID repoName" (left) — "Edit Reviewers & Approvers" (right)
+	// Width is anchored to the hint line which is the widest content.
+	const hintLine = "  ↑/↓ move  space:approver  d:remove  /:search  T:team  ↵:save  v/esc:cancel"
+	contentW := lip.Width(hintLine)
+	repoName := w.mr.ProjectPath
+	if i := strings.LastIndex(repoName, "/"); i >= 0 {
+		repoName = repoName[i+1:]
+	}
+	leftStr := fmt.Sprintf("!%d %s", w.mr.IID, repoName)
+	rightStr := "Edit Reviewers & Approvers"
+	gap := contentW - lip.Width(leftStr) - lip.Width(rightStr)
+	if gap < 1 {
+		gap = 1
+	}
+	line1 := w.styles.PopupHint.Render(leftStr) + strings.Repeat(" ", gap) + w.styles.PopupTitle.Render(rightStr)
+	// Line 2: MR title
+	line2 := w.styles.PopupItem.Render(w.mr.Title)
+	sb.WriteString(line1 + "\n" + line2 + "\n\n")
 
 	if w.mode == reviewerEditorModeSearch {
 		w.renderSearch(&sb)
@@ -510,7 +527,7 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 		sb.WriteString("\n" + w.styles.PopupHint.Render("  Saving…"))
 	} else {
 		sb.WriteString("\n" + w.styles.PopupHint.Render(
-			"  ↑/↓ move  space:approver  d:remove  /:search  T:team  ↵:save  r/esc:cancel"))
+			"  ↑/↓ move  space:approver  d:remove  /:search  T:team  ↵:save  v/esc:cancel"))
 	}
 }
 

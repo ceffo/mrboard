@@ -57,14 +57,14 @@ var DefaultKeyMap = KeyMap{
 	Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 	Left:        key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
 	Right:       key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
-	Refresh:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh")),
+	Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
 	Detail:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "details")),
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
-	Reviewers:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reviewers")),
+	Reviewers:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "reviewers")),
 	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Notify:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "notify")),
 	Jira:        key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "jira")),
@@ -100,7 +100,7 @@ var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
 	Search:         key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 	SetTeam:        key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "set team")),
 	Confirm:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "save")),
-	Close:          key.NewBinding(key.WithKeys("r", "esc"), key.WithHelp("r/esc", "cancel")),
+	Close:          key.NewBinding(key.WithKeys("v", "esc"), key.WithHelp("v/esc", "cancel")),
 }
 
 // DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.
