@@ -9,11 +9,11 @@ const (
 	overlayKindNone           overlayKind = iota
 	overlayKindDiffView                   // full-screen diff view
 	overlayKindSettings                   // settings popup
-	overlayKindApproverEditor             // approver editor popup
+	overlayKindReviewerEditor             // reviewer editor popup
 )
 
 // overlayRouter is a single-active-overlay state machine. Only one exclusive
-// overlay (diff view, settings, approver editor) can own focus at a time.
+// overlay (diff view, settings, reviewer editor) can own focus at a time.
 // The detail side-panel is not tracked here — it can remain visible while an
 // overlay is active (e.g. detail open → user opens diff view on top).
 type overlayRouter struct {

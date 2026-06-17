@@ -15,7 +15,7 @@ type KeyMap struct {
 	Sort        key.Binding
 	ToggleView  key.Binding
 	Settings    key.Binding
-	Approvers   key.Binding
+	Reviewers   key.Binding
 	Diff        key.Binding
 	Notify      key.Binding
 	Jira        key.Binding
@@ -26,7 +26,7 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Approvers, k.Diff, k.Notify, k.Jira, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Reviewers, k.Diff, k.Notify, k.Jira, k.Quit,
 	}
 }
 
@@ -57,48 +57,50 @@ var DefaultKeyMap = KeyMap{
 	Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 	Left:        key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
 	Right:       key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
-	Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+	Refresh:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh")),
 	Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
 	Detail:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "details")),
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
-	Approvers:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approvers")),
+	Reviewers:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reviewers")),
 	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Notify:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "notify")),
 	Jira:        key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "jira")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 }
 
-// ApproverEditorKeyMap holds keybindings for the approver editor overlay.
-type ApproverEditorKeyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	Toggle    key.Binding
-	FocusNext key.Binding
-	FocusPrev key.Binding
-	Confirm   key.Binding
-	Close     key.Binding
+// ReviewerEditorKeyMap holds keybindings for the reviewer editor overlay.
+type ReviewerEditorKeyMap struct {
+	Up             key.Binding
+	Down           key.Binding
+	ToggleApprover key.Binding
+	Remove         key.Binding
+	Search         key.Binding
+	SetTeam        key.Binding
+	Confirm        key.Binding
+	Close          key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
-func (k ApproverEditorKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.FocusNext, k.Confirm, k.Close}
+func (k ReviewerEditorKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.ToggleApprover, k.Remove, k.Search, k.SetTeam, k.Confirm, k.Close}
 }
 
 // FullHelp implements help.KeyMap.
-func (k ApproverEditorKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+func (k ReviewerEditorKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
-// DefaultApproverEditorKeyMap is the default keybinding set for the approver editor overlay.
-var DefaultApproverEditorKeyMap = ApproverEditorKeyMap{
-	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle:    key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
-	FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "all members")),
-	FocusPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "reviewers")),
-	Confirm:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "save")),
-	Close:     key.NewBinding(key.WithKeys("a", "esc"), key.WithHelp("a/esc", "close")),
+// DefaultReviewerEditorKeyMap is the default keybinding set for the reviewer editor overlay.
+var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
+	Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	ToggleApprover: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "approver")),
+	Remove:         key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "remove")),
+	Search:         key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+	SetTeam:        key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "set team")),
+	Confirm:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "save")),
+	Close:          key.NewBinding(key.WithKeys("r", "esc"), key.WithHelp("r/esc", "cancel")),
 }
 
 // DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.

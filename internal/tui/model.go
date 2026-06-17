@@ -192,14 +192,14 @@ type Model struct {
 	detail             detailWidget
 	showDetail         bool
 	settings           settingsWidget
-	approverEditor     *approverEditorWidget
+	reviewerEditor     *reviewerEditorWidget
 	diffView           diffViewWidget
 	diffViewKeys       DiffViewKeyMap
 	overlay            overlayRouter
 	keys               KeyMap
 	detailKeys         DetailKeyMap
 	settingsKeys       SettingsKeyMap
-	approverEditorKeys ApproverEditorKeyMap
+	reviewerEditorKeys ReviewerEditorKeyMap
 	styles             Styles
 	theme              theme.Theme[ColorKey]
 	themeName          string // currently active theme name
@@ -309,7 +309,7 @@ func New(
 		keys:               keys,
 		detailKeys:         DefaultDetailKeyMap,
 		settingsKeys:       DefaultSettingsKeyMap,
-		approverEditorKeys: DefaultApproverEditorKeyMap,
+		reviewerEditorKeys: DefaultReviewerEditorKeyMap,
 		diffViewKeys:       DefaultDiffViewKeyMap,
 		diffView:           newDiffViewWidget(styles),
 		styles:             styles,
@@ -499,12 +499,12 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MembersLoadedMsg:
 		return m.handleMembersLoaded(msg)
 
-	case ApproverEditorClosedMsg:
+	case ReviewerEditorClosedMsg:
 		m.overlay.closeOverlay()
 		return m, nil
 
-	case ApproversSavedMsg:
-		return m.handleApproversSaved(msg)
+	case ReviewersSavedMsg:
+		return m.handleReviewersSaved(msg)
 
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
@@ -545,10 +545,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.settings.Update(msg)
 		m.settings = updated.(settingsWidget)
 		return m, cmd
-	case overlayKindApproverEditor:
-		if m.approverEditor != nil {
-			updated, cmd := m.approverEditor.Update(msg)
-			m.approverEditor = updated.(*approverEditorWidget)
+	case overlayKindReviewerEditor:
+		if m.reviewerEditor != nil {
+			updated, cmd := m.reviewerEditor.Update(msg)
+			m.reviewerEditor = updated.(*reviewerEditorWidget)
 			return m, cmd
 		}
 	case overlayKindDiffView:
@@ -672,12 +672,12 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Settings):
 		m.openSettings()
 		return m, nil
-	case key.Matches(msg, m.keys.Approvers):
+	case key.Matches(msg, m.keys.Reviewers):
 		if mr := m.board.FocusedMR(); mr != nil {
-			m.approverEditor = newApproverEditorWidget(
-				m.baseCtx, *mr, m.styles, m.approverEditorKeys, m.src,
+			m.reviewerEditor = newReviewerEditorWidget(
+				m.baseCtx, *mr, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster,
 			)
-			m.overlay.openOverlay(overlayKindApproverEditor)
+			m.overlay.openOverlay(overlayKindReviewerEditor)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.Diff):
@@ -991,9 +991,9 @@ func (m Model) renderContent() string {
 		switch m.overlay.active() {
 		case overlayKindSettings:
 			return m.renderWithOverlay(board, m.settings.render())
-		case overlayKindApproverEditor:
-			if m.approverEditor != nil {
-				return m.renderWithOverlay(board, m.approverEditor.render())
+		case overlayKindReviewerEditor:
+			if m.reviewerEditor != nil {
+				return m.renderWithOverlay(board, m.reviewerEditor.render())
 			}
 		}
 		return board
@@ -1058,20 +1058,20 @@ func (m Model) renderWithOverlay(board, popup string) string {
 	return lip.NewCompositor(bgLayer, popupLayer).Render()
 }
 
-// handleMembersLoaded forwards the members list to the approver editor if it is open.
+// handleMembersLoaded forwards the members list to the reviewer editor if it is open.
 func (m Model) handleMembersLoaded(msg MembersLoadedMsg) (tea.Model, tea.Cmd) {
-	if m.approverEditor != nil {
-		m.approverEditor.SetMembers(msg.Members, msg.Err)
+	if m.reviewerEditor != nil {
+		m.reviewerEditor.SetMembers(msg.Members, msg.Err)
 	}
 	return m, nil
 }
 
-// handleApproversSaved closes the editor, updates the MR in-place, and fires
+// handleReviewersSaved closes the editor, updates the MR in-place, and fires
 // a Teams notification automatically if a notifier is configured.
-func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) {
 	m.overlay.closeOverlay()
 	if msg.Err != nil {
-		m.logger.Error("tui: approvers save failed", "err", msg.Err)
+		m.logger.Error("tui: reviewers save failed", "err", msg.Err)
 		m.errors = append(m.errors, msg.Err)
 		return m, m.toast(toast.ErrorAlert, "Save failed")
 	}
@@ -1085,7 +1085,7 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 	m.applyMRFilter()
 	m.updateJiraKey()
 
-	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Approvers saved")}
+	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Reviewers saved")}
 	if m.notifier != nil {
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
@@ -1150,8 +1150,8 @@ func (m *Model) applyTheme() {
 	m.detail.SetStyles(m.styles)
 	m.diffView.SetStyles(m.styles)
 	m.settings.styles = m.styles
-	if m.approverEditor != nil {
-		m.approverEditor.styles = m.styles
+	if m.reviewerEditor != nil {
+		m.reviewerEditor.styles = m.styles
 	}
 }
 
