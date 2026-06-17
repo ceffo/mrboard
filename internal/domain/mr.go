@@ -81,6 +81,15 @@ func (p MRPhase) String() string {
 	}
 }
 
+// User is a GitLab instance user, used for username-to-ID resolution.
+// Distinct from ProjectMember: a User is resolved instance-wide from a username,
+// while ProjectMember is project-scoped membership.
+type User struct {
+	ID       int64
+	Username string
+	Name     string
+}
+
 // ProjectMember is a GitLab project member (Developer or higher access level).
 type ProjectMember struct {
 	UserID   int64

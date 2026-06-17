@@ -398,6 +398,43 @@ func (c *Client) GetRawFileContent(ctx context.Context, projectID int64, path, r
 	return content, nil
 }
 
+// SetMRReviewers replaces the MR's reviewer set with the given user IDs.
+// An empty slice clears all reviewers.
+func (c *Client) SetMRReviewers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: set MR reviewers", "project_id", projectID, "mr_iid", mrIID, "count", len(userIDs))
+	_, _, err := c.gl.MergeRequests.UpdateMergeRequest(projectID, mrIID,
+		&gl.UpdateMergeRequestOptions{ReviewerIDs: &userIDs},
+		gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: set MR reviewers error", "project_id", projectID, "mr_iid", mrIID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return fmt.Errorf("gitlab: set reviewers project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Info("gitlab: set MR reviewers done", "project_id", projectID, "mr_iid", mrIID,
+		"count", len(userIDs), "duration", ilog.FmtDur(time.Since(start)))
+	return nil
+}
+
+// ListUsersByUsername looks up a GitLab user by exact username.
+// Returns nil, nil if no user is found.
+func (c *Client) ListUsersByUsername(ctx context.Context, username string) (*gl.User, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list users by username", "username", username)
+	users, _, err := c.gl.Users.ListUsers(&gl.ListUsersOptions{Username: gl.Ptr(username)}, gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: list users by username error", "username", username,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return nil, fmt.Errorf("gitlab: list users username=%q: %w", username, err)
+	}
+	c.logger.Debug("gitlab: list users by username done", "username", username,
+		"found", len(users), "duration", ilog.FmtDur(time.Since(start)))
+	if len(users) == 0 {
+		return nil, nil
+	}
+	return users[0], nil
+}
+
 // IsProjectArchived reports whether the given project is archived. Results are cached.
 // Safe for concurrent use.
 func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, error) {

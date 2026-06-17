@@ -29,11 +29,17 @@ type MREnricher interface {
 	GetRawFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error)
 }
 
-// MRWriter covers mutations: writing approval rules and fetching editable project members.
+// MRWriter covers mutations: writing approval rules, reviewer lists, and fetching editable project members.
 type MRWriter interface {
 	GetProjectMembers(ctx context.Context, projectID int64, minAccessLevel int) ([]*gl.ProjectMember, error)
 	CreateMRApprovalRule(
 		ctx context.Context, projectID, mrIID int64, payload MRApprovalRulePayload,
 	) (*gl.MergeRequestApprovalRule, error)
 	UpdateMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64, payload MRApprovalRulePayload) error
+	// SetMRReviewers replaces the MR's reviewer set with the given user IDs.
+	// An empty slice clears all reviewers.
+	SetMRReviewers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error
+	// ListUsersByUsername looks up a GitLab user by exact username.
+	// Returns nil, nil if no user is found.
+	ListUsersByUsername(ctx context.Context, username string) (*gl.User, error)
 }

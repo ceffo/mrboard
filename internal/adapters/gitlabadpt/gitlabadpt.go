@@ -422,6 +422,46 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 	return nil
 }
 
+// SetReviewers implements mrsvc.MergeRequestSource.
+func (a *GitLabAdapter) SetReviewers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: set reviewers", "project_id", projectID, "mr_iid", mrIID, "count", len(userIDs))
+	if err := a.client.SetMRReviewers(ctx, projectID, mrIID, userIDs); err != nil {
+		return err
+	}
+	logger.Info("gitlab: set reviewers done", "project_id", projectID, "mr_iid", mrIID,
+		"duration", ilog.FmtDur(time.Since(start)))
+	return nil
+}
+
+// ResolveUsers implements mrsvc.MergeRequestSource.
+// Unknown usernames are omitted from the result without error.
+func (a *GitLabAdapter) ResolveUsers(ctx context.Context, usernames []string) ([]domain.User, error) {
+	logger := ilog.FromContext(ctx)
+	start := time.Now()
+	logger.Info("gitlab: resolve users", "count", len(usernames))
+	result := make([]domain.User, 0, len(usernames))
+	for _, username := range usernames {
+		u, err := a.client.ListUsersByUsername(ctx, username)
+		if err != nil {
+			return result, fmt.Errorf("resolve users username=%q: %w", username, err)
+		}
+		if u == nil {
+			logger.Warn("gitlab: resolve users: unknown username", "username", username)
+			continue
+		}
+		result = append(result, domain.User{
+			ID:       u.ID,
+			Username: u.Username,
+			Name:     u.Name,
+		})
+	}
+	logger.Info("gitlab: resolve users done", "requested", len(usernames), "resolved", len(result),
+		"duration", ilog.FmtDur(time.Since(start)))
+	return result, nil
+}
+
 func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) (domain.MergeRequest, error) {
 	if mr.Draft {
 		discussions, err := a.client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)

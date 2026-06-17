@@ -40,6 +40,15 @@ type MergeRequestSource interface {
 
 	// GetFileContent fetches the raw content of a file at a given ref (SHA or branch).
 	GetFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error)
+
+	// SetReviewers replaces the MR's reviewer set with the given user IDs.
+	// An empty slice clears all reviewers.
+	SetReviewers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+
+	// ResolveUsers looks up GitLab users by username (instance-wide).
+	// Unknown usernames are omitted from the result; callers can diff against
+	// the input to detect invalid entries.
+	ResolveUsers(ctx context.Context, usernames []string) ([]domain.User, error)
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.
