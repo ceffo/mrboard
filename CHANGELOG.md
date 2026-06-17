@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-06-17
+
+### Added
+- New unified reviewer editor overlay: a full-screen modal that replaces the former approver editor, allowing reviewers to be added or removed inline without leaving the board.
+- Team username resolution at startup — the roster is fetched once and cached, so reviewer names are always shown as human-readable handles rather than raw user IDs.
+- `User` domain type with dedicated reviewer ports and corresponding GitLab client methods, giving the reviewer workflow a clean domain model separate from MR state.
+
+### Changed
+- Remapped `r`/`v` keys and redesigned the reviewer editor title bar for a clearer, more consistent keyboard affordance.
+
 ## [0.4.5] - 2026-06-09
 
 ### Fixed
