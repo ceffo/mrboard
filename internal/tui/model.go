@@ -168,6 +168,13 @@ type NotifyResultMsg struct {
 	Err error
 }
 
+// TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
+type TeamResolvedMsg struct {
+	Roster           []domain.User
+	InvalidUsernames []string // usernames that could not be resolved
+	Err              error
+}
+
 // Options are session-scoped overrides passed via CLI flags.
 // They are not persisted to the state file.
 type Options struct {
@@ -222,6 +229,7 @@ type Model struct {
 	notifier           domain.Notifier
 	alerts             toast.Model
 	jiraBaseURL        string
+	teamRoster         []domain.User // resolved once at startup from type:user sources
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -334,9 +342,15 @@ func New(
 	return m
 }
 
-// Init starts the spinner, fires the first data fetch, and schedules the minute ticker.
+// Init starts the spinner, fires the first data fetch, schedules the minute ticker,
+// and resolves team usernames from type:user sources.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Init(), makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs), tickCmd())
+	return tea.Batch(
+		m.sp.Init(),
+		makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs),
+		tickCmd(),
+		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
+	)
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
@@ -347,6 +361,37 @@ func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource, includeRev
 		defer cancel()
 		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs})
 		return FetchResultMsg{MRs: mrs, Errors: errs}
+	}
+}
+
+// makeResolveTeamCmd resolves team usernames (from type:user sources) to GitLab user IDs.
+// Returns nil if there are no user-type sources (empty team is valid).
+func makeResolveTeamCmd(base context.Context, src mrsvc.MergeRequestSource, cfg *config.Config) tea.Cmd {
+	var usernames []string
+	for _, s := range cfg.Sources {
+		if s.Type == "user" {
+			usernames = append(usernames, s.IDs...)
+		}
+	}
+	if len(usernames) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		roster, err := src.ResolveUsers(base, usernames)
+		if err != nil {
+			return TeamResolvedMsg{Err: err}
+		}
+		resolvedByUsername := make(map[string]bool, len(roster))
+		for _, u := range roster {
+			resolvedByUsername[u.Username] = true
+		}
+		var invalid []string
+		for _, name := range usernames {
+			if !resolvedByUsername[name] {
+				invalid = append(invalid, name)
+			}
+		}
+		return TeamResolvedMsg{Roster: roster, InvalidUsernames: invalid}
 	}
 }
 
@@ -463,6 +508,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
+
+	case TeamResolvedMsg:
+		return m.handleTeamResolved(msg)
 
 	case tickMsg:
 		return m, tickCmd()
@@ -1042,6 +1090,21 @@ func (m Model) handleApproversSaved(msg ApproversSavedMsg) (tea.Model, tea.Cmd) 
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// handleTeamResolved caches the resolved team roster and surfaces any feedback.
+func (m Model) handleTeamResolved(msg TeamResolvedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Error("tui: team resolution failed", "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, "Team resolution failed: "+msg.Err.Error())
+	}
+	m.teamRoster = msg.Roster
+	m.logger.Info("tui: team resolved", "count", len(msg.Roster), "invalid", len(msg.InvalidUsernames))
+	if len(msg.InvalidUsernames) > 0 {
+		m.logger.Warn("tui: team: unknown usernames", "usernames", msg.InvalidUsernames)
+		return m, m.toast(toast.WarnAlert, "Unknown team members: "+strings.Join(msg.InvalidUsernames, ", "))
+	}
+	return m, nil
 }
 
 // handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.
