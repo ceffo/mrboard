@@ -1,0 +1,111 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-qtk.1
+- **Task Title**: tui: index MRs by JIRA ID in board model for sibling lookup
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T18:07:27.731Z
+- **Ended At**: 2026-06-29T18:12:56.572Z
+- **Duration**: 5m 28s
+- **Input Tokens**: 130
+- **Output Tokens**: 13352
+- **Total Tokens**: 13482
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-0bw
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and reading the progress file to understand what needs to be implemented.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Let me search for context on the mrr-qtk epic and look at the bead details.
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-qtk JIRA sibling lookup index board model[0m
+[94m[Bash][0m Show epic and task details for mrr-qtk $ br show mrr-qtk.1 --format toon 2>/dev/null
+Now let me understand the board model and domain types to know what needs to be indexed.
+[94m[Bash][0m Check model.go size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Search for existing JIRA key fields in TUI $ rg -n "JiraKey\|JiraIssue\|jiraKey\|jiraIndex\|sibling\|ByJira\|jiraID" /Users/moncefnaji/code/githu...
+[94m[Bash][0m Find JIRA key field in domain types $ rg -n "JiraKey\|JiraIssue\|jiraKey\|IssueKey" /Users/moncefnaji/code/github.com/mrboard/internal/dom...
+[94m[Bash][0m Find Model and MergeRequest struct definitions $ rg -n "type Model struct\|type MergeRequest struct" /Users/moncefnaji/code/github.com/mrboard/intern...
+[94m[Bash][0m Find files with JIRA references in domain $ rg -n "JiraKey\|IssueKey\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ -l
+[94m[Bash][0m Find Model struct in model.go $ rg -rn "type Model struct" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Find Model struct $ rg "type Model struct" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Find JIRA-related files in domain package $ rg "JiraKey\|IssueKey\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ -l 2>&1
+[94m[Bash][0m List domain package files $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/domain/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+Now let me look at the Model struct and understand where the MR list is maintained.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me find where `allMRs` is updated to understand where to build the index.
+[94m[Bash][0m Find all allMRs assignments in model.go $ rg -n "allMRs" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -30
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me look at the JiraIssueType update section and the existing jiraKey logic to understand all the update paths.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I have a complete picture. Let me also look at the `updateJiraKey` method:
+[94m[Bash][0m Find updateJiraKey method $ rg -n "updateJiraKey\|jiraKey" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | hea...
+[94m[Bash][0m Find all jira key related code in tui $ rg -n "updateJiraKey\|jiraKey\|JiraKey\|JiraURL\|jiraURL" /Users/moncefnaji/code/github.com/mrboard/...
+[94m[Bash][0m Find updateJira methods $ grep -n "updateJira" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me look at the model tests to understand the testing pattern:
+
+`★ Insight ─────────────────────────────────────`
+- `domain.ExtractJiraID` already handles the JIRA key extraction from titles with regex `\(([A-Z]+-\d+)\)` — we reuse this, not reinvent it
+- The index (`map[string][]domain.MergeRequest`) should cover `allMRs` (not just visible/filtered MRs) since siblings may be reviewer-source MRs currently hidden from the board
+- `applyMRFilter()` is the natural rebuild point — it's already called after every `allMRs` mutation
+`─────────────────────────────────────────────────`
+[94m[Bash][0m List test files in tui package $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/*test* 2>/dev/null
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m Check model_test.go size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+I now have everything I need. Here's the implementation plan:
+
+1. Add `jiraIndex map[string][]domain.MergeRequest` to `Model`
+2. Add `buildJiraIndex()` called from `applyMRFilter()` (already the "recompute from allMRs" hook)
+3. Add `SiblingMRs(key string) []domain.MergeRequest` accessor for mrr-qtk.2 to use
+4. Add tests
+
+`★ Insight ─────────────────────────────────────`
+- Building the index from `allMRs` (not the filtered view) is important: siblings may be hidden by current filters (reviewer-source toggle, sprint filter) but the batch editor should still see them
+- `applyMRFilter()` is already the canonical "allMRs changed, recompute everything" function — it's called after every mutation, making it the perfect rebuild point for the index
+`─────────────────────────────────────────────────`
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	sprintIssueKeys    map[string]bool       // activ..." → "	sprintIssueKeys    map[string]bool              /..."
+Now add `buildJiraIndex()` and `SiblingMRs()` methods. I'll place them near the `applyMRFilter` function:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func visibleMRs(mrs []domain.MergeRequest, _ strin..." → "func visibleMRs(mrs []domain.MergeRequest, _ strin..."
+Now call `buildJiraIndex()` from `applyMRFilter()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m *Model) applyMRFilter() {
+	m.userMap = mrs..." → "func (m *Model) applyMRFilter() {
+	m.buildJiraInde..."
+Now add tests. First let me check what `goconst` thresholds might be hit with string literals:
+[94m[Bash][0m Check if JIRA key strings already appear in tui tests $ rg -c "OD-\|feat\(" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --type go 2>/dev/null
+Good — no existing JIRA key literals in the test files. Now I'll add the tests to `model_test.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "func TestModel_EscKey_ClosesDetailPanel(t *testing..." → "func TestModel_EscKey_ClosesDetailPanel(t *testing..."
+Now run the quality checks:
+[94m[Bash][0m Run full quality gate: fmt + lint + build + test $ just check 2>&1
+All 3 new tests pass, 0 lint issues, clean build. Now close the bead and update progress:
+[94m[Bash][0m Close bead and flush tracker state $ 3 tests added" && br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-0bw.3" → "## 2026-06-29 - mrr-qtk.1
+- Added `jiraIndex map[s..."
+
+[91m[Error: <tool_use_error>File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-0bw.3" → "## 2026-06-29 - mrr-qtk.1
+- Added `jiraIndex map[s..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Added `jiraIndex map[string][]domain.MergeRequest` to `Model`, `buildJiraIndex()` private method, and `SiblingMRs(key string)` public accessor.
+
+**Why**: mrr-qtk epic needs a batch reviewer ... (1037 chars)"
+<promise>COMPLETE</promise>
+
+`mrr-qtk.1` is done. Here's what was added to `internal/tui/model.go`:
+
+- **`jiraIndex map[string][]domain.MergeRequest`** — new field on `Model`, keyed by JIRA issue key (e.g. `"OD-100"`)
+- **`buildJiraIndex()`** — rebuilds the index from `allMRs` using the existing `domain.ExtractJiraID` regex; MRs without a JIRA key in their title are omitted
+- **`SiblingMRs(issueKey string) []domain.MergeRequest`** — public accessor for mrr-qtk.2 to call; returns nil for empty key
+- Hooked into **`applyMRFilter()`** as its first line — that function is already called after every `allMRs` mutation, so no additional call sites are needed
+
+3 new tests in `model_test.go` cover: siblings grouped correctly, empty key returns nil, and no-JIRA-key MRs produce an empty index. `just check` passes: 0 lint issues, clean build, all tests green.

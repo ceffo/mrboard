@@ -17,6 +17,7 @@ type KeyMap struct {
 	ToggleView  key.Binding
 	Settings    key.Binding
 	Reviewers   key.Binding
+	BatchEdit   key.Binding
 	Diff        key.Binding
 	Notify      key.Binding
 	Jira        key.Binding
@@ -28,7 +29,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
 		k.Refresh, k.Open, k.Detail, k.Sort, k.Sprint,
-		k.ToggleView, k.Settings, k.Reviewers, k.Diff, k.Notify, k.Jira, k.Quit,
+		k.ToggleView, k.Settings, k.Reviewers, k.BatchEdit, k.Diff, k.Notify, k.Jira, k.Quit,
 	}
 }
 
@@ -68,6 +69,7 @@ var DefaultKeyMap = KeyMap{
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
 	Reviewers:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "reviewers")),
+	BatchEdit:   key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "batch edit")),
 	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	Notify:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "notify")),
 	Jira:        key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "jira")),
@@ -174,6 +176,36 @@ var DefaultSettingsKeyMap = SettingsKeyMap{
 	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
 	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
 	Close:   key.NewBinding(key.WithKeys(",", "esc"), key.WithHelp(",/esc", "close")),
+}
+
+// BatchReviewerEditorKeyMap holds keybindings for the batch reviewer editor overlay.
+type BatchReviewerEditorKeyMap struct {
+	Up             key.Binding
+	Down           key.Binding
+	Tab            key.Binding
+	ToggleApprover key.Binding
+	Remove         key.Binding
+	Close          key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k BatchReviewerEditorKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Tab, k.ToggleApprover, k.Remove, k.Close}
+}
+
+// FullHelp implements help.KeyMap.
+func (k BatchReviewerEditorKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
+// DefaultBatchReviewerEditorKeyMap is the default keybinding set for the batch reviewer editor.
+var DefaultBatchReviewerEditorKeyMap = BatchReviewerEditorKeyMap{
+	Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Tab:            key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch panels")),
+	ToggleApprover: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "approver")),
+	Remove:         key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "remove")),
+	Close:          key.NewBinding(key.WithKeys("E", "esc"), key.WithHelp("E/esc", "cancel")),
 }
 
 // DefaultDiffViewKeyMap is the default keybinding set for the diff view.

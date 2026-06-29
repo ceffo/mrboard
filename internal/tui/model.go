@@ -199,57 +199,59 @@ type Options struct {
 
 // Model is the root Bubble Tea model for mrboard.
 type Model struct {
-	state              appState
-	header             headerWidget
-	board              boardWidget
-	footer             footerWidget
-	sp                 spinnerWidget
-	detail             detailWidget
-	showDetail         bool
-	settings           settingsWidget
-	reviewerEditor     *reviewerEditorWidget
-	diffView           diffViewWidget
-	diffViewKeys       DiffViewKeyMap
-	overlay            overlayRouter
-	keys               KeyMap
-	detailKeys         DetailKeyMap
-	settingsKeys       SettingsKeyMap
-	reviewerEditorKeys ReviewerEditorKeyMap
-	styles             Styles
-	theme              theme.Theme[ColorKey]
-	themeName          string // currently active theme name
-	themeMode          string // "auto", "dark", "light"
-	hasDarkBg          bool
-	width              int
-	height             int
-	errors             []error
-	errMsg             string
-	cfg                *config.Config
-	src                mrsvc.MergeRequestSource
-	store              domain.StateStore
-	allMRs             []domain.MergeRequest
-	userMap            map[string]string
-	currentUser        string
-	viewMode           domain.ViewMode
-	sortField          sortField
-	sortDesc           bool
-	filter             domain.FilterCriteria
-	includeReviewerMRs bool
-	reviewerMRsInStore bool // true once allMRs contains reviewer-source MRs
-	fetchCancel        context.CancelFunc
-	baseCtx            context.Context
-	logger             *slog.Logger
-	isRefreshing       bool
-	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
-	notifier           domain.Notifier
-	alerts             toast.Model
-	jiraBaseURL        string
-	jiraEnricher       jirasvc.JiraEnricher             // nil when JIRA is not configured
-	iconResolver       IssueTypeIconResolver            // maps JIRA issue type names to emoji
-	teamRoster         []domain.User                    // resolved once at startup from type:user sources
-	sprintIssueKeys    map[string]bool                  // active sprint keys; nil until loaded or when no active sprint
-	sprintFilterActive bool                             // true when S-key sprint filter is toggled on
-	jiraIndex          map[string][]domain.MergeRequest // MRs by extracted JIRA key; rebuilt on every allMRs change
+	state                   appState
+	header                  headerWidget
+	board                   boardWidget
+	footer                  footerWidget
+	sp                      spinnerWidget
+	detail                  detailWidget
+	showDetail              bool
+	settings                settingsWidget
+	reviewerEditor          *reviewerEditorWidget
+	batchReviewerEditor     *batchReviewerEditorWidget
+	diffView                diffViewWidget
+	diffViewKeys            DiffViewKeyMap
+	overlay                 overlayRouter
+	keys                    KeyMap
+	detailKeys              DetailKeyMap
+	settingsKeys            SettingsKeyMap
+	reviewerEditorKeys      ReviewerEditorKeyMap
+	batchReviewerEditorKeys BatchReviewerEditorKeyMap
+	styles                  Styles
+	theme                   theme.Theme[ColorKey]
+	themeName               string // currently active theme name
+	themeMode               string // "auto", "dark", "light"
+	hasDarkBg               bool
+	width                   int
+	height                  int
+	errors                  []error
+	errMsg                  string
+	cfg                     *config.Config
+	src                     mrsvc.MergeRequestSource
+	store                   domain.StateStore
+	allMRs                  []domain.MergeRequest
+	userMap                 map[string]string
+	currentUser             string
+	viewMode                domain.ViewMode
+	sortField               sortField
+	sortDesc                bool
+	filter                  domain.FilterCriteria
+	includeReviewerMRs      bool
+	reviewerMRsInStore      bool // true once allMRs contains reviewer-source MRs
+	fetchCancel             context.CancelFunc
+	baseCtx                 context.Context
+	logger                  *slog.Logger
+	isRefreshing            bool
+	prevFocusMR             *domain.MergeRequest // saved before refresh for focus restoration
+	notifier                domain.Notifier
+	alerts                  toast.Model
+	jiraBaseURL             string
+	jiraEnricher            jirasvc.JiraEnricher             // nil when JIRA is not configured
+	iconResolver            IssueTypeIconResolver            // maps JIRA issue type names to emoji
+	teamRoster              []domain.User                    // resolved once at startup from type:user sources
+	sprintIssueKeys         map[string]bool                  // active sprint keys; nil when no active sprint
+	sprintFilterActive      bool                             // true when S-key sprint filter is toggled on
+	jiraIndex               map[string][]domain.MergeRequest // MRs by extracted JIRA key; rebuilt on every allMRs change
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -326,38 +328,39 @@ func New(
 	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
 
 	m := Model{
-		state:              stateLoading,
-		header:             newHeaderWidget(styles),
-		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir),
-		footer:             newFooterWidget(keys, styles, version),
-		sp:                 newSpinnerWidget(),
-		detail:             newDetailWidget(styles),
-		keys:               keys,
-		detailKeys:         DefaultDetailKeyMap,
-		settingsKeys:       DefaultSettingsKeyMap,
-		reviewerEditorKeys: DefaultReviewerEditorKeyMap,
-		diffViewKeys:       DefaultDiffViewKeyMap,
-		diffView:           newDiffViewWidget(styles),
-		styles:             styles,
-		theme:              th,
-		themeName:          themeName,
-		themeMode:          themeMode,
-		hasDarkBg:          initialDark,
-		cfg:                cfg,
-		src:                src,
-		store:              store,
-		currentUser:        cfg.CurrentUser,
-		viewMode:           viewMode,
-		sortField:          sf,
-		sortDesc:           st.SortDesc,
-		filter:             st.Filter,
-		includeReviewerMRs: st.IncludeReviewerMRs,
-		baseCtx:            ctx,
-		logger:             logger,
-		notifier:           notifier,
-		jiraBaseURL:        cfg.Jira.InstanceURL,
-		jiraEnricher:       jiraEnricher,
-		iconResolver:       ir,
+		state:                   stateLoading,
+		header:                  newHeaderWidget(styles),
+		board:                   newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir),
+		footer:                  newFooterWidget(keys, styles, version),
+		sp:                      newSpinnerWidget(),
+		detail:                  newDetailWidget(styles),
+		keys:                    keys,
+		detailKeys:              DefaultDetailKeyMap,
+		settingsKeys:            DefaultSettingsKeyMap,
+		reviewerEditorKeys:      DefaultReviewerEditorKeyMap,
+		batchReviewerEditorKeys: DefaultBatchReviewerEditorKeyMap,
+		diffViewKeys:            DefaultDiffViewKeyMap,
+		diffView:                newDiffViewWidget(styles),
+		styles:                  styles,
+		theme:                   th,
+		themeName:               themeName,
+		themeMode:               themeMode,
+		hasDarkBg:               initialDark,
+		cfg:                     cfg,
+		src:                     src,
+		store:                   store,
+		currentUser:             cfg.CurrentUser,
+		viewMode:                viewMode,
+		sortField:               sf,
+		sortDesc:                st.SortDesc,
+		filter:                  st.Filter,
+		includeReviewerMRs:      st.IncludeReviewerMRs,
+		baseCtx:                 ctx,
+		logger:                  logger,
+		notifier:                notifier,
+		jiraBaseURL:             cfg.Jira.InstanceURL,
+		jiraEnricher:            jiraEnricher,
+		iconResolver:            ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
 			WithMinWidth(toastMinWidth).
@@ -532,7 +535,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MembersLoadedMsg:
 		return m.handleMembersLoaded(msg)
 
-	case ReviewerEditorClosedMsg:
+	case ReviewerEditorClosedMsg, BatchReviewerEditorClosedMsg:
 		m.overlay.closeOverlay()
 		return m, nil
 
@@ -588,6 +591,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.reviewerEditor != nil {
 			updated, cmd := m.reviewerEditor.Update(msg)
 			m.reviewerEditor = updated.(*reviewerEditorWidget)
+			return m, cmd
+		}
+	case overlayKindBatchReviewerEditor:
+		if m.batchReviewerEditor != nil {
+			updated, cmd := m.batchReviewerEditor.Update(msg)
+			m.batchReviewerEditor = updated.(*batchReviewerEditorWidget)
 			return m, cmd
 		}
 	case overlayKindDiffView:
@@ -720,6 +729,15 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.baseCtx, *mr, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster,
 			)
 			m.overlay.openOverlay(overlayKindReviewerEditor)
+			return m, nil
+		}
+	case key.Matches(msg, m.keys.BatchEdit):
+		if mr := m.board.FocusedMR(); mr != nil {
+			siblings := m.SiblingMRs(domain.ExtractJiraID(mr.Title))
+			m.batchReviewerEditor = newBatchReviewerEditorWidget(
+				*mr, siblings, m.styles, m.batchReviewerEditorKeys,
+			)
+			m.overlay.openOverlay(overlayKindBatchReviewerEditor)
 			return m, nil
 		}
 	case key.Matches(msg, m.keys.Diff):
@@ -1037,6 +1055,10 @@ func (m Model) renderContent() string {
 			if m.reviewerEditor != nil {
 				return m.renderWithOverlay(board, m.reviewerEditor.render())
 			}
+		case overlayKindBatchReviewerEditor:
+			if m.batchReviewerEditor != nil {
+				return m.renderWithOverlay(board, m.batchReviewerEditor.render())
+			}
 		}
 		return board
 	}
@@ -1271,6 +1293,9 @@ func (m *Model) applyTheme() {
 	m.settings.styles = m.styles
 	if m.reviewerEditor != nil {
 		m.reviewerEditor.styles = m.styles
+	}
+	if m.batchReviewerEditor != nil {
+		m.batchReviewerEditor.styles = m.styles
 	}
 }
 

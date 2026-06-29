@@ -3,10 +3,10 @@
   "sessionId": "0cfb0553-366f-479d-823e-40e5718b8abf",
   "status": "running",
   "startedAt": "2026-06-29T17:52:44.905Z",
-  "updatedAt": "2026-06-29T18:12:56.638Z",
-  "currentIteration": 3,
+  "updatedAt": "2026-06-29T18:22:03.545Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 3,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -64,6 +64,16 @@
       "durationMs": 196660,
       "startedAt": "2026-06-29T17:59:04.725Z",
       "endedAt": "2026-06-29T18:02:21.385Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "mrr-qtk.1",
+      "taskTitle": "tui: index MRs by JIRA ID in board model for sibling lookup",
+      "taskCompleted": true,
+      "durationMs": 328841,
+      "startedAt": "2026-06-29T18:07:27.731Z",
+      "endedAt": "2026-06-29T18:12:56.572Z"
     }
   ],
   "skippedTaskIds": [],

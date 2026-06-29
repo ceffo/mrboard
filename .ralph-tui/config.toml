@@ -3,7 +3,7 @@ maxIterations = 10
 agent = "claude"
 tracker = "beads-rust"
 autoCommit = true
-subagentTracingDetail = "moderate"
+subagentTracingDetail = "full"
 
 [agentOptions]
 [trackerOptions]

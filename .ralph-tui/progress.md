@@ -67,3 +67,17 @@ after each iteration and it's included in prompts for context.
   - The `[sprint]` badge renders independently of `[filtered]`; both can appear simultaneously if other filters are also active — clean separation of concerns
 
 ---
+
+## 2026-06-29 - mrr-qtk.2
+- Created `internal/tui/batch_reviewer_editor.go`: `batchReviewerEditorWidget` with `batchReviewerEditorPanel` (reviewers/siblings), pre-fill from focused MR, Tab panel switching, ↑/↓ navigation, space toggle approver, d remove, Esc close
+- Added `BatchEdit key.Binding` (key `E`) to `KeyMap` + `ShortHelp`; added `BatchReviewerEditorKeyMap` + `DefaultBatchReviewerEditorKeyMap` to `keys.go`
+- Added `overlayKindBatchReviewerEditor` to `overlay_router.go`
+- Wired in `model.go`: new fields (`batchReviewerEditor`, `batchReviewerEditorKeys`), E key handler in `handleKeyBoard`, overlay dispatch in `handleKey`, `overlayKindBatchReviewerEditor` render case, `applyTheme` propagation
+- Merged `ReviewerEditorClosedMsg` and `BatchReviewerEditorClosedMsg` into a single type-switch case to keep `gocyclo` complexity ≤ 30
+- Files changed: `internal/tui/batch_reviewer_editor.go` (new), `internal/tui/keys.go`, `internal/tui/overlay_router.go`, `internal/tui/model.go`
+- **Learnings:**
+  - Adding a new overlay case to `coreUpdate` would have pushed `gocyclo` from 30→31 — merging the two "closed" messages into one `case T1, T2:` is the right fix when semantics are identical
+  - Formatter re-aligns struct field columns; adding `batchReviewerEditorKeys` widened the longest field name, pushing an adjacent comment over 120 chars — shortening the comment is the correct fix
+  - `SiblingMRs("")` returns nil when the focused MR has no JIRA key; this propagates naturally to `len(siblings) == 0`, rendering `(no sibling MRs)` without any special-casing at the call site
+
+---
