@@ -1,0 +1,185 @@
+# Iteration 11 Log
+
+## Metadata
+
+- **Task ID**: mrr-hl4.2
+- **Task Title**: gitlabadpt: auto-inject JIRA link on MR fetch — detect marker, append if missing, background
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T17:04:25.486Z
+- **Ended At**: 2026-06-29T17:10:42.399Z
+- **Duration**: 6m 16s
+- **Input Tokens**: 179
+- **Output Tokens**: 22924
+- **Total Tokens**: 23103
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and understanding the current state of the project.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Bash][0m Show bead details for mrr-hl4.2 $ br show mrr-hl4.2 --format toon
+Let me look at the epic and the relevant code to understand what's needed.
+[94m[Bash][0m Show parent epic details $ br show mrr-hl4 --format toon
+[94m[Bash][0m Check gitlabadpt file size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+Now let me understand the domain's JIRA-related functions and the GitLab interfaces.
+[94m[Bash][0m Find JIRA-related domain files $ rg -l "ExtractJiraID\|JiraLink\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ --i...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/interfaces.go[0m
+
+[91m[Error: Exit code 2
+rg: unrecognized flag --include
+
+similar flags that are available: --include-zero][0m
+[94m[Bash][0m Find JIRA-related domain files $ rg "ExtractJiraID\|JiraLink\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ -l
+[94m[Bash][0m Find JIRA-related files across the whole project $ rg "ExtractJiraID\|JiraLink\|jira" /Users/moncefnaji/code/github.com/mrboard/ -l
+[94m[Bash][0m Find JIRA extraction code $ rg "ExtractJira\|JiraID\|jira" /Users/moncefnaji/code/github.com/mrboard/ -l
+[94m[Bash][0m Find all JIRA-related files $ rg -i "jira" /Users/moncefnaji/code/github.com/mrboard/ -l 2>/dev/null | head -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+Let me search memory for the specific JIRA link injection design.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA link inject description marker write-back[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mMR description JIRA auto-inject background[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design feature areas[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_get_observation[0m
+[94m[mcp__plugin_engram_engram__mem_get_observation][0m
+Now I have the full design. Let me look at how the adapter is constructed in core.go.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Let me check the Go version and look at any tests for gitlabadpt.
+[94m[Bash][0m Check Go version and gitlabadpt files $ head -5 /Users/moncefnaji/code/github.com/mrboard/go.mod && \ls /Users/moncefnaji/code/github.com/mr...
+Let me look at the existing test files to understand testing patterns.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+I have all the context I need. Here's what mrr-hl4.2 requires:
+
+- In `gitlabadpt`, after fetching MRs, fire a background goroutine per MR that has a JIRA ID in its title
+- Each goroutine: fetch description → check for `<!-- mrboard -->` marker → if absent, append `---\n🎫 [ID](url) <!-- mrboard -->` and write back
+- Needs `JiraInstanceURL` added to adapter config
+- Wire it up in `core.go`
+
+Let me implement this in a new file to keep concerns separated.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira.go[0m "package gitlabadpt
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	ilog "github.com/ceffo/mrboard/internal/log"
+)
+
+// jiraMarker is the HTML comment ap... (2590 chars)"
+Now add `JiraInstanceURL` to `Config` and call `injectJiraLinksBackground` from `FetchAll`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// Config holds the adapter-specific configuration..." → "// Config holds the adapter-specific configuration..."
+Now call `injectJiraLinksBackground` from `FetchAll` after the enrichment stage:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "	logger.Info("gitlab: fetch done",
+		"mrs", len(fi..." → "	// Fire background JIRA link injection — no-op wh..."
+Now update `core.go` to pass `JiraInstanceURL` to the adapter:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	adapter := gitlabadpt.New(client, gitlabadpt.Conf..." → "	adapter := gitlabadpt.New(client, gitlabadpt.Conf..."
+Now write the tests:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m "package gitlabadpt
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+
+	gl "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	pkggitlab "github.com/ceffo/mrboard/pk... (7503 chars)"
+[94m[Bash][0m Run quality checks $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/adapters/gitlabadpt/inject_jira_test.go:102:1: The line is 122 characters long, which exceeds the maximum of 120 characters. (lll)
+func (f *fakeJiraClient) UpdateMRApprovalRule(_ context.Context, _, _, _ int64, _ pkggitlab.MRApprovalRulePayload) error {
+^
+internal/adapters/gitlabadpt/inject_jira_test.go:222:50: unused-parameter: parameter 't' seems to be unused, consider removing or renaming it as _ (revive)
+func TestInjectJiraLinksBackground_NoopWhenNoURL(t *testing.T) {
+                                                 ^
+internal/adapters/gitlabadpt/inject_jira_test.go:233:53: unused-parameter: parameter 't' seems to be unused, consider removing or renaming it as _ (revive)
+func TestInjectJiraLinksBackground_NoopWhenNoJiraID(t *testing.T) {
+                                                    ^
+internal/adapters/gitlabadpt/inject_jira_test.go:116:47: newTestAdapterWithURL - jiraURL always receives "https://jira.example.com" (unparam)
+func newTestAdapterWithURL(c *fakeJiraClient, jiraURL string) *GitLabAdapter {
+                                              ^
+4 issues:
+* lll: 1
+* revive: 2
+* unparam: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Four fixes needed: break long line, rename unused `t` params, and fix `unparam` by removing redundant parameter from helper.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "func (f *fakeJiraClient) UpdateMRApprovalRule(_ co..." → "func (f *fakeJiraClient) UpdateMRApprovalRule(
+	_ ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "// --- helpers ---
+
+func newTestAdapterWithURL(c *..." → "// --- helpers ---
+
+const testJiraURL = "https://j..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "newTestAdapterWithURL(c, "https://jira.example.com..." → "newTestAdapter(c)"
+Now rename unused `t` params in the no-op tests:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "func TestInjectJiraLinksBackground_NoopWhenNoURL(t..." → "func TestInjectJiraLinksBackground_NoopWhenNoURL(_..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "func TestInjectJiraLinksBackground_NoopWhenNoJiraI..." → "func TestInjectJiraLinksBackground_NoopWhenNoJiraI..."
+Also fix the `instanceURL` constant in the test — it now needs to use `testJiraURL`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+Remove the redundant local `instanceURL` constant in `TestAppendJiraLink` — use `testJiraURL`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "func TestAppendJiraLink(t *testing.T) {
+	const (
+	..." → "func TestAppendJiraLink(t *testing.T) {
+	const iss..."
+[94m[Bash][0m Run quality checks $ just check 2>&1
+All checks pass. Now close the bead, flush, and update the progress log.
+[94m[Bash][0m Close bead and flush $ br close mrr-hl4.2 --reason "Implemented JIRA link auto-injection in gitlabadpt: detect marker, appe...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "---
+" → "---
+"
+
+[91m[Error: <tool_use_error>No changes to make: old_string and new_string are exactly the same.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+Now append to progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m edit: "package gitlabadpt" → "package gitlabadpt"
+
+[91m[Error: <tool_use_error>No changes to make: old_string and new_string are exactly the same.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+Now append to progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+Good. Now append to progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/inject_jira_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-hl4.1
+- Added `UpdateMRDescrip..." → "## 2026-06-29 - mrr-hl4.1
+- Added `UpdateMRDescrip..."
+Now save to engram memory:
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-hl4.2: gitlabadpt auto-inject JIRA link on MR fetch — detect `<!-- mrboard -->` marker, append if missing, fire in background.
+
+## Discoveries
+- `context.WithoutCancel(ctx)` (Go ... (1943 chars)"
+All done. Here's what was implemented:
+
+**mrr-hl4.2 — JIRA link auto-injection in `gitlabadpt`**
+
+- **`inject_jira.go`** (new): Three functions — `injectJiraLinksBackground` (fires goroutines after fetch), `maybeInjectJiraLink` (fetch desc → check marker → write), `appendJiraLink` (builds `---\n🎫 [KEY](url) <!-- mrboard -->`)
+- **`gitlabadpt.go`**: Added `JiraInstanceURL string` to `Config`; calls `injectJiraLinksBackground` at the end of `FetchAll`  
+- **`core.go`**: Passes `cfg.Jira.InstanceURL` to adapter config
+- **`inject_jira_test.go`** (new): 8 tests covering idempotency (marker present = no-op), write paths (empty/non-empty desc), error propagation, and no-op guards (no URL, no JIRA ID)
+
+The injection is fully non-blocking (`context.WithoutCancel` prevents cancellation from the next board refresh killing in-flight writes) and idempotent (the `<!-- mrboard -->` sentinel stops re-writes).
+
+<promise>COMPLETE</promise>
