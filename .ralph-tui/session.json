@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
+  "status": "running",
+  "startedAt": "2026-06-29T15:25:55.630Z",
+  "updatedAt": "2026-06-29T15:29:31.996Z",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "beads-rust",
+    "epicId": "mrr-6bb",
+    "totalTasks": 5,
+    "tasks": [
+      {
+        "id": "mrr-6bb.1",
+        "title": "Config: add email, api_token, board_id, cache_ttl, issue_type_icons to jira block",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-6bb.2",
+        "title": "pkg/jira: thin HTTP client — auth, GetIssue, GetActiveSprint",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-6bb.3",
+        "title": "jirasvc: JiraEnricher port (GetIssueType, GetActiveSprintIssueKeys)",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-6bb.4",
+        "title": "jiraadpt: adapter implementing JiraEnricher with 24h disk cache",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-6bb.5",
+        "title": "core: wire jiraadpt into composition root",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/moncefnaji/code/github.com/mrboard",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}

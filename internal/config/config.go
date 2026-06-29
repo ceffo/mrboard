@@ -50,7 +50,12 @@ type Notifications struct {
 
 // Jira holds configuration for JIRA integration.
 type Jira struct {
-	InstanceURL string `mapstructure:"instance_url"` // e.g. "https://northstar.atlassian.net"
+	InstanceURL    string            `mapstructure:"instance_url"`     // e.g. "https://northstar.atlassian.net"
+	Email          string            `mapstructure:"email"`            // Atlassian account email for Basic Auth
+	APIToken       string            `mapstructure:"api_token"`        // or $JIRA_TOKEN
+	BoardID        int               `mapstructure:"board_id"`         // optional; enables sprint filter (S key)
+	CacheTTL       time.Duration     `mapstructure:"cache_ttl"`        // default 24h
+	IssueTypeIcons map[string]string `mapstructure:"issue_type_icons"` // override default emoji map
 }
 
 // AppConfig is the top-level application configuration.
@@ -153,9 +158,14 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("log.level", "info")
 	v.SetDefault("lifetime_warn_after", "72h")
 	v.SetDefault("lifetime_error_after", "120h")
+	v.SetDefault("jira.cache_ttl", "24h")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {
+		return nil, fmt.Errorf("config: bind env: %w", err)
+	}
+	// JIRA_TOKEN env override for jira.api_token.
+	if err := v.BindEnv("jira.api_token", "JIRA_TOKEN"); err != nil {
 		return nil, fmt.Errorf("config: bind env: %w", err)
 	}
 
