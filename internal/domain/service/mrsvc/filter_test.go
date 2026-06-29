@@ -276,6 +276,45 @@ func TestFilterAndSort_Reviewers_EmptyShowsAll(t *testing.T) {
 	}
 }
 
+// FilterAndSort — sprint filter
+
+func TestFilterAndSort_SprintFilter_IncludesOnlySprintMRs(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		{ID: 1, IID: 1, Title: "feat(OD-100): in sprint"},
+		{ID: 2, IID: 2, Title: "feat(OD-200): also in sprint"},
+		{ID: 3, IID: 3, Title: "fix: no jira id"},
+		{ID: 4, IID: 4, Title: "feat(OD-999): not in sprint"},
+	}
+	sprintKeys := map[string]bool{"OD-100": true, "OD-200": true}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SprintFilter: true, SprintKeys: sprintKeys})
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d", len(got))
+	}
+}
+
+func TestFilterAndSort_SprintFilter_OffShowsAll(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		{ID: 1, IID: 1, Title: "feat(OD-100): in sprint"},
+		{ID: 2, IID: 2, Title: "feat(OD-999): not in sprint"},
+	}
+	sprintKeys := map[string]bool{"OD-100": true}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SprintFilter: false, SprintKeys: sprintKeys})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 when SprintFilter is off, got %d", len(got))
+	}
+}
+
+func TestFilterAndSort_SprintFilter_NilKeysShowsAll(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		{ID: 1, IID: 1, Title: "feat(OD-100): some mr"},
+		{ID: 2, IID: 2, Title: "fix: no jira id"},
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SprintFilter: true, SprintKeys: nil})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 when SprintKeys is nil, got %d", len(got))
+	}
+}
+
 // FilterAndSort — does not mutate input
 
 func TestFilterAndSort_DoesNotMutateInput(t *testing.T) {

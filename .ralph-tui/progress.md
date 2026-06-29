@@ -21,3 +21,21 @@ after each iteration and it's included in prompts for context.
   - `fakeClient` in tests implements all three `jiraClient` interface methods with a `calls` counter for verifying cache hit/miss behavior
 
 ---
+
+## 2026-06-29 - mrr-0bw.2
+- Added `SprintIssueKeysMsg` message type to `internal/tui/model.go`
+- Added `sprintIssueKeys map[string]bool` and `sprintFilterActive bool` fields to `Model` struct
+- Added `makeSprintFetchCmd` (fires `GetActiveSprintIssueKeys`; gated by `jiraEnricher != nil && cfg.Jira.BoardID != 0`)
+- Fired sprint fetch in `Init()` alongside existing cmds; `nil` cmd in `tea.Batch` is safe
+- Added `handleSprintIssueKeys` handler: stores keys as `map[string]bool`, calls `applyMRFilter`
+- Dispatches `SprintIssueKeysMsg` in `coreUpdate`
+- Extended `mrsvc.FilterOptions` with `SprintFilter bool` + `SprintKeys map[string]bool`
+- `FilterAndSort` applies sprint filter after reviewers filter; guarded by `SprintFilter && len(SprintKeys) > 0`
+- `isFilterActive` now includes `sprintFilterActive`
+- 3 new tests in `filter_test.go` covering: filter on, filter off, nil keys passthrough
+- **Learnings:**
+  - `goconst` counts struct literal field values across the package — avoid `"repo/a"` / `"repo/b"` in new sprint tests (already at threshold from existing tests using the `mr()` helper)
+  - Sprint key set uses `nil` (not empty map) as sentinel for "no active sprint"; `len(nil map) == 0` so the filter guard is naturally inert
+  - `tea.Batch(nil)` is valid — no need to conditionally omit from Init when board_id is 0
+
+---

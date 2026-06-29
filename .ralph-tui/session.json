@@ -3,10 +3,10 @@
   "sessionId": "0cfb0553-366f-479d-823e-40e5718b8abf",
   "status": "running",
   "startedAt": "2026-06-29T17:52:44.905Z",
-  "updatedAt": "2026-06-29T17:53:58.758Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-06-29T17:59:03.466Z",
+  "currentIteration": 1,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "mrr-0bw.1",
         "title": "jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-0bw.2",
@@ -34,7 +34,18 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "mrr-0bw.1",
+      "taskTitle": "jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API",
+      "taskCompleted": true,
+      "durationMs": 69455,
+      "startedAt": "2026-06-29T17:52:49.249Z",
+      "endedAt": "2026-06-29T17:53:58.704Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
   "activeTaskIds": [],

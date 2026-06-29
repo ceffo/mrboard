@@ -22,6 +22,12 @@ type FilterOptions struct {
 	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
 	// nil or empty slice means all reviewers are shown.
 	Reviewers []string
+	// SprintFilter, when true and SprintKeys is non-empty, shows only MRs whose
+	// extracted JIRA key is present in the active sprint.
+	SprintFilter bool
+	// SprintKeys is the set of JIRA issue keys belonging to the active sprint.
+	// Applied only when SprintFilter is true and the set is non-empty.
+	SprintKeys map[string]bool
 }
 
 // FilterAndSort applies all active filters and then sorts the slice.
@@ -74,6 +80,15 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 					filtered = append(filtered, mr)
 					break
 				}
+			}
+		}
+		mrs = filtered
+	}
+	if opts.SprintFilter && len(opts.SprintKeys) > 0 {
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			if k := domain.ExtractJiraID(mr.Title); k != "" && opts.SprintKeys[k] {
+				filtered = append(filtered, mr)
 			}
 		}
 		mrs = filtered

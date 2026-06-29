@@ -1,0 +1,72 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-0bw.1
+- **Task Title**: jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T17:52:49.249Z
+- **Ended At**: 2026-06-29T17:53:58.704Z
+- **Duration**: 1m 9s
+- **Input Tokens**: 60
+- **Output Tokens**: 2836
+- **Total Tokens**: 2896
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-0bw
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context from memory and reading the progress file to understand the current state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mjiraadpt JIRA agile sprint[0m
+[94m[Bash][0m Show bead details for mrr-0bw epic and mrr-0bw.1 task $ br show mrr-0bw.1 --format toon 2>/dev/null
+Now let me explore the existing jiraadpt code and the JIRA architecture design.
+[94m[Bash][0m List all files in jiraadpt adapter $ find /Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt -type f | sort
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mjiraadpt JSON disk cache pattern interface[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt.go[0m
+The implementation already exists. Let me verify the tests and the service interface align correctly.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m
+[94m[Bash][0m Find all files referencing GetActiveSprintIssueKeys $ rg -l "GetActiveSprintIssueKeys" /Users/moncefnaji/code/github.com/mrboard --type go
+The implementation is already complete. Let me verify the service interface and run the quality checks.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/jirasvc/jirasvc.go[0m
+Everything aligns. Let me run the quality checks to confirm it all passes.
+
+```
+★ Insight ─────────────────────────────────────
+- The implementation uses a two-call pattern: GetActiveSprint(boardID) → GetSprintIssueKeys(sprintID),
+  caching the combined result under a board-scoped key (sprint_board_<id>.json). This avoids
+  caching at the sprint-ID level, which would require knowing the sprint ID before the cache check.
+- The json.RawMessage trick in cacheEntry.Value allows readCache/writeCache to be fully generic
+  over any JSON-serializable type — both []string (sprint keys) and string (issue type) reuse
+  the same helpers.
+─────────────────────────────────────────────────
+```
+[94m[Bash][0m Run full quality gate (fmt + lint + build + test) $ just check 2>&1
+All 0 lint issues, clean build, all tests pass including `TestGetActiveSprintIssueKeys_LiveAndCached` and `TestGetActiveSprintIssueKeys_NoActiveSprint`.
+
+```
+★ Insight ─────────────────────────────────────
+- The work was already complete from a prior session — the CLAUDE.md "Stop Condition" applies:
+  when an implementation exists and verifies correctly, signal completion immediately rather
+  than re-implementing or duplicating.
+- `just check` runs `go test -v ./...` across the entire module, so the jiraadpt-specific tests
+  (which live in package jiraadpt) run as part of the same sweep — no need for a targeted
+  `go test ./internal/adapters/jiraadpt/...` call.
+─────────────────────────────────────────────────
+```
+
+Now I'll close the bead, sync, and update the progress log.
+[94m[Bash][0m Close bead mrr-0bw.1 and flush tracker to JSONL $ all tests pass" 2>&1 && br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+" → "---
+
+## 2026-06-29 - mrr-0bw.1
+- Implementation wa..."
+<promise>COMPLETE</promise>
+
+`GetActiveSprintIssueKeys` was already fully implemented in a prior session. The method lives at `jiraadpt.go:92-116`, implements the `jirasvc.JiraEnricher` port, uses a two-step `GetActiveSprint` → `GetSprintIssueKeys` call chain with a board-scoped JSON disk cache, and has full test coverage. All quality gates pass (`just check` clean).

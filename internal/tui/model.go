@@ -177,6 +177,12 @@ type JiraIssueTypeMsg struct {
 	Err       error
 }
 
+// SprintIssueKeysMsg carries the result of a background active-sprint key fetch.
+type SprintIssueKeysMsg struct {
+	Keys []string // nil when no active sprint exists
+	Err  error
+}
+
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
 type TeamResolvedMsg struct {
 	Roster           []domain.User
@@ -241,6 +247,8 @@ type Model struct {
 	jiraEnricher       jirasvc.JiraEnricher  // nil when JIRA is not configured
 	iconResolver       IssueTypeIconResolver // maps JIRA issue type names to emoji
 	teamRoster         []domain.User         // resolved once at startup from type:user sources
+	sprintIssueKeys    map[string]bool       // active sprint keys; nil until loaded or when no active sprint
+	sprintFilterActive bool                  // true when S-key sprint filter is toggled on
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -361,11 +369,16 @@ func New(
 // Init starts the spinner, fires the first data fetch, schedules the minute ticker,
 // and resolves team usernames from type:user sources.
 func (m Model) Init() tea.Cmd {
+	var sprintCmd tea.Cmd
+	if m.jiraEnricher != nil && m.cfg.Jira.BoardID != 0 {
+		sprintCmd = makeSprintFetchCmd(m.baseCtx, m.jiraEnricher, m.cfg.Jira.BoardID)
+	}
 	return tea.Batch(
 		m.sp.Init(),
 		makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs),
 		tickCmd(),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
+		sprintCmd,
 	)
 }
 
@@ -527,6 +540,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case JiraIssueTypeMsg:
 		return m.handleJiraIssueType(msg)
+
+	case SprintIssueKeysMsg:
+		return m.handleSprintIssueKeys(msg)
 
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
@@ -1141,6 +1157,24 @@ func (m Model) handleJiraIssueType(msg JiraIssueTypeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleSprintIssueKeys stores the active sprint key set and re-applies the filter.
+func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
+		return m, nil
+	}
+	if len(msg.Keys) == 0 {
+		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.
+		return m, nil
+	}
+	m.sprintIssueKeys = make(map[string]bool, len(msg.Keys))
+	for _, k := range msg.Keys {
+		m.sprintIssueKeys[k] = true
+	}
+	m.applyMRFilter()
+	return m, nil
+}
+
 // makeJiraEnrichCmds returns one fetch command per unique JIRA issue key found
 // in allMRs. Returns nil when jiraEnricher is nil or no keys are found.
 func (m *Model) makeJiraEnrichCmds() tea.Cmd {
@@ -1171,6 +1205,17 @@ func makeJiraFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, issue
 		defer cancel()
 		issueType, err := enricher.GetIssueType(ctx, issueKey)
 		return JiraIssueTypeMsg{IssueKey: issueKey, IssueType: issueType, Err: err}
+	}
+}
+
+// makeSprintFetchCmd returns a Cmd that loads all issue keys for the active sprint
+// of the given JIRA board and wraps the result in a SprintIssueKeysMsg.
+func makeSprintFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, boardID int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		defer cancel()
+		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
+		return SprintIssueKeysMsg{Keys: keys, Err: err}
 	}
 }
 
@@ -1235,13 +1280,15 @@ func (m *Model) applyMRFilter() {
 		src = filtered
 	}
 	mrs := mrsvc.FilterAndSort(src, mrsvc.FilterOptions{
-		MyView:      m.viewMode == domain.ViewMine,
-		CurrentUser: m.currentUser,
-		SortField:   m.sortField.stateKey(),
-		SortDesc:    m.sortDesc,
-		Phases:      m.filter.Phases,
-		Authors:     m.filter.Authors,
-		Reviewers:   m.filter.Reviewers,
+		MyView:       m.viewMode == domain.ViewMine,
+		CurrentUser:  m.currentUser,
+		SortField:    m.sortField.stateKey(),
+		SortDesc:     m.sortDesc,
+		Phases:       m.filter.Phases,
+		Authors:      m.filter.Authors,
+		Reviewers:    m.filter.Reviewers,
+		SprintFilter: m.sprintFilterActive,
+		SprintKeys:   m.sprintIssueKeys,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.board.SetMRs(displayMRs)
@@ -1254,7 +1301,8 @@ func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
 }
 
 func (m *Model) isFilterActive() bool {
-	return len(m.filter.Phases) > 0 || len(m.filter.Authors) > 0 || len(m.filter.Reviewers) > 0
+	return len(m.filter.Phases) > 0 || len(m.filter.Authors) > 0 || len(m.filter.Reviewers) > 0 ||
+		m.sprintFilterActive
 }
 
 func (m *Model) saveState() {
