@@ -79,3 +79,14 @@ after each iteration and it's included in prompts for context.
   - Local `jiraClient` interface in the adapter package avoids needing mockery for adapter unit tests — plain fake structs in `_test.go` files suffice
 
 ---
+
+## 2026-06-29 - mrr-9yi.1
+- Added `JiraIssueType string` field to `MergeRequest` struct in `internal/domain/mr.go`
+- Zero value (`""`) means "not yet fetched or no JIRA issue found" — async enrichment populates it later
+- Field placed after `ReviewerSource` in its own block to signal it's populated post-fetch
+- **Files changed:** `internal/domain/mr.go`
+- **Learnings:**
+  - Domain stays stdlib-only; new JIRA fields are plain `string` types
+  - Zero value as sentinel ("not yet fetched") is the correct pattern for async-populated fields — no `*string` or separate bool needed
+
+---

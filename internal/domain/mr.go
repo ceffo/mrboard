@@ -152,6 +152,8 @@ type MergeRequest struct {
 	RoundTripCount int
 
 	ReviewerSource bool // true when this MR came only from a reviewer-source fetch
+
+	JiraIssueType string // populated asynchronously; "" means not yet fetched or no JIRA issue
 }
 
 // DisplayAuthor returns the human-readable author name, falling back to the username.

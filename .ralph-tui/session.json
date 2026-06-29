@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:39:15.118Z",
-  "currentIteration": 4,
+  "updatedAt": "2026-06-29T15:41:32.322Z",
+  "currentIteration": 5,
   "maxIterations": 10,
-  "tasksCompleted": 4,
+  "tasksCompleted": 5,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -41,8 +41,8 @@
       {
         "id": "mrr-6bb.5",
         "title": "core: wire jiraadpt into composition root",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       }
     ]
   },
@@ -86,6 +86,16 @@
       "durationMs": 240051,
       "startedAt": "2026-06-29T15:33:49.691Z",
       "endedAt": "2026-06-29T15:37:49.742Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "mrr-6bb.5",
+      "taskTitle": "core: wire jiraadpt into composition root",
+      "taskCompleted": true,
+      "durationMs": 84111,
+      "startedAt": "2026-06-29T15:37:50.979Z",
+      "endedAt": "2026-06-29T15:39:15.090Z"
     }
   ],
   "skippedTaskIds": [],

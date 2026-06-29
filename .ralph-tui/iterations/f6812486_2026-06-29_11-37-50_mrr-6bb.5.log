@@ -1,0 +1,70 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-6bb.5
+- **Task Title**: core: wire jiraadpt into composition root
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:37:50.979Z
+- **Ended At**: 2026-06-29T15:39:15.090Z
+- **Duration**: 1m 24s
+- **Input Tokens**: 62
+- **Output Tokens**: 5106
+- **Total Tokens**: 5168
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file and understanding the current state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Show bead details for mrr-6bb.5 $ br show mrr-6bb.5 --format toon
+Now let me look at the composition root to understand what needs to be wired.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/core'][0m
+[94m[Bash][0m Check file sizes in core package $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/core/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Now let me check the jiraadpt and config structures.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt.go[0m
+[94m[Bash][0m Find Jira config fields $ rg -n "Jira" /Users/moncefnaji/code/github.com/mrboard/internal/config/config.go | head -40
+[94m[Bash][0m Get Jira config struct definition $ rg -n "Jira" /Users/moncefnaji/code/github.com/mrboard/internal/config/config.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+Now let me check the pkg/jira Config structure.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m
+[94m[Bash][0m Find the constructor for pkg/jira.Client $ rg -n "func NewClient\|func New" /Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go | head...
+[94m[Bash][0m Find functions in client.go $ rg -n "^func" /Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go
+I have everything I need. Now I'll wire jiraadpt into the composition root.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "import (
+	"context"
+	"io"
+	"log/slog"
+
+	"github.co..." → "import (
+	"context"
+	"io"
+	"log/slog"
+
+	"github.co..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "// Core holds every dependency a binary needs, ful..." → "// Core holds every dependency a binary needs, ful..."
+Now add the JIRA wiring in `New()` before the return:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	var notifier domain.Notifier
+	if teamsCfg := cfg...." → "	var notifier domain.Notifier
+	if teamsCfg := cfg...."
+Now run the quality checks:
+[94m[Bash][0m Run quality gates: fmt + lint + build + test $ just check 2>&1
+All checks pass. Now close the bead and update the progress file.
+[94m[Bash][0m Close bead mrr-6bb.5 $ br close mrr-6bb.5 --reason "Wired jiraadpt into Core struct and New() in internal/core/core.go — Ji...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-6bb.4" → "## 2026-06-29 - mrr-6bb.5
+- Added `JiraEnricher ji..."
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+Done. `internal/core/core.go` now:
+- Adds `JiraEnricher jirasvc.JiraEnricher` to `Core` (nil when JIRA unconfigured)
+- In `New()`, step 5 constructs a `pkgjira.Client` + `jiraadpt.JiraAdapter` only when `InstanceURL`, `Email`, and `APIToken` are all set
+- All quality gates pass (`just check` → 0 lint issues, all tests green)
+
+<promise>COMPLETE</promise>
