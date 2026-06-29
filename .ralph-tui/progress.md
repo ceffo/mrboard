@@ -21,3 +21,18 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-06-29 - mrr-6bb.2
+- Created `pkg/jira/` package with two files: `config.go` and `client.go`
+- `Config` struct: `InstanceURL`, `Email`, `APIToken`, `Timeout` — mirrors `pkg/gitlab/config.go` shape
+- `Client` struct: Basic Auth pre-encoded in constructor (`base64(email:api_token)`), thin `net/http` wrapper
+- `GetIssue(ctx, issueKey)` → `*Issue{Key, Type}` — calls `/rest/api/3/issue/{key}?fields=issuetype`
+- `GetActiveSprint(ctx, boardID)` → `*Sprint{ID, Name}` (or nil if no active sprint) — calls `/rest/agile/1.0/board/{id}/sprint?state=active`
+- **Files changed:** `pkg/jira/config.go`, `pkg/jira/client.go`
+- **Learnings:**
+  - `mnd` linter catches bare numeric literals — extract `const defaultTimeout = 30 * time.Second` before using
+  - JIRA Cloud Basic Auth: `base64(email:api_token)` in `Authorization: Basic <creds>` header
+  - Agile API (`/rest/agile/1.0/`) is a separate path from REST API v3 (`/rest/api/3/`); both use same auth
+  - `GetActiveSprint` returns `(nil, nil)` for no active sprint — adapter layer must handle this gracefully
+
+---
+
