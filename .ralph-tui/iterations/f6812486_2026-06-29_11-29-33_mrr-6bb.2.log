@@ -1,0 +1,111 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-6bb.2
+- **Task Title**: pkg/jira: thin HTTP client — auth, GetIssue, GetActiveSprint
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:29:33.194Z
+- **Ended At**: 2026-06-29T15:31:57.911Z
+- **Duration**: 2m 24s
+- **Input Tokens**: 85
+- **Output Tokens**: 8335
+- **Total Tokens**: 8420
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file and understanding the current state of the JIRA integration work.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Show bead details for mrr-6bb.2 $ br show mrr-6bb.2 --format toon
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m List pkg directory $ \ls /Users/moncefnaji/code/github.com/mrboard/pkg/
+Let me look at the pkg/gitlab structure to understand the patterns:
+[94m[Bash][0m List gitlab package files and their sizes $ \ls /Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/ && wc -l /Users/moncefnaji/code/github.com...
+[94m[Bash][0m Show parent epic details $ br show mrr-6bb --format toon
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/config.go[0m
+[94m[Bash][0m Check go.mod for existing dependencies $ wc -l /Users/moncefnaji/code/github.com/mrboard/go.mod && head -30 /Users/moncefnaji/code/github.com...
+[94m[Bash][0m Find any existing JIRA-related files $ rg -l "jira" /Users/moncefnaji/code/github.com/mrboard/ 2>/dev/null | head -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design client GetIssue GetActiveSprint[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design card display sprint filter[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_get_observation[0m
+[94m[mcp__plugin_engram_engram__mem_get_observation][0m
+I have the full design. The `pkg/jira/` package mirrors `pkg/gitlab/` — thin HTTP client, Basic Auth, two methods: `GetIssue` and `GetActiveSprint`. Let me implement it.
+[94m[Bash][0m Create pkg/jira directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/pkg/jira
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/config.go[0m "// Package jira provides a thin HTTP client for the Atlassian JIRA REST API.
+// It has no dependency on internal/* — callers pass a Config built from their
+// own config layer.
+package jira
+
+import "t... (566 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m "package jira
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// Issue is a minimal representation of a JIRA issue.
+type Issue struct {
+	Key  string
+	T... (2885 chars)"
+Now let me run the quality checks:
+[94m[Bash][0m Run quality checks $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+pkg/jira/client.go:37:13: Magic number: 30, in <operation> detected (mnd)
+		timeout = 30 * time.Second
+		          ^
+1 issues:
+* mnd: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: const (
+	perPage = 100
+)</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m edit: "// Client is an authenticated JIRA REST API client..." → "const defaultTimeout = 30 * time.Second
+
+// Client..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m edit: "	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeo..." → "	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeo..."
+[94m[Bash][0m Run quality checks again $ just check 2>&1
+All checks pass. Now let me close the bead, flush, and update progress:
+[94m[Bash][0m Close bead mrr-6bb.2 $ br close mrr-6bb.2 --reason "Implemented pkg/jira thin HTTP client with Config, GetIssue, and GetAct...
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+" → "---
+
+## 2026-06-29 - mrr-6bb.2
+- Created `pkg/jira..."
+
+[91m[Error: <tool_use_error>Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - JIRA integration config is fully optional (no ..." → "  - JIRA integration config is fully optional (no ..."
+<promise>COMPLETE</promise>
+
+`pkg/jira` is implemented. Two files created:
+
+- **`pkg/jira/config.go`** — `Config{InstanceURL, Email, APIToken, Timeout}`, mirroring `pkg/gitlab/config.go`
+- **`pkg/jira/client.go`** — `Client` with Basic Auth (pre-encoded at construction), `GetIssue(ctx, key) *Issue` and `GetActiveSprint(ctx, boardID) *Sprint`, using raw `net/http` + `encoding/json`
+
+All `just check` gates pass clean.

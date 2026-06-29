@@ -36,3 +36,16 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-06-29 - mrr-6bb.3
+- Created `internal/domain/service/jirasvc/jirasvc.go` — `JiraEnricher` port with two methods: `GetIssueType(ctx, issueKey)` and `GetActiveSprintIssueKeys(ctx, boardID)`
+- Added `jirasvc` package entry to `.mockery.yml` under `packages:`
+- Ran `just generate` → mock generated at `internal/domain/service/jirasvc/mocks/mock_JiraEnricher.go`
+- **Files changed:** `internal/domain/service/jirasvc/jirasvc.go`, `internal/domain/service/jirasvc/mocks/mock_JiraEnricher.go`, `.mockery.yml`
+- **Learnings:**
+  - Service port interface (`jirasvc`) lives in `internal/domain/service/jirasvc/` mirroring `mrsvc` — one package per port
+  - Adding a new package to `.mockery.yml` requires a full `packages:` entry with `config` + `interfaces` blocks; the `dir` template uses `{{.InterfaceDir}}/mocks` which resolves relative to the interface source
+  - `just generate` runs `mockery` at repo root — picks up all packages in `.mockery.yml` automatically
+  - `GetActiveSprintIssueKeys` returns `(nil, nil)` for no active sprint — the port contract matches the `pkg/jira` client's `(nil, nil)` convention for missing resources
+
+---
+

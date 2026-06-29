@@ -77,7 +77,7 @@ type MockMergeRequestSource_FetchAll_Call struct {
 // FetchAll is a helper method to define mock.On call
 //   - ctx context.Context
 //   - opts mrsvc.FetchOptions
-func (_e *MockMergeRequestSource_Expecter) FetchAll(ctx interface{}, opts interface{}) *MockMergeRequestSource_FetchAll_Call {
+func (_e *MockMergeRequestSource_Expecter) FetchAll(ctx any, opts any) *MockMergeRequestSource_FetchAll_Call {
 	return &MockMergeRequestSource_FetchAll_Call{Call: _e.mock.On("FetchAll", ctx, opts)}
 }
 
@@ -144,7 +144,7 @@ type MockMergeRequestSource_FetchMR_Call struct {
 //   - ctx context.Context
 //   - projectID int64
 //   - mrIID int64
-func (_e *MockMergeRequestSource_Expecter) FetchMR(ctx interface{}, projectID interface{}, mrIID interface{}) *MockMergeRequestSource_FetchMR_Call {
+func (_e *MockMergeRequestSource_Expecter) FetchMR(ctx any, projectID any, mrIID any) *MockMergeRequestSource_FetchMR_Call {
 	return &MockMergeRequestSource_FetchMR_Call{Call: _e.mock.On("FetchMR", ctx, projectID, mrIID)}
 }
 
@@ -224,7 +224,7 @@ type MockMergeRequestSource_GetDetail_Call struct {
 //   - ctx context.Context
 //   - projectID int64
 //   - mrIID int64
-func (_e *MockMergeRequestSource_Expecter) GetDetail(ctx interface{}, projectID interface{}, mrIID interface{}) *MockMergeRequestSource_GetDetail_Call {
+func (_e *MockMergeRequestSource_Expecter) GetDetail(ctx any, projectID any, mrIID any) *MockMergeRequestSource_GetDetail_Call {
 	return &MockMergeRequestSource_GetDetail_Call{Call: _e.mock.On("GetDetail", ctx, projectID, mrIID)}
 }
 
@@ -296,7 +296,7 @@ type MockMergeRequestSource_GetDiff_Call struct {
 //   - ctx context.Context
 //   - projectID int64
 //   - mrIID int64
-func (_e *MockMergeRequestSource_Expecter) GetDiff(ctx interface{}, projectID interface{}, mrIID interface{}) *MockMergeRequestSource_GetDiff_Call {
+func (_e *MockMergeRequestSource_Expecter) GetDiff(ctx any, projectID any, mrIID any) *MockMergeRequestSource_GetDiff_Call {
 	return &MockMergeRequestSource_GetDiff_Call{Call: _e.mock.On("GetDiff", ctx, projectID, mrIID)}
 }
 
@@ -371,7 +371,7 @@ type MockMergeRequestSource_GetFileContent_Call struct {
 //   - projectID int64
 //   - path string
 //   - ref string
-func (_e *MockMergeRequestSource_Expecter) GetFileContent(ctx interface{}, projectID interface{}, path interface{}, ref interface{}) *MockMergeRequestSource_GetFileContent_Call {
+func (_e *MockMergeRequestSource_Expecter) GetFileContent(ctx any, projectID any, path any, ref any) *MockMergeRequestSource_GetFileContent_Call {
 	return &MockMergeRequestSource_GetFileContent_Call{Call: _e.mock.On("GetFileContent", ctx, projectID, path, ref)}
 }
 
@@ -449,7 +449,7 @@ type MockMergeRequestSource_GetProjectMembers_Call struct {
 // GetProjectMembers is a helper method to define mock.On call
 //   - ctx context.Context
 //   - projectID int64
-func (_e *MockMergeRequestSource_Expecter) GetProjectMembers(ctx interface{}, projectID interface{}) *MockMergeRequestSource_GetProjectMembers_Call {
+func (_e *MockMergeRequestSource_Expecter) GetProjectMembers(ctx any, projectID any) *MockMergeRequestSource_GetProjectMembers_Call {
 	return &MockMergeRequestSource_GetProjectMembers_Call{Call: _e.mock.On("GetProjectMembers", ctx, projectID)}
 }
 
@@ -517,7 +517,7 @@ type MockMergeRequestSource_ResolveUsers_Call struct {
 // ResolveUsers is a helper method to define mock.On call
 //   - ctx context.Context
 //   - usernames []string
-func (_e *MockMergeRequestSource_Expecter) ResolveUsers(ctx interface{}, usernames interface{}) *MockMergeRequestSource_ResolveUsers_Call {
+func (_e *MockMergeRequestSource_Expecter) ResolveUsers(ctx any, usernames any) *MockMergeRequestSource_ResolveUsers_Call {
 	return &MockMergeRequestSource_ResolveUsers_Call{Call: _e.mock.On("ResolveUsers", ctx, usernames)}
 }
 
@@ -576,7 +576,7 @@ type MockMergeRequestSource_SaveApprovers_Call struct {
 //   - projectID int64
 //   - mrIID int64
 //   - userIDs []int64
-func (_e *MockMergeRequestSource_Expecter) SaveApprovers(ctx interface{}, projectID interface{}, mrIID interface{}, userIDs interface{}) *MockMergeRequestSource_SaveApprovers_Call {
+func (_e *MockMergeRequestSource_Expecter) SaveApprovers(ctx any, projectID any, mrIID any, userIDs any) *MockMergeRequestSource_SaveApprovers_Call {
 	return &MockMergeRequestSource_SaveApprovers_Call{Call: _e.mock.On("SaveApprovers", ctx, projectID, mrIID, userIDs)}
 }
 
@@ -645,7 +645,7 @@ type MockMergeRequestSource_SetReviewers_Call struct {
 //   - projectID int64
 //   - mrIID int64
 //   - userIDs []int64
-func (_e *MockMergeRequestSource_Expecter) SetReviewers(ctx interface{}, projectID interface{}, mrIID interface{}, userIDs interface{}) *MockMergeRequestSource_SetReviewers_Call {
+func (_e *MockMergeRequestSource_Expecter) SetReviewers(ctx any, projectID any, mrIID any, userIDs any) *MockMergeRequestSource_SetReviewers_Call {
 	return &MockMergeRequestSource_SetReviewers_Call{Call: _e.mock.On("SetReviewers", ctx, projectID, mrIID, userIDs)}
 }
 

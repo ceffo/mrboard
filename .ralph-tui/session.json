@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:31:57.944Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-06-29T15:33:48.483Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -23,8 +23,8 @@
       {
         "id": "mrr-6bb.2",
         "title": "pkg/jira: thin HTTP client — auth, GetIssue, GetActiveSprint",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-6bb.3",
@@ -56,6 +56,16 @@
       "durationMs": 88517,
       "startedAt": "2026-06-29T15:28:03.451Z",
       "endedAt": "2026-06-29T15:29:31.968Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-6bb.2",
+      "taskTitle": "pkg/jira: thin HTTP client — auth, GetIssue, GetActiveSprint",
+      "taskCompleted": true,
+      "durationMs": 144717,
+      "startedAt": "2026-06-29T15:29:33.194Z",
+      "endedAt": "2026-06-29T15:31:57.911Z"
     }
   ],
   "skippedTaskIds": [],
