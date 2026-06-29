@@ -153,3 +153,19 @@ When a string literal appears in both a source file (e.g. map key) and two test-
   - No mockery regeneration needed — `MRWriter` lives in `pkg/gitlab`, not in `internal/domain/service/` (mockery only covers service ports)
 
 ---
+
+## 2026-06-29 - mrr-hl4.2
+- Created `internal/adapters/gitlabadpt/inject_jira.go` with `injectJiraLinksBackground`, `maybeInjectJiraLink`, and `appendJiraLink`
+- `injectJiraLinksBackground` fires a goroutine per MR with a JIRA ID in its title; uses `context.WithoutCancel` so the goroutine survives fetch-context cancellation
+- `maybeInjectJiraLink` fetches description → checks for `<!-- mrboard -->` marker → if absent, appends `---\n🎫 [KEY](url) <!-- mrboard -->` and calls `UpdateMRDescription`
+- Added `JiraInstanceURL string` to `gitlabadpt.Config`; updated `core.go` to pass `cfg.Jira.InstanceURL`
+- Called `injectJiraLinksBackground` from `FetchAll` after enrichment stage
+- Created `inject_jira_test.go` with 8 tests covering: empty/non-empty desc append, marker-present no-op, marker-absent write, empty desc write, get-desc error, update error, no-op when URL absent, no-op when no JIRA ID
+- **Files changed:** `internal/adapters/gitlabadpt/inject_jira.go` (new), `internal/adapters/gitlabadpt/inject_jira_test.go` (new), `internal/adapters/gitlabadpt/gitlabadpt.go`, `internal/core/core.go`
+- **Learnings:**
+  - `context.WithoutCancel(ctx)` (Go 1.21+) detaches the background goroutine from the fetch context's cancellation while preserving trace info — cleaner than `context.Background()`
+  - `revive` linter flags `t *testing.T` as unused-parameter when the test body doesn't call `t.` methods; use `_ *testing.T` for no-op smoke tests
+  - `unparam` linter detects when a function parameter always receives the same value across all call sites; extract a package-level constant and remove the parameter
+  - Fake client for adapter tests: implement all interface methods as panics except the ones under test — compiler catches missing methods, tests catch unexpected calls at runtime
+
+---

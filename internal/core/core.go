@@ -66,6 +66,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		Sources:           sources,
 		ExcludedAuthors:   adptCfg.ExcludedAuthors,
 		ReviewerUsernames: deriveReviewerUsernames(sources, adptCfg.CurrentUser),
+		JiraInstanceURL:   cfg.Jira.InstanceURL,
 	})
 
 	// 4. State store
