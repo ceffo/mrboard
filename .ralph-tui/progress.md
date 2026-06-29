@@ -49,6 +49,18 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-06-29 - mrr-6bb.5
+- Added `JiraEnricher jirasvc.JiraEnricher` field to `Core` struct in `internal/core/core.go`
+- In `New()`, added step 5: if `cfg.Jira.InstanceURL`, `Email`, and `APIToken` are all non-empty, create a `pkgjira.Client` and a `jiraadpt.JiraAdapter`; assign to `Core.JiraEnricher` (nil otherwise)
+- Added imports for `jiraadpt`, `jirasvc`, and `pkgjira` packages
+- **Files changed:** `internal/core/core.go`
+- **Learnings:**
+  - Pattern for optional adapters: declare as interface type in Core (nil = disabled), guard construction with a non-empty credential check
+  - `pkgjira.NewClient` takes no logger (thin HTTP client); logger is passed to `jiraadpt.New` instead
+  - Composition root `New()` follows a numbered-step convention — new adapters get the next step number
+
+---
+
 ## 2026-06-29 - mrr-6bb.4
 - Added `GetSprintIssueKeys(ctx, sprintID int)` to `pkg/jira/client.go` — paginates through `/rest/agile/1.0/sprint/{id}/issue?fields=key` until all keys are fetched
 - Created `internal/adapters/jiraadpt/jiraadpt.go`:

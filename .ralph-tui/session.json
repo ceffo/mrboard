@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:37:49.768Z",
-  "currentIteration": 3,
+  "updatedAt": "2026-06-29T15:39:15.118Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 3,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -35,8 +35,8 @@
       {
         "id": "mrr-6bb.4",
         "title": "jiraadpt: adapter implementing JiraEnricher with 24h disk cache",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-6bb.5",
@@ -76,6 +76,16 @@
       "durationMs": 109293,
       "startedAt": "2026-06-29T15:31:59.163Z",
       "endedAt": "2026-06-29T15:33:48.456Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "mrr-6bb.4",
+      "taskTitle": "jiraadpt: adapter implementing JiraEnricher with 24h disk cache",
+      "taskCompleted": true,
+      "durationMs": 240051,
+      "startedAt": "2026-06-29T15:33:49.691Z",
+      "endedAt": "2026-06-29T15:37:49.742Z"
     }
   ],
   "skippedTaskIds": [],

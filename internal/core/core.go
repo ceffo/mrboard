@@ -9,23 +9,27 @@ import (
 	"log/slog"
 
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
+	"github.com/ceffo/mrboard/internal/adapters/jiraadpt"
 	"github.com/ceffo/mrboard/internal/adapters/statestore"
 	"github.com/ceffo/mrboard/internal/adapters/teamsnotify"
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/jirasvc"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
+	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
 
 // Core holds every dependency a binary needs, fully wired.
 type Core struct {
-	MRSource   mrsvc.MergeRequestSource
-	StateStore domain.StateStore
-	Notifier   domain.Notifier
-	Config     *config.AppConfig
-	Logger     *slog.Logger
-	logCloser  io.Closer
+	MRSource     mrsvc.MergeRequestSource
+	StateStore   domain.StateStore
+	Notifier     domain.Notifier
+	JiraEnricher jirasvc.JiraEnricher // nil when JIRA is not configured
+	Config       *config.AppConfig
+	Logger       *slog.Logger
+	logCloser    io.Closer
 }
 
 // New builds all services from the provided config.
@@ -81,13 +85,25 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		}, logger)
 	}
 
+	// 5. JIRA adapter (optional — only wired when all three credentials are present)
+	var jiraEnricher jirasvc.JiraEnricher
+	if j := cfg.Jira; j.InstanceURL != "" && j.Email != "" && j.APIToken != "" {
+		jiraClient := pkgjira.NewClient(pkgjira.Config{
+			InstanceURL: j.InstanceURL,
+			Email:       j.Email,
+			APIToken:    j.APIToken,
+		})
+		jiraEnricher = jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL}, logger)
+	}
+
 	return &Core{
-		MRSource:   adapter,
-		StateStore: store,
-		Notifier:   notifier,
-		Config:     cfg,
-		Logger:     logger,
-		logCloser:  closer,
+		MRSource:     adapter,
+		StateStore:   store,
+		Notifier:     notifier,
+		JiraEnricher: jiraEnricher,
+		Config:       cfg,
+		Logger:       logger,
+		logCloser:    closer,
 	}, nil
 }
 

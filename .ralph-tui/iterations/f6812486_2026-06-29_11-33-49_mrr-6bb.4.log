@@ -1,0 +1,139 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-6bb.4
+- **Task Title**: jiraadpt: adapter implementing JiraEnricher with 24h disk cache
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:33:49.691Z
+- **Ended At**: 2026-06-29T15:37:49.742Z
+- **Duration**: 4m 0s
+- **Input Tokens**: 95
+- **Output Tokens**: 15575
+- **Total Tokens**: 15670
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context and checking the progress file before implementing.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me look at the existing JIRA-related code to understand what I need to build on.
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design adapter cache[0m
+[94m[Bash][0m Check file sizes for key JIRA-related files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/domain/service/jirasvc/jirasvc.go /Users/mo...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/jirasvc/jirasvc.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m
+Let me check the existing adapters structure to follow the same pattern.
+[94m[Bash][0m List adapters directory $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/adapters/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m List gitlabadpt structure $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/
+[94m[Bash][0m Check sizes of gitlabadpt files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/*.go 2>/dev/null | head...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Bash][0m Check for existing jiraadpt and any jira references in internal/ $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/adapters/ && rg -l "jira" /Users/moncefnaji/c...
+[94m[Bash][0m Check go.mod for module name and dependencies $ cat /Users/moncefnaji/code/github.com/mrboard/go.mod
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/config.go[0m
+[94m[Bash][0m Check teamsnotify structure sizes $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/adapters/teamsnotify/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/teamsnotify/teamsnotify.go[0m
+I have all the context I need. Let me implement the adapter. I need to:
+1. Add `GetSprintIssueKeys` to `pkg/jira/client.go`
+2. Create `internal/adapters/jiraadpt/jiraadpt.go`
+3. Write a test
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/jira/client.go[0m edit: "// get performs an authenticated GET request and J..." → "const sprintIssuePageSize = 50
+
+// GetSprintIssueK..."
+Now create the adapter package:
+[94m[Bash][0m Create jiraadpt directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt.go[0m "// Package jiraadpt implements jirasvc.JiraEnricher using pkg/jira.Client
+// with a JSON disk cache (default TTL 24h).
+package jiraadpt
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	... (5040 chars)"
+Now write the tests:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m "package jiraadpt
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	pkgjira "github.com/ceffo/mrboard/pkg/jira"
+)... (3910 chars)"
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/adapters/jiraadpt/jiraadpt_test.go:89:24: string `OD-10` has 3 occurrences, make it a constant (goconst)
+		sprintKeys: []string{"OD-10", "OD-11"},
+		                     ^
+internal/adapters/jiraadpt/jiraadpt.go:150:48: Magic number: 0o700, in <argument> detected (mnd)
+	if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
+	                                              ^
+internal/adapters/jiraadpt/jiraadpt.go:154:41: Magic number: 0o600, in <argument> detected (mnd)
+	if err := os.WriteFile(filename, data, 0o600); err != nil {
+	                                       ^
+3 issues:
+* goconst: 1
+* mnd: 2
+error: recipe `lint` failed on line 17 with exit code 1][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt.go[0m edit: "// cacheEntry wraps a cached JSON value with its e..." → "const (
+	cacheDirPerm  = 0o700
+	cacheFilePerm = 0o..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt.go[0m edit: "	if err := os.MkdirAll(filepath.Dir(filename), 0o7..." → "	if err := os.MkdirAll(filepath.Dir(filename), cac..."
+Now fix the `goconst` issue in the test:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m edit: "// fakeClient is a trivial in-memory implementatio..." → "const (
+	issueKeyOD10 = "OD-10"
+	issueKeyOD11 = "O..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m edit: "		sprintKeys: []string{"OD-10", "OD-11"},
+" → "		sprintKeys: []string{issueKeyOD10, issueKeyOD11}..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m edit: "	assert.Equal(t, []string{"OD-10", "OD-11"}, keys)..." → "	assert.Equal(t, []string{issueKeyOD10, issueKeyOD..."
+[94m[Bash][0m Run quality gates again $ just check 2>&1
+All 7 tests pass. Now close the bead and update the progress log:
+[94m[Bash][0m Close the bead $ br close mrr-6bb.4 --reason "Implemented jiraadpt: adapter implementing JiraEnricher with JSON disk ...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+" → "---
+
+## 2026-06-29 - mrr-6bb.4
+- Added `GetSprintI..."
+
+[91m[Error: <tool_use_error>Found 4 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `GetActiveSprintIssueKeys` returns `(nil, nil)..." → "  - `GetActiveSprintIssueKeys` returns `(nil, nil)..."
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only 2>&1
+[94m[mcp__plugin_engram_engram__mem_save][0m "Implemented `internal/adapters/jiraadpt` — adapter for `jirasvc.JiraEnricher` with write-through JSON disk cache.
+
+**Key patterns:**
+- `json.RawMessage` in `cacheEntry.Value` makes read/write cache he... (1004 chars)"
+Done. Here's what was implemented for `mrr-6bb.4`:
+
+**`pkg/jira/client.go`** — added `GetSprintIssueKeys(ctx, sprintID)` with automatic pagination through `/rest/agile/1.0/sprint/{id}/issue`.
+
+**`internal/adapters/jiraadpt/jiraadpt.go`** — `JiraAdapter` implementing `jirasvc.JiraEnricher`:
+- `GetIssueType`: cache key `issue_<sanitized-key>.json`, calls `GetIssue` on miss
+- `GetActiveSprintIssueKeys`: cache key `sprint_board_<id>.json`, calls `GetActiveSprint` + `GetSprintIssueKeys` on miss
+- Cache uses `json.RawMessage` in `cacheEntry` for generic read/write without generics complexity
+- Cache write failures log warnings but never block the caller
+- `CacheDir` defaults to `os.UserCacheDir()/mrboard/jira`; `TTL=0` disables caching
+
+**`internal/adapters/jiraadpt/jiraadpt_test.go`** — 7 tests covering live→cached path, TTL-disabled path, nil-issue, no-sprint, key sanitization, and bad-cache-dir resilience. All tests pass, `just check` clean.
+
+<promise>COMPLETE</promise>
