@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "sessionId": "0cfb0553-366f-479d-823e-40e5718b8abf",
+  "status": "running",
+  "startedAt": "2026-06-29T17:52:44.905Z",
+  "updatedAt": "2026-06-29T17:53:58.758Z",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "beads-rust",
+    "epicId": "mrr-0bw",
+    "totalTasks": 3,
+    "tasks": [
+      {
+        "id": "mrr-0bw.1",
+        "title": "jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-0bw.2",
+        "title": "tui: sprint filter state in board model (active sprint issue key set)",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-0bw.3",
+        "title": "tui: S key toggle + board header sprint indicator; disable if board_id absent",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/moncefnaji/code/github.com/mrboard",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}
