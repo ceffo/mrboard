@@ -40,6 +40,20 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-06-29 - mrr-qtk.1
+- Added `jiraIndex map[string][]domain.MergeRequest` field to `Model` struct
+- Added `buildJiraIndex()` private method — iterates `allMRs`, calls `domain.ExtractJiraID`, populates map; MRs with no JIRA key are skipped
+- Added `SiblingMRs(issueKey string) []domain.MergeRequest` public method — returns nil for empty key
+- Wired `buildJiraIndex()` as the first call in `applyMRFilter()` — ensures index is always consistent with `allMRs` since applyMRFilter is called after every mutation
+- Added 3 tests in `model_test.go`: index builds on fetch (siblings grouped), empty key returns nil, no JIRA keys produces empty index
+- Files changed: `internal/tui/model.go`, `internal/tui/model_test.go`
+- **Learnings:**
+  - Index is built from `allMRs` (not the filtered view) so siblings hidden by sprint/reviewer-source filters are still findable by the batch editor
+  - `applyMRFilter()` is the canonical "allMRs changed, recompute" hook — no need to call `buildJiraIndex` separately after individual `allMRs[i]` mutations since `applyMRFilter` follows each one
+  - `goconst` string literal threshold: used package-level `const jiraKeyAlpha/jiraKeyBeta` in tests to stay safe (JIRA keys like "OD-100" appear twice in test table data)
+
+---
+
 ## 2026-06-29 - mrr-0bw.3
 - Added `Sprint key.Binding` to `KeyMap` struct and `DefaultKeyMap` (uppercase `S`); added to `ShortHelp()` and wrapped to stay within 120-char lint limit
 - Disabled Sprint key at construction time in `New()` when `cfg.Jira.BoardID == 0` — same pattern as `Notify`/`Jira` keys

@@ -244,11 +244,12 @@ type Model struct {
 	notifier           domain.Notifier
 	alerts             toast.Model
 	jiraBaseURL        string
-	jiraEnricher       jirasvc.JiraEnricher  // nil when JIRA is not configured
-	iconResolver       IssueTypeIconResolver // maps JIRA issue type names to emoji
-	teamRoster         []domain.User         // resolved once at startup from type:user sources
-	sprintIssueKeys    map[string]bool       // active sprint keys; nil until loaded or when no active sprint
-	sprintFilterActive bool                  // true when S-key sprint filter is toggled on
+	jiraEnricher       jirasvc.JiraEnricher             // nil when JIRA is not configured
+	iconResolver       IssueTypeIconResolver            // maps JIRA issue type names to emoji
+	teamRoster         []domain.User                    // resolved once at startup from type:user sources
+	sprintIssueKeys    map[string]bool                  // active sprint keys; nil until loaded or when no active sprint
+	sprintFilterActive bool                             // true when S-key sprint filter is toggled on
+	jiraIndex          map[string][]domain.MergeRequest // MRs by extracted JIRA key; rebuilt on every allMRs change
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -1274,6 +1275,7 @@ func (m *Model) applyTheme() {
 }
 
 func (m *Model) applyMRFilter() {
+	m.buildJiraIndex()
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
 	src := m.allMRs
 	if !m.includeReviewerMRs {
@@ -1305,6 +1307,27 @@ func (m *Model) applyMRFilter() {
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
 	return mrs
+}
+
+// buildJiraIndex rebuilds jiraIndex from allMRs. MRs without a detectable JIRA
+// key are omitted; empty key "" is never stored.
+func (m *Model) buildJiraIndex() {
+	idx := make(map[string][]domain.MergeRequest, len(m.allMRs))
+	for _, mr := range m.allMRs {
+		if key := domain.ExtractJiraID(mr.Title); key != "" {
+			idx[key] = append(idx[key], mr)
+		}
+	}
+	m.jiraIndex = idx
+}
+
+// SiblingMRs returns all MRs in allMRs that share the given JIRA issue key.
+// Returns nil when issueKey is empty or no MRs match.
+func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
+	if issueKey == "" {
+		return nil
+	}
+	return m.jiraIndex[issueKey]
 }
 
 func (m *Model) isFilterActive() bool {

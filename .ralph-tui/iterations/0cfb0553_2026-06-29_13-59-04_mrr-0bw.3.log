@@ -1,0 +1,125 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-0bw.3
+- **Task Title**: tui: S key toggle + board header sprint indicator; disable if board_id absent
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T17:59:04.725Z
+- **Ended At**: 2026-06-29T18:02:21.385Z
+- **Duration**: 3m 16s
+- **Input Tokens**: 96
+- **Output Tokens**: 11349
+- **Total Tokens**: 11445
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-0bw
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and checking the current state of the implementation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Show bead details for mrr-0bw.3 $ br show mrr-0bw.3 --format toon 2>/dev/null || br show mrr-0bw.3 2>/dev/null | head -50
+Let me examine the TUI files to understand the current state and what needs to be implemented.
+[94m[Bash][0m Check sizes of key TUI files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go /Users/moncefnaji/code/github....
+[94m[Bash][0m Find all sprint references in TUI package $ rg -n "sprint|Sprint" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --include="*.go" | hea...
+[94m[Bash][0m Find all sprint references in TUI package $ rg -n "sprint|Sprint" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ 2>/dev/null | head -60
+Now let me look at the keys and model files more carefully to understand the current state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m
+Let me look at the relevant parts of model.go — the filter logic and the area where the S key would be handled.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me look at how `isFilterActive` and `applyMRFilter` work, plus how the header gets `SetFilterActive`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the config structure for `Jira.BoardID` and look at how other conditionally-disabled keys work:
+[94m[Bash][0m Find BoardID in config package $ rg -n "BoardID" /Users/moncefnaji/code/github.com/mrboard/internal/config/ 2>/dev/null
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the styles for `FilterActive`:
+[94m[Bash][0m Find FilterActive style usage in TUI $ rg -n "FilterActive" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ 2>/dev/null
+`★ Insight ─────────────────────────────────────`
+
+The config already has a `// optional; enables sprint filter (S key)` comment on `BoardID`, meaning the ground was prepared for this exact binding. The `key.Binding.SetEnabled(false)` pattern (used for `Notify`, `Jira`) is the idiomatic way to gate a key on runtime conditions — it makes the key invisible in the footer help bar automatically.
+
+`─────────────────────────────────────────────────`
+
+Now I'll implement the four changes: keys.go (Sprint binding), model.go (disable gate + key handler), header.go (sprint indicator), and wire the header setter in applyMRFilter.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// KeyMap contains all keybindings for mrboard in ..." → "// KeyMap contains all keybindings for mrboard in ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// ShortHelp implements help.KeyMap.
+func (k KeyMa..." → "// ShortHelp implements help.KeyMap.
+func (k KeyMa..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "	Sort:        key.NewBinding(key.WithKeys("s"), ke..." → "	Sort:        key.NewBinding(key.WithKeys("s"), ke..."
+Now update `model.go` — disable Sprint key when `board_id` is 0, and handle the key press:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if notifier == nil {
+		keys.Notify.SetEnabled(fal..." → "	if notifier == nil {
+		keys.Notify.SetEnabled(fal..."
+Now add the Sprint key handler in `handleKeyBoard`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.Sort):
+		m.sortField..." → "	case key.Matches(msg, m.keys.Sort):
+		m.sortField..."
+Now update `header.go` to add a sprint indicator field and render it:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m edit: "type headerWidget struct {
+	styles        Styles
+	..." → "type headerWidget struct {
+	styles             Sty..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m edit: "func (h *headerWidget) SetFilterActive(v bool)    ..." → "func (h *headerWidget) SetFilterActive(v bool)    ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m edit: "	if h.filterActive {
+		stats += bg.Render("  ") + ..." → "	if h.filterActive {
+		stats += bg.Render("  ") + ..."
+Now wire the new `SetSprintFilterActive` call into `applyMRFilter` in model.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	m.board.SetMRs(displayMRs)
+	m.header.SetMRs(displ..." → "	m.board.SetMRs(displayMRs)
+	m.header.SetMRs(displ..."
+Now run the quality checks:
+[94m[Bash][0m Run full quality gate: fmt + lint + build + test $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/keys.go:30:1: The line is 121 characters long, which exceeds the maximum of 120 characters. (lll)
+		k.Refresh, k.Open, k.Detail, k.Sort, k.Sprint, k.ToggleView, k.Settings, k.Reviewers, k.Diff, k.Notify, k.Jira, k.Quit,
+^
+1 issues:
+* lll: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Line too long — wrap the `ShortHelp` return across two lines:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// ShortHelp implements help.KeyMap.
+func (k KeyMa..." → "// ShortHelp implements help.KeyMap.
+func (k KeyMa..."
+[94m[Bash][0m Run quality gate again after fix $ just check 2>&1
+All 0 lint issues, clean build, all tests green. Now close the bead and flush:
+[94m[Bash][0m Close bead and flush tracker state $ br close mrr-0bw.3 --reason "Implemented S key sprint filter toggle, board header [sprint] badge, an...
+Now append to the progress log:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard//.ralph-tui/progress.md[0m edit: "---
+" → "---
+
+## 2026-06-29 - mrr-0bw.3
+- Added `Sprint key..."
+
+[91m[Error: <tool_use_error>Found 3 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard//.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard//.ralph-tui/progress.md[0m edit: "  - Sprint key set uses `nil` (not empty map) as s..." → "  - Sprint key set uses `nil` (not empty map) as s..."
+`★ Insight ─────────────────────────────────────`
+
+The `key.Binding.SetEnabled(false)` pattern is elegant here: it not only ignores the keypress but also hides the binding from the footer help bar automatically — one call handles both UI visibility and behavioral gating. The `[sprint]` badge reuses `FilterActive` style so it visually coheres with `[filtered]` without needing a new style token.
+
+`─────────────────────────────────────────────────`
+
+Done. Here's what was implemented for mrr-0bw.3:
+
+- **`keys.go`** — Added `Sprint key.Binding` (uppercase `S`, "sprint filter") to `KeyMap` struct, `ShortHelp()`, and `DefaultKeyMap`
+- **`model.go`** — Disabled the key at startup when `cfg.Jira.BoardID == 0`; added `case key.Matches(msg, m.keys.Sprint)` in `handleKeyBoard` that toggles `sprintFilterActive` and re-applies the filter
+- **`header.go`** — Added `sprintFilterActive bool` field with `SetSprintFilterActive()` setter; `render()` appends a `[sprint]` badge using the existing `FilterActive` style
+- Wired `header.SetSprintFilterActive()` in `applyMRFilter` to keep badge in sync
+
+All checks pass: 0 lint issues, clean build, all tests green.
+
+<promise>COMPLETE</promise>

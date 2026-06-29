@@ -206,3 +206,50 @@ func TestModel_EscKey_ClosesDetailPanel(t *testing.T) {
 		t.Fatal("expected showDetail=false after pressing esc")
 	}
 }
+
+// --- JIRA index ---
+
+const (
+	jiraKeyAlpha = "OD-100"
+	jiraKeyBeta  = "OD-200"
+)
+
+func mrWithJiraKey(id, iid int, jiraKey string) domain.MergeRequest {
+	title := "no jira key"
+	if jiraKey != "" {
+		title = "feat(" + jiraKey + "): change"
+	}
+	return domain.MergeRequest{ID: id, IID: iid, Title: title}
+}
+
+func TestModel_JiraIndex_BuildsOnFetch(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mrWithJiraKey(1, 10, jiraKeyAlpha),
+		mrWithJiraKey(2, 20, jiraKeyAlpha), // sibling
+		mrWithJiraKey(3, 30, jiraKeyBeta),
+		{ID: 4, IID: 40, Title: "no jira key"},
+	}
+	m := makeModel(t, mrs, "")
+
+	got := m.SiblingMRs(jiraKeyAlpha)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 siblings for %s, got %d", jiraKeyAlpha, len(got))
+	}
+	if len(m.SiblingMRs(jiraKeyBeta)) != 1 {
+		t.Fatalf("expected 1 MR for %s, got %d", jiraKeyBeta, len(m.SiblingMRs(jiraKeyBeta)))
+	}
+}
+
+func TestModel_JiraIndex_EmptyKeyReturnsNil(t *testing.T) {
+	m := makeModel(t, someMRs(), "")
+	if m.SiblingMRs("") != nil {
+		t.Fatal("expected nil for empty JIRA key")
+	}
+}
+
+func TestModel_JiraIndex_NoJiraKeysProducesEmptyIndex(t *testing.T) {
+	m := makeModel(t, someMRs(), "") // someMRs have no JIRA keys in titles
+	if m.SiblingMRs(jiraKeyAlpha) != nil {
+		t.Fatalf("expected nil when no MR has JIRA key %s", jiraKeyAlpha)
+	}
+}
