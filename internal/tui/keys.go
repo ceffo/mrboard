@@ -13,6 +13,7 @@ type KeyMap struct {
 	Detail      key.Binding
 	CloseDetail key.Binding
 	Sort        key.Binding
+	Sprint      key.Binding
 	ToggleView  key.Binding
 	Settings    key.Binding
 	Reviewers   key.Binding
@@ -26,7 +27,8 @@ type KeyMap struct {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.ToggleView, k.Settings, k.Reviewers, k.Diff, k.Notify, k.Jira, k.Quit,
+		k.Refresh, k.Open, k.Detail, k.Sort, k.Sprint,
+		k.ToggleView, k.Settings, k.Reviewers, k.Diff, k.Notify, k.Jira, k.Quit,
 	}
 }
 
@@ -62,6 +64,7 @@ var DefaultKeyMap = KeyMap{
 	Detail:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "details")),
 	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
 	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
+	Sprint:      key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sprint filter")),
 	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
 	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
 	Reviewers:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "reviewers")),

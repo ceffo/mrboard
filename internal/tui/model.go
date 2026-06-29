@@ -317,6 +317,9 @@ func New(
 	if notifier == nil {
 		keys.Notify.SetEnabled(false)
 	}
+	if cfg.Jira.BoardID == 0 {
+		keys.Sprint.SetEnabled(false)
+	}
 	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
 
 	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
@@ -682,6 +685,9 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.footer.SetKeyMap(m.keys)
 		m.applyMRFilter()
 		m.saveState()
+	case key.Matches(msg, m.keys.Sprint):
+		m.sprintFilterActive = !m.sprintFilterActive
+		m.applyMRFilter()
 	case key.Matches(msg, m.keys.ToggleView):
 		if m.viewMode == domain.ViewMine {
 			m.viewMode = domain.ViewAll
@@ -1294,6 +1300,7 @@ func (m *Model) applyMRFilter() {
 	m.board.SetMRs(displayMRs)
 	m.header.SetMRs(displayMRs)
 	m.header.SetFilterActive(m.isFilterActive())
+	m.header.SetSprintFilterActive(m.sprintFilterActive)
 }
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {

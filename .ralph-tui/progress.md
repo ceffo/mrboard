@@ -39,3 +39,17 @@ after each iteration and it's included in prompts for context.
   - `tea.Batch(nil)` is valid — no need to conditionally omit from Init when board_id is 0
 
 ---
+
+## 2026-06-29 - mrr-0bw.3
+- Added `Sprint key.Binding` to `KeyMap` struct and `DefaultKeyMap` (uppercase `S`); added to `ShortHelp()` and wrapped to stay within 120-char lint limit
+- Disabled Sprint key at construction time in `New()` when `cfg.Jira.BoardID == 0` — same pattern as `Notify`/`Jira` keys
+- Added `case key.Matches(msg, m.keys.Sprint):` in `handleKeyBoard` — toggles `sprintFilterActive`, calls `applyMRFilter` (no `saveState` needed; sprint state is ephemeral)
+- Added `sprintFilterActive bool` field and `SetSprintFilterActive(v bool)` setter to `headerWidget`; `render()` appends `[sprint]` badge using `FilterActive` style when active
+- Wired `header.SetSprintFilterActive(m.sprintFilterActive)` in `applyMRFilter` so badge always reflects current state
+- Files changed: `internal/tui/keys.go`, `internal/tui/model.go`, `internal/tui/header.go`
+- **Learnings:**
+  - `ShortHelp()` line-length: adding one more binding to an already-long return pushed the line over 120 chars (`lll` lint) — split across two lines grouped conceptually (navigation vs actions)
+  - Sprint toggle state is ephemeral (not persisted via `saveState`) — no sprint ID is available client-side, and the sprint keys are already re-fetched on every startup
+  - The `[sprint]` badge renders independently of `[filtered]`; both can appear simultaneously if other filters are also active — clean separation of concerns
+
+---

@@ -11,12 +11,13 @@ import (
 )
 
 type headerWidget struct {
-	styles        Styles
-	mrs           []domain.MergeRequest
-	width         int
-	title         string
-	filterActive  bool
-	statsOverride string
+	styles             Styles
+	mrs                []domain.MergeRequest
+	width              int
+	title              string
+	filterActive       bool
+	sprintFilterActive bool
+	statsOverride      string
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -28,6 +29,7 @@ func (h *headerWidget) SetWidth(w int)                   { h.width = w }
 func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetFilterActive(v bool)           { h.filterActive = v }
+func (h *headerWidget) SetSprintFilterActive(v bool)     { h.sprintFilterActive = v }
 func (h *headerWidget) SetStats(s string)                { h.statsOverride = s }
 
 func (h headerWidget) Init() tea.Cmd                         { return nil }
@@ -44,6 +46,9 @@ func (h headerWidget) render() string {
 	stats := h.styles.HeaderStats.Inherit(bg).Render(statsStr)
 	if h.filterActive {
 		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[filtered]")
+	}
+	if h.sprintFilterActive {
+		stats += bg.Render("  ") + h.styles.FilterActive.Inherit(bg).Render("[sprint]")
 	}
 
 	titleW := lip.Width(title)
