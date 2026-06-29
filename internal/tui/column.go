@@ -25,17 +25,21 @@ type columnWidget struct {
 	focusIdx     int
 	scrollOffset int
 	styles       Styles
+	iconResolver IssueTypeIconResolver
 	width        int
 	height       int
 }
 
-func newColumnWidget(phase domain.MRPhase, styles Styles, width, height int) columnWidget {
+func newColumnWidget(
+	phase domain.MRPhase, styles Styles, width, height int, iconResolver IssueTypeIconResolver,
+) columnWidget {
 	return columnWidget{
-		phase:  phase,
-		name:   phaseName(phase),
-		styles: styles,
-		width:  width,
-		height: height,
+		phase:        phase,
+		name:         phaseName(phase),
+		styles:       styles,
+		iconResolver: iconResolver,
+		width:        width,
+		height:       height,
 	}
 }
 
@@ -81,7 +85,7 @@ func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
 	c.cards = make([]cardWidget, len(mrs))
 	c.cardHeights = make([]int, len(mrs))
 	for i, mr := range mrs {
-		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth)
+		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth, c.iconResolver)
 		c.cardHeights[i] = c.cards[i].measureHeight(c.width - colBorderWidth)
 	}
 	c.scrollOffset = 0

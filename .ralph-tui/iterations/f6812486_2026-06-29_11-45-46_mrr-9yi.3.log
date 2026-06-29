@@ -1,0 +1,184 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: mrr-9yi.3
+- **Task Title**: tui: async enrichment — background fetch of issue type, send update Msg
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:45:46.798Z
+- **Ended At**: 2026-06-29T15:51:46.408Z
+- **Duration**: 5m 59s
+- **Input Tokens**: 201
+- **Output Tokens**: 20598
+- **Total Tokens**: 20799
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading session context and reviewing the progress file to understand where we are.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Good context. Let me look at the TUI model and relevant files to understand how async operations work.
+[94m[Bash][0m Check sizes of key TUI files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go /Users/moncefnaji/code/github....
+[94m[Bash][0m Find files referencing JIRA service $ rg -l "jirasvc\|JiraEnricher\|JiraIssueType" /Users/moncefnaji/code/github.com/mrboard/internal/ --t...
+
+[91m[Error: Exit code 1
+    1229 /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+      58 /Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons.go
+    1287 total][0m
+[94m[Bash][0m Find all files referencing JIRA types $ rg -l "jirasvc\|JiraEnricher\|JiraIssueType" /Users/moncefnaji/code/github.com/mrboard/ --type go 2>...
+[94m[Bash][0m Find TUI message/command files $ rg "tea\.Cmd\|tea\.Msg\|func.*Msg\b" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --type ...
+[94m[Bash][0m Find all JIRA references in Go files $ rg "JiraIssueType\|JiraEnricher\|jirasvc\|jiraadpt" /Users/moncefnaji/code/github.com/mrboard/ --typ...
+[94m[Bash][0m Find TUI files with Cmd/Msg types $ rg "Cmd\|Msg\b" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --type go -l
+[94m[Bash][0m List TUI directory contents $ ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+[94m[Bash][0m Search for JiraIssueType references $ rg "JiraIssueType" /Users/moncefnaji/code/github.com/mrboard/ -r --type go 2>/dev/null | head -20
+[94m[Bash][0m Find JiraIssueType references $ rg "JiraIssueType" /Users/moncefnaji/code/github.com/mrboard/ --type go 2>/dev/null | head -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Now let me look at the model.go structure and card rendering to understand how to hook in async JIRA enrichment.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m
+Let me look at the model.go more closely for the msg types and how async is done, and also check what JIRA key extraction looks like.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons.go[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design card JIRA line issue key extraction async[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+There's already a `m.updateJiraKey()` call! Let me search for existing JIRA-related code.
+[94m[Bash][0m Find all JIRA references in TUI $ rg "jira\|Jira\|JIRA" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --type go -n | head -6...
+[94m[Bash][0m Find JIRA references in model.go $ grep -n "jira\|Jira\|JIRA\|updateJira\|JiraKey\|jiraKey\|JiraEnricher" /Users/moncefnaji/code/github...
+[94m[Bash][0m Find JIRA-related domain functions $ grep -n "ExtractJiraID\|JiraIssueURL\|Jira" /Users/moncefnaji/code/github.com/mrboard/internal/domai...
+[94m[Bash][0m Find where JIRA domain functions are defined $ grep -rn "ExtractJiraID\|JiraIssueURL" /Users/moncefnaji/code/github.com/mrboard/ --include="*.go"
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+Let me check the full bead structure and look at the existing coreUpdate patterns to understand the scope.
+[94m[Bash][0m Show JIRA epic details $ br show mrr-9yi --format toon 2>/dev/null | head -50
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check how the Model is constructed in cmd and whether JiraEnricher is already threaded in.
+[94m[Bash][0m Find where tui.New and JiraEnricher are used $ grep -rn "tui.New\|tui\.New\|JiraEnricher" /Users/moncefnaji/code/github.com/mrboard/ --include="*.g...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Now I have a clear picture. Let me check the board.go call and the full New() signature.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the config.Config type and the keys.go for the Jira key binding.
+[94m[Bash][0m Find Jira key in keys.go $ grep -n "Jira\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go | head -20
+[94m[Bash][0m Check config type names $ grep -n "type Config\|type AppConfig" /Users/moncefnaji/code/github.com/mrboard/internal/config/conf...
+Let me look at `applyMRFilter` and the end of model.go to understand what helper methods exist.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Find key model helper functions $ grep -n "func.*applyMRFilter\|func.*applyTheme\|func.*updateJiraKey" /Users/moncefnaji/code/github.c...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the config Jira struct to understand IssueTypeIcons type.
+[94m[Bash][0m Find Jira config fields $ grep -n "Jira\|IssueTypeIcons" /Users/moncefnaji/code/github.com/mrboard/internal/config/config.go |...
+Now I have everything I need. Let me implement the changes.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I'll make all the changes to model.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	"github.com/ceffo/mrboard/internal/config"
+	"gith..." → "	"github.com/ceffo/mrboard/internal/config"
+	"gith..."
+Now add the `jiraFetchTimeout` constant and `JiraIssueTypeMsg` type:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "const (
+	detailWidthRatio   = 40  // percent of to..." → "const (
+	detailWidthRatio   = 40  // percent of to..."
+Now add `JiraIssueTypeMsg` alongside the other Msg types:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// NotifyResultMsg carries the result of a webhook..." → "// NotifyResultMsg carries the result of a webhook..."
+Now add `jiraEnricher` and `iconResolver` fields to the Model struct:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	notifier           domain.Notifier
+	alerts       ..." → "	notifier           domain.Notifier
+	alerts       ..."
+Now update the `New()` function signature to accept `jiraEnricher`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// New creates a ready-to-run mrboard model. It lo..." → "// New creates a ready-to-run mrboard model. It lo..."
+Now add `jiraEnricher` and `iconResolver` to the model initialization in `New()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		notifier:           notifier,
+		jiraBaseURL:    ..." → "		notifier:           notifier,
+		jiraBaseURL:    ..."
+Now update the `FetchResultMsg` handler to dispatch JIRA fetch commands:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		m.applyMRFilter()
+		if m.prevFocusMR != nil {
+		..." → "		m.applyMRFilter()
+		if m.prevFocusMR != nil {
+		..."
+Now add the `JiraIssueTypeMsg` case in `coreUpdate`. Let me find the right place (after NotifyResultMsg):
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case NotifyResultMsg:
+		return m.handleNotifyResu..." → "	case NotifyResultMsg:
+		return m.handleNotifyResu..."
+Now add the `handleJiraIssueType`, `makeJiraEnrichCmds`, and `makeJiraFetchCmd` functions. I'll add them after `handleTeamResolved`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// handleDiffFetchResult handles DiffFetchResultMs..." → "// handleJiraIssueType stores a freshly fetched JI..."
+Now update `board.go` to pass `c.JiraEnricher`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "	_, err := tea.NewProgram(
+		tui.New(ctx, c.Config..." → "	_, err := tea.NewProgram(
+		tui.New(ctx, c.Config..."
+Now let's run the quality checks:
+[94m[Bash][0m Run quality checks $ just check 2>&1 | tail -40
+Need to fix the test calls to `New`. Let me check those lines:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	m := New(context.Background(), cfg, src, noopStor..." → "	m := New(context.Background(), cfg, src, noopStor..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	m := New(context.Background(), &config.Config{}, ..." → "	m := New(context.Background(), &config.Config{}, ..."
+[94m[Bash][0m Run quality checks again $ just check 2>&1 | tail -30
+All checks pass. Now let's run the TUI verification with agent-tui to confirm there are no runtime issues:
+[94m[Skill][0m
+[94m[Bash][0m Launch TUI via agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1 | head -5
+[94m[Bash][0m Wait for TUI to stabilize $ agent-tui wait --stable 2>&1
+[94m[Bash][0m Screenshot initial TUI state $ agent-tui screenshot 2>&1
+TUI starts cleanly and shows the board. The JIRA-enabled MRs (like `feat(OD-2332)` and `feat(OD-2362)`) are visible — in production with JIRA configured, they would trigger async type fetches.
+[94m[Bash][0m Kill agent-tui session $ agent-tui kill 2>&1
+Now close the bead and update the progress log:
+[94m[Bash][0m Close bead and flush tracker $ iconResolver initialized in Model" && br sync --flush-only
+[94m[Bash][0m Flush beads to JSONL $ br sync --flush-only
+Now append to the progress log:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "package tui
+
+import (
+	"context"
+	"errors"" → "package tui
+
+import (
+	"context"
+	"errors"
+"
+That was a bad edit — let me revert it:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "package tui
+
+import (
+	"context"
+	"errors"
+" → "package tui
+
+import (
+	"context"
+	"errors""
+Now append to progress.md:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+The implementation looks correct. Let me append to the progress log:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "package tui
+
+import (
+	"context"
+	"errors"" → "package tui
+
+import (
+	"context"
+	"errors"
+"
+Oops, I edited the wrong file. Reverting:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "package tui
+
+import (
+	"context"
+	"errors"
+" → "package tui
+
+import (
+	"context"
+	"errors""
+Now append to progress.md:
+[94m[Bash][0m Append mrr-9yi.3 entry to progress.md $ always run after signature changes  --- EOF
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-9yi.3: TUI async enrichment — background fetch of JIRA issue type, send update Msg.
+
+## Discoveries
+- `tui.New()` signature change requires updating all call sites: board.go (pro... (1806 chars)"
+<promise>COMPLETE</promise>

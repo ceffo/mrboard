@@ -107,6 +107,22 @@ When a string literal appears in both a source file (e.g. map key) and two test-
 
 ---
 
+## 2026-06-29 - mrr-9yi.4
+- Added `iconResolver IssueTypeIconResolver` field to `cardWidget`, `columnWidget`, and `boardWidget`
+- Updated `newCardWidget`, `newColumnWidget`, `newBoardWidget` to accept and propagate the resolver
+- Added `renderLine3()` on `cardWidget` — returns `icon + " " + key` styled with `CardMeta`, empty string when no JIRA key in title
+- Updated `render()` to insert line 3 after line 2 when non-empty
+- Updated `measureHeight()` to add 1 when `domain.ExtractJiraID(c.mr.Title) != ""`
+- Extracted `ir := NewIssueTypeIconResolver(...)` before the `Model` struct literal in `model.go` so it can be passed to `newBoardWidget`
+- Updated `card_preview_test.go` to pass `IssueTypeIconResolver{}` (zero value) to `newCardWidget`
+- **Files changed:** `internal/tui/card.go`, `internal/tui/column.go`, `internal/tui/board.go`, `internal/tui/model.go`, `internal/tui/card_preview_test.go`
+- **Learnings:**
+  - Zero-value `IssueTypeIconResolver{}` has nil `icons` map — `Resolve("")` returns `unknownIssueTypeIcon` correctly since the nil map lookup returns `("", false)`. Safe to use in tests without initializing.
+  - Threading a new parameter down 3 levels (board → column → card) is straightforward: add to each struct, update constructors, pass through. `just check` catches all missed call sites immediately.
+  - lll linter (120 char limit) triggers on long function signatures — break with multi-line format when over limit.
+
+---
+
 ## 2026-06-29 - mrr-9yi.3
 - Added `JiraIssueTypeMsg{IssueKey, IssueType, Err}` msg type to model.go
 - Added `jiraEnricher jirasvc.JiraEnricher` and `iconResolver IssueTypeIconResolver` fields to `Model` struct

@@ -311,10 +311,12 @@ func New(
 	}
 	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
 
+	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
+
 	m := Model{
 		state:              stateLoading,
 		header:             newHeaderWidget(styles),
-		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight),
+		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir),
 		footer:             newFooterWidget(keys, styles, version),
 		sp:                 newSpinnerWidget(),
 		detail:             newDetailWidget(styles),
@@ -343,7 +345,7 @@ func New(
 		notifier:           notifier,
 		jiraBaseURL:        cfg.Jira.InstanceURL,
 		jiraEnricher:       jiraEnricher,
-		iconResolver:       NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons),
+		iconResolver:       ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
 			WithMinWidth(toastMinWidth).

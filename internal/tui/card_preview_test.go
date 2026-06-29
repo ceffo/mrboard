@@ -44,7 +44,7 @@ func TestCardPreview(t *testing.T) {
 		return lip.NewStyle().Foreground(lip.Color("240")).Render("── " + label + " " + line)
 	}
 
-	c := newCardWidget(mr, styles, cardWidth)
+	c := newCardWidget(mr, styles, cardWidth, IssueTypeIconResolver{})
 
 	fmt.Println(sep("unfocused"))
 	fmt.Println(c.render())

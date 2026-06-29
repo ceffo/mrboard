@@ -14,11 +14,12 @@ const (
 )
 
 type boardWidget struct {
-	columns    [4]columnWidget
-	focusedCol int
-	styles     Styles
-	width      int
-	height     int
+	columns      [4]columnWidget
+	focusedCol   int
+	styles       Styles
+	iconResolver IssueTypeIconResolver
+	width        int
+	height       int
 }
 
 var phaseOrder = [4]domain.MRPhase{
@@ -28,11 +29,11 @@ var phaseOrder = [4]domain.MRPhase{
 	domain.PhaseReadyToMerge,
 }
 
-func newBoardWidget(styles Styles, width, height int) boardWidget {
-	b := boardWidget{styles: styles, width: width, height: height}
+func newBoardWidget(styles Styles, width, height int, iconResolver IssueTypeIconResolver) boardWidget {
+	b := boardWidget{styles: styles, iconResolver: iconResolver, width: width, height: height}
 	widths := columnWidths(width)
 	for i, phase := range phaseOrder {
-		b.columns[i] = newColumnWidget(phase, styles, widths[i], height)
+		b.columns[i] = newColumnWidget(phase, styles, widths[i], height, iconResolver)
 		b.columns[i].SetActive(true)
 	}
 	b.columns[0].SetFocused(true)

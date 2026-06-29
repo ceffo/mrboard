@@ -27,13 +27,14 @@ const (
 type cardWidget struct {
 	mr            domain.MergeRequest
 	styles        Styles
+	iconResolver  IssueTypeIconResolver
 	focused       bool
 	focusInactive bool // focused but board does not own the keyboard (detail panel open)
 	width         int
 }
 
-func newCardWidget(mr domain.MergeRequest, styles Styles, width int) cardWidget {
-	return cardWidget{mr: mr, styles: styles, width: width}
+func newCardWidget(mr domain.MergeRequest, styles Styles, width int, iconResolver IssueTypeIconResolver) cardWidget {
+	return cardWidget{mr: mr, styles: styles, width: width, iconResolver: iconResolver}
 }
 
 func (c *cardWidget) SetFocused(v bool)       { c.focused = v }
@@ -53,9 +54,13 @@ func (c cardWidget) measureHeight(w int) int {
 
 	nTitle := len(wrapLines(c.mr.Title, innerWidth, cardTitleLines))
 	nPills := len(c.wrapPills(now, innerWidth))
+	nJira := 0
+	if domain.ExtractJiraID(c.mr.Title) != "" {
+		nJira = 1
+	}
 
-	// line1(1) + line2(1) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
-	return 6 + nTitle + nPills
+	// line1(1) + line2(1) + jira(nJira) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
+	return 6 + nTitle + nPills + nJira
 }
 
 func (c cardWidget) render() string {
@@ -86,6 +91,9 @@ func (c cardWidget) render() string {
 
 	rawLines := []string{c.renderLine1(authorLabel, openDur, innerWidth)}
 	rawLines = append(rawLines, c.renderLine2(innerWidth))
+	if line3 := c.renderLine3(); line3 != "" {
+		rawLines = append(rawLines, line3)
+	}
 	rawLines = append(rawLines, "") // blank line before title
 	titleWidth := innerWidth
 	titleStyle := c.titleStyle()
@@ -151,6 +159,18 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 		pad = 0
 	}
 	return authorStyled + strings.Repeat(" ", pad) + rightRendered
+}
+
+// renderLine3 builds the optional JIRA line: icon + issue key.
+// Returns "" when the MR title contains no extractable JIRA key.
+// Uses 🎫 as a loading placeholder until JiraIssueType is populated.
+func (c cardWidget) renderLine3() string {
+	key := domain.ExtractJiraID(c.mr.Title)
+	if key == "" {
+		return ""
+	}
+	icon := c.iconResolver.Resolve(c.mr.JiraIssueType)
+	return c.styles.CardMeta.Render(icon + " " + key)
 }
 
 // renderLine2 builds the second card line: !IID + last path segment of ProjectPath.

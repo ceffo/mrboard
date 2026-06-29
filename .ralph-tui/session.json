@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:51:46.440Z",
-  "currentIteration": 7,
+  "updatedAt": "2026-06-29T15:57:36.809Z",
+  "currentIteration": 8,
   "maxIterations": 10,
-  "tasksCompleted": 7,
+  "tasksCompleted": 8,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -116,6 +116,16 @@
       "durationMs": 251987,
       "startedAt": "2026-06-29T15:41:33.527Z",
       "endedAt": "2026-06-29T15:45:45.514Z"
+    },
+    {
+      "iteration": 8,
+      "status": "completed",
+      "taskId": "mrr-9yi.3",
+      "taskTitle": "tui: async enrichment — background fetch of issue type, send update Msg",
+      "taskCompleted": true,
+      "durationMs": 359610,
+      "startedAt": "2026-06-29T15:45:46.798Z",
+      "endedAt": "2026-06-29T15:51:46.408Z"
     }
   ],
   "skippedTaskIds": [],
