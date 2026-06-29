@@ -1,0 +1,52 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-9yi.1
+- **Task Title**: domain: add JiraIssueType field to MergeRequest
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:40:31.270Z
+- **Ended At**: 2026-06-29T15:41:32.295Z
+- **Duration**: 1m 1s
+- **Input Tokens**: 45
+- **Output Tokens**: 2812
+- **Total Tokens**: 2857
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file and understanding the current state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m $ br show mrr-9yi.1 --format toon 2>/dev/null || br show mrr-9yi.1 2>/dev/null
+Let me look at the domain model and understand what needs to be added.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain[0m
+
+[91m[Error: EISDIR: illegal operation on a directory, read '/Users/moncefnaji/code/github.com/mrboard/internal/domain'][0m
+[94m[Bash][0m $ br show mrr-9yi --format toon 2>/dev/null
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/domain/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Now I have a clear picture. I need to add `JiraIssueType string` to `MergeRequest`. This is a simple domain change — stdlib-only, no external deps.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m edit: "	ReviewerSource bool // true when this MR came onl..." → "	ReviewerSource bool // true when this MR came onl..."
+[94m[Bash][0m $ just check 2>&1
+All tests pass. Now let me close the bead, update progress.md, and flush.
+[94m[Bash][0m $ stdlib-only, zero value means unfetched"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+" → "---
+
+## 2026-06-29 - mrr-9yi.1
+- Added `JiraIssueT..."
+
+[91m[Error: <tool_use_error>Found 6 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - Local `jiraClient` interface in the adapter pa..." → "  - Local `jiraClient` interface in the adapter pa..."
+[94m[Bash][0m $ br sync --flush-only
+Done. Added `JiraIssueType string` to `domain.MergeRequest` in `internal/domain/mr.go:154`. All tests pass. The zero value signals "not yet fetched" — async enrichment (mrr-9yi.3) will populate it after the initial board load.
+
+<promise>COMPLETE</promise>

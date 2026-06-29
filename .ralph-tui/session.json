@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:41:32.322Z",
-  "currentIteration": 5,
+  "updatedAt": "2026-06-29T15:45:45.564Z",
+  "currentIteration": 6,
   "maxIterations": 10,
-  "tasksCompleted": 5,
+  "tasksCompleted": 6,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -96,6 +96,16 @@
       "durationMs": 84111,
       "startedAt": "2026-06-29T15:37:50.979Z",
       "endedAt": "2026-06-29T15:39:15.090Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "mrr-9yi.1",
+      "taskTitle": "domain: add JiraIssueType field to MergeRequest",
+      "taskCompleted": true,
+      "durationMs": 61025,
+      "startedAt": "2026-06-29T15:40:31.270Z",
+      "endedAt": "2026-06-29T15:41:32.295Z"
     }
   ],
   "skippedTaskIds": [],

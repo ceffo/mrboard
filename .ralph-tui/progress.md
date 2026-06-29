@@ -5,6 +5,9 @@ after each iteration and it's included in prompts for context.
 
 ## Codebase Patterns (Study These First)
 
+### goconst across test files
+When a string literal appears in both a source file (e.g. map key) and two test-table rows across one or more test files, `goconst` will trigger (threshold: 3 occurrences across the package). Fix: define package-level const in the source file for keys used >1 time in tests; define test-local `const` in `_test.go` for repeated literals. Using a different (semantically equivalent) string in tests avoids cross-file collisions (e.g. use "Incident" instead of "Unknown" to test the fallback path when "Unknown" already appears in other files).
+
 *Add reusable patterns discovered during development here.*
 
 ---
@@ -77,6 +80,19 @@ after each iteration and it's included in prompts for context.
   - `goconst` linter requires 3+ occurrences of the same string literal in tests to be a constant — use named constants when repeating test fixture strings
   - Using `json.RawMessage` for the cache value field gives generic read/write without Go generics complexity
   - Local `jiraClient` interface in the adapter package avoids needing mockery for adapter unit tests — plain fake structs in `_test.go` files suffice
+
+---
+
+## 2026-06-29 - mrr-9yi.2
+- Created `internal/tui/jira_icons.go`: `IssueTypeIconResolver` struct with `NewIssueTypeIconResolver(overrides map[string]string)` and `Resolve(issueType string) string`
+- Default map: Bug=🐛 Story=📖 Task=☑️ Epic=⚡ Subtask=↩️; fallback=🎫
+- Case-insensitive lookup; override keys (from `jira.issue_type_icons` config) take precedence over defaults
+- Map keys extracted as package-level constants (`issueTypeBug`, `issueTypeStory`, etc.) — used both in the map and referenced in tests
+- Created `internal/tui/jira_icons_test.go` with two test cases: defaults and overrides
+- **Files changed:** `internal/tui/jira_icons.go`, `internal/tui/jira_icons_test.go`
+- **Learnings:**
+  - `goconst` counts string literals across ALL files in a package — a string in a map key + 2 test rows triggers the linter; fix by defining constants in the source file and reusing them in tests
+  - Cross-file "Unknown" collision: the literal "Unknown" was already used in `column.go` and `detail.go`; adding it in a third file triggered `goconst`. Use a semantically equivalent but distinct string (e.g. "Incident") for unrecognized-type fallback tests to avoid the collision without modifying unrelated files.
 
 ---
 
