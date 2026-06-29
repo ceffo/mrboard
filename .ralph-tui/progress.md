@@ -49,3 +49,21 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+## 2026-06-29 - mrr-6bb.4
+- Added `GetSprintIssueKeys(ctx, sprintID int)` to `pkg/jira/client.go` — paginates through `/rest/agile/1.0/sprint/{id}/issue?fields=key` until all keys are fetched
+- Created `internal/adapters/jiraadpt/jiraadpt.go`:
+  - `jiraClient` local interface (enables test fakes without mockery)
+  - `Config{CacheDir, TTL}` — CacheDir defaults to `os.UserCacheDir()/mrboard/jira`
+  - `JiraAdapter` implementing `jirasvc.JiraEnricher` with write-through JSON disk cache
+  - `cacheEntry{Value json.RawMessage, ExpiresAt time.Time}` — generic via `json.RawMessage`
+  - `readCache` / `writeCache` helpers — cache errors are warnings, live data always returned
+  - `sanitizeKey` replaces `/`, `\`, `:` with `_` for safe filenames
+- Created `internal/adapters/jiraadpt/jiraadpt_test.go` with 7 tests covering live+cache, TTL disabled, no-sprint, nil-issue, sanitize, and bad-dir scenarios
+- **Files changed:** `pkg/jira/client.go`, `internal/adapters/jiraadpt/jiraadpt.go`, `internal/adapters/jiraadpt/jiraadpt_test.go`
+- **Learnings:**
+  - `mnd` linter flags octal literals (`0o700`, `0o600`) — extract as named constants (`cacheDirPerm`, `cacheFilePerm`)
+  - `goconst` linter requires 3+ occurrences of the same string literal in tests to be a constant — use named constants when repeating test fixture strings
+  - Using `json.RawMessage` for the cache value field gives generic read/write without Go generics complexity
+  - Local `jiraClient` interface in the adapter package avoids needing mockery for adapter unit tests — plain fake structs in `_test.go` files suffice
+
+---

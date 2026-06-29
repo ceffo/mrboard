@@ -82,6 +82,36 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 	return &Sprint{ID: s.ID, Name: s.Name}, nil
 }
 
+const sprintIssuePageSize = 50
+
+// GetSprintIssueKeys returns all issue keys belonging to the given sprint,
+// automatically paginating through the full result set.
+func (c *Client) GetSprintIssueKeys(ctx context.Context, sprintID int) ([]string, error) {
+	var keys []string
+	startAt := 0
+	for {
+		url := fmt.Sprintf("%s/rest/agile/1.0/sprint/%d/issue?fields=key&maxResults=%d&startAt=%d",
+			c.instanceURL, sprintID, sprintIssuePageSize, startAt)
+		var body struct {
+			Total  int `json:"total"`
+			Issues []struct {
+				Key string `json:"key"`
+			} `json:"issues"`
+		}
+		if err := c.get(ctx, url, &body); err != nil {
+			return nil, fmt.Errorf("jira: get sprint %d issues (startAt=%d): %w", sprintID, startAt, err)
+		}
+		for _, issue := range body.Issues {
+			keys = append(keys, issue.Key)
+		}
+		if len(body.Issues) == 0 || len(keys) >= body.Total {
+			break
+		}
+		startAt += len(body.Issues)
+	}
+	return keys, nil
+}
+
 // get performs an authenticated GET request and JSON-decodes the response body
 // into dest. Returns an error on non-2xx status codes.
 func (c *Client) get(ctx context.Context, url string, dest any) error {

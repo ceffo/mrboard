@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:33:48.483Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-06-29T15:37:49.768Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -29,8 +29,8 @@
       {
         "id": "mrr-6bb.3",
         "title": "jirasvc: JiraEnricher port (GetIssueType, GetActiveSprintIssueKeys)",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-6bb.4",
@@ -66,6 +66,16 @@
       "durationMs": 144717,
       "startedAt": "2026-06-29T15:29:33.194Z",
       "endedAt": "2026-06-29T15:31:57.911Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "mrr-6bb.3",
+      "taskTitle": "jirasvc: JiraEnricher port (GetIssueType, GetActiveSprintIssueKeys)",
+      "taskCompleted": true,
+      "durationMs": 109293,
+      "startedAt": "2026-06-29T15:31:59.163Z",
+      "endedAt": "2026-06-29T15:33:48.456Z"
     }
   ],
   "skippedTaskIds": [],
