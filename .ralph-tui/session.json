@@ -3,10 +3,10 @@
   "sessionId": "f6812486-22a9-4a3f-932f-b1f185eb6815",
   "status": "running",
   "startedAt": "2026-06-29T15:25:55.630Z",
-  "updatedAt": "2026-06-29T15:45:45.564Z",
-  "currentIteration": 6,
+  "updatedAt": "2026-06-29T15:51:46.440Z",
+  "currentIteration": 7,
   "maxIterations": 10,
-  "tasksCompleted": 6,
+  "tasksCompleted": 7,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -106,6 +106,16 @@
       "durationMs": 61025,
       "startedAt": "2026-06-29T15:40:31.270Z",
       "endedAt": "2026-06-29T15:41:32.295Z"
+    },
+    {
+      "iteration": 7,
+      "status": "completed",
+      "taskId": "mrr-9yi.2",
+      "taskTitle": "tui: issue type icon resolver (default map + config overrides)",
+      "taskCompleted": true,
+      "durationMs": 251987,
+      "startedAt": "2026-06-29T15:41:33.527Z",
+      "endedAt": "2026-06-29T15:45:45.514Z"
     }
   ],
   "skippedTaskIds": [],

@@ -1,0 +1,142 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: mrr-9yi.2
+- **Task Title**: tui: issue type icon resolver (default map + config overrides)
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:41:33.527Z
+- **Ended At**: 2026-06-29T15:45:45.514Z
+- **Duration**: 4m 11s
+- **Input Tokens**: 87
+- **Output Tokens**: 13323
+- **Total Tokens**: 13410
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading the project context and understanding what needs to be implemented.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-9yi jira issue type icon[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Let me look at the bead details and the current config to understand what's needed.
+[94m[Bash][0m Show bead details for mrr-9yi.2 $ br show mrr-9yi.2 --format toon
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mJIRA integration design card display issue type icons[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_get_observation[0m
+[94m[mcp__plugin_engram_engram__mem_get_observation][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+Let me look at the TUI structure to understand where the resolver should live.
+[94m[Bash][0m List TUI directory contents $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+Let me look at card.go to understand the rendering structure.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m
+Now I have a clear picture. I'll implement the issue type icon resolver — a small struct in the TUI package with a default icon map and config override support.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons.go[0m "package tui
+
+import "strings"
+
+// defaultIssueTypeIcons maps canonical JIRA issue type names to their emoji icons.
+// Lookup is case-insensitive; these keys are stored in their canonical casing.
+var d... (1661 chars)"
+Now the test file:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons_test.go[0m "package tui
+
+import (
+	"testing"
+)
+
+func TestIssueTypeIconResolver_Defaults(t *testing.T) {
+	r := NewIssueTypeIconResolver(nil)
+
+	cases := []struct {
+		issueType string
+		want      string
+	}{
+		{"Bug"... (1325 chars)"
+[94m[Bash][0m Run quality gates $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/column.go:53:10: string `Unknown` has 3 occurrences, make it a constant (goconst)
+		return "Unknown"
+		       ^
+internal/tui/detail.go:269:10: string `Unknown` has 3 occurrences, make it a constant (goconst)
+		return "Unknown"
+		       ^
+internal/tui/jira_icons.go:10:2: string `bug` has 3 occurrences, make it a constant (goconst)
+	"bug":     "🐛",
+	^
+internal/tui/jira_icons_test.go:14:4: string `Bug` has 3 occurrences, make it a constant (goconst)
+		{"Bug", "🐛"},
+		 ^
+internal/tui/jira_icons_test.go:15:4: string `bug` has 3 occurrences, make it a constant (goconst)
+		{"bug", "🐛"},
+		 ^
+internal/tui/jira_icons_test.go:25:4: string `Unknown` has 3 occurrences, make it a constant (goconst)
+		{"Unknown", unknownIssueTypeIcon},
+		 ^
+internal/tui/jira_icons_test.go:27:4: string `Tech Debt` has 3 occurrences, make it a constant (goconst)
+		{"Tech Debt", unknownIssueTypeIcon},
+		 ^
+7 issues:
+* goconst: 7
+error: recipe `lint` failed on line 17 with exit code 1][0m
+The goconst linter complains about string repetitions. Let me check what "Unknown" is used for in the existing TUI files and fix accordingly.
+[94m[Bash][0m Find all occurrences of "Unknown" in tui package $ rg '"Unknown"' /Users/moncefnaji/code/github.com/mrboard/internal/tui/ --with-filename -n
+I need to define constants to satisfy goconst. Let me fix both files:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons.go[0m "package tui
+
+import "strings"
+
+// Canonical (lowercased) keys for the default issue type icon map.
+const (
+	issueTypeBug     = "bug"
+	issueTypeStory   = "story"
+	issueTypeTask    = "task"
+	issueTypeEp... (1877 chars)"
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons_test.go[0m "package tui
+
+import (
+	"testing"
+)
+
+// Test-local string constants to avoid goconst lint violations.
+const (
+	testBugTitle  = "Bug"
+	testTechDebt  = "Tech Debt"
+	testUnknownFB = "Incident" // unrecogn... (1689 chars)"
+[94m[Bash][0m Run quality gates $ just check 2>&1
+All checks pass. Now let me close the bead, flush, and update the progress file.
+[94m[Bash][0m Close bead mrr-9yi.2 $ tests pass"
+[94m[Bash][0m Flush beads to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons_test.go[0m edit: "		{"tech debt", "🔧"},  // case-insensitive lookup" → "		{"tech debt", "🔧"}, // case-insensitive lookup"
+Now update progress.md:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons_test.go[0m edit: "		{"tech debt", "🔧"}, // case-insensitive lookup" → "		{"tech debt", "🔧"}, // case-insensitive"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+### goco..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-9yi.1" → "## 2026-06-29 - mrr-9yi.2
+- Created `internal/tui/..."
+[94m[mcp__plugin_engram_engram__mem_save][0m "**Rule**: `goconst` counts string literals across ALL files in the same Go package — a map key in source + two test table rows can hit the threshold of 3 and fail lint.
+
+**Fix pattern**:
+1. Define pac... (1011 chars)"
+Done. Here's a summary of what was implemented:
+
+**`internal/tui/jira_icons.go`** — new file with:
+- `IssueTypeIconResolver` struct with case-insensitive lookup
+- `NewIssueTypeIconResolver(overrides map[string]string)` — merges defaults with config overrides, overrides win
+- `Resolve(issueType string) string` — returns the emoji or `"🎫"` as the fallback
+- Default map: Bug=🐛 Story=📖 Task=☑️ Epic=⚡ Subtask=↩️
+
+**`internal/tui/jira_icons_test.go`** — 2 test functions covering all defaults, case-insensitivity, config overrides, and the fallback.
+
+Key gotcha: `goconst` counts literals across the whole package, so map key strings needed to become package-level constants and test strings needed test-local constants to stay under the threshold.
+
+<promise>COMPLETE</promise>

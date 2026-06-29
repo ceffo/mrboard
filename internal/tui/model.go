@@ -17,6 +17,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/jirasvc"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	"github.com/ceffo/mrboard/pkg/theme"
@@ -97,6 +98,7 @@ const (
 	detailWidthRatio   = 40  // percent of total width for the detail panel
 	detailWidthDivisor = 100 // divisor for percentage calculation
 	fetchTimeout       = 60 * time.Second
+	jiraFetchTimeout   = 30 * time.Second
 	toastWidth         = 50
 	toastMinWidth      = 30
 	toastQueueDepth    = 16
@@ -168,6 +170,13 @@ type NotifyResultMsg struct {
 	Err error
 }
 
+// JiraIssueTypeMsg carries the result of a background JIRA issue type fetch.
+type JiraIssueTypeMsg struct {
+	IssueKey  string
+	IssueType string // "" on error or not found
+	Err       error
+}
+
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
 type TeamResolvedMsg struct {
 	Roster           []domain.User
@@ -229,7 +238,9 @@ type Model struct {
 	notifier           domain.Notifier
 	alerts             toast.Model
 	jiraBaseURL        string
-	teamRoster         []domain.User // resolved once at startup from type:user sources
+	jiraEnricher       jirasvc.JiraEnricher  // nil when JIRA is not configured
+	iconResolver       IssueTypeIconResolver // maps JIRA issue type names to emoji
+	teamRoster         []domain.User         // resolved once at startup from type:user sources
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -240,6 +251,7 @@ func New(
 	src mrsvc.MergeRequestSource,
 	store domain.StateStore,
 	notifier domain.Notifier,
+	jiraEnricher jirasvc.JiraEnricher,
 	version string,
 	opts Options,
 ) Model {
@@ -330,6 +342,8 @@ func New(
 		logger:             logger,
 		notifier:           notifier,
 		jiraBaseURL:        cfg.Jira.InstanceURL,
+		jiraEnricher:       jiraEnricher,
+		iconResolver:       NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons),
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
 			WithMinWidth(toastMinWidth).
@@ -463,7 +477,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prevFocusMR = nil
 		}
 		m.updateJiraKey()
-		return m, nil
+		return m, m.makeJiraEnrichCmds()
 
 	case FetchErrMsg:
 		m.isRefreshing = false
@@ -508,6 +522,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
+
+	case JiraIssueTypeMsg:
+		return m.handleJiraIssueType(msg)
 
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
@@ -1105,6 +1122,54 @@ func (m Model) handleTeamResolved(msg TeamResolvedMsg) (tea.Model, tea.Cmd) {
 		return m, m.toast(toast.WarnAlert, "Unknown team members: "+strings.Join(msg.InvalidUsernames, ", "))
 	}
 	return m, nil
+}
+
+// handleJiraIssueType stores a freshly fetched JIRA issue type on the matching MR(s).
+func (m Model) handleJiraIssueType(msg JiraIssueTypeMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Warn("tui: jira fetch failed", "key", msg.IssueKey, "err", msg.Err)
+		return m, nil
+	}
+	for i := range m.allMRs {
+		if domain.ExtractJiraID(m.allMRs[i].Title) == msg.IssueKey {
+			m.allMRs[i].JiraIssueType = msg.IssueType
+		}
+	}
+	m.applyMRFilter()
+	return m, nil
+}
+
+// makeJiraEnrichCmds returns one fetch command per unique JIRA issue key found
+// in allMRs. Returns nil when jiraEnricher is nil or no keys are found.
+func (m *Model) makeJiraEnrichCmds() tea.Cmd {
+	if m.jiraEnricher == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var cmds []tea.Cmd
+	for _, mr := range m.allMRs {
+		if issueKey := domain.ExtractJiraID(mr.Title); issueKey != "" {
+			if _, ok := seen[issueKey]; !ok {
+				seen[issueKey] = struct{}{}
+				cmds = append(cmds, makeJiraFetchCmd(m.baseCtx, m.jiraEnricher, issueKey))
+			}
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// makeJiraFetchCmd returns a Cmd that calls GetIssueType for issueKey and
+// wraps the result in a JiraIssueTypeMsg.
+func makeJiraFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, issueKey string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		defer cancel()
+		issueType, err := enricher.GetIssueType(ctx, issueKey)
+		return JiraIssueTypeMsg{IssueKey: issueKey, IssueType: issueType, Err: err}
+	}
 }
 
 // handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.

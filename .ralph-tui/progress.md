@@ -106,3 +106,23 @@ When a string literal appears in both a source file (e.g. map key) and two test-
   - Zero value as sentinel ("not yet fetched") is the correct pattern for async-populated fields — no `*string` or separate bool needed
 
 ---
+
+## 2026-06-29 - mrr-9yi.3
+- Added `JiraIssueTypeMsg{IssueKey, IssueType, Err}` msg type to model.go
+- Added `jiraEnricher jirasvc.JiraEnricher` and `iconResolver IssueTypeIconResolver` fields to `Model` struct
+- Added `jiraFetchTimeout = 30 * time.Second` constant
+- Updated `tui.New()` to accept `jiraEnricher jirasvc.JiraEnricher`; initializes `iconResolver` from `cfg.Jira.IssueTypeIcons`
+- Added `makeJiraFetchCmd(ctx, enricher, issueKey)` — returns a `tea.Cmd` calling `GetIssueType` wrapped in `JiraIssueTypeMsg`
+- Added `makeJiraEnrichCmds()` method — deduplicates issue keys across allMRs, returns `tea.Batch` of fetch cmds; no-op when `jiraEnricher == nil`
+- Added `handleJiraIssueType(msg)` handler — logs errors, updates `allMRs[i].JiraIssueType` for matching key, calls `applyMRFilter()`
+- FetchResultMsg handler now returns `m.makeJiraEnrichCmds()` instead of `nil`
+- Updated `internal/cmd/mrboard/board.go` to pass `c.JiraEnricher` to `tui.New`
+- Fixed 3 `tui.New` call sites in `model_test.go` to pass `nil` for the new `jiraEnricher` parameter
+- **Files changed:** `internal/tui/model.go`, `internal/cmd/mrboard/board.go`, `internal/tui/model_test.go`
+- **Learnings:**
+  - Dedup by issue key before fanning out fetch commands — multiple MRs can share the same JIRA ticket
+  - `iconResolver IssueTypeIconResolver` added to Model now so mrr-9yi.4 (card rendering) can use it without constructor changes
+  - Pattern for adding a new parameter to `tui.New`: update signature → update model struct → update board.go call site → update all _test.go call sites
+  - `just check` catches test call-site mismatches immediately; always run after signature changes
+
+---

@@ -54,7 +54,7 @@ func TestIssueTypeIconResolver_Overrides(t *testing.T) {
 		want      string
 	}{
 		{testTechDebt, "🔧"},
-		{"tech debt", "🔧"}, // case-insensitive
+		{"tech debt", "🔧"},  // case-insensitive
 		{testBugTitle, "🔴"}, // override wins over default
 		{issueTypeBug, "🔴"}, // same override, lowercase input
 		{"Story", "📖"},      // unchanged default
