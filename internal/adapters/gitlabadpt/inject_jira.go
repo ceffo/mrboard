@@ -15,9 +15,11 @@ import (
 const jiraMarker = "<!-- mrboard -->"
 
 // injectJiraLinksBackground fires a background goroutine for each MR that has a
-// JIRA ID in its title. Each goroutine fetches the description, checks for the
-// marker, and writes the link once if the marker is absent. No-op when
-// JiraInstanceURL is not configured.
+// JIRA ID in its title and has not been processed yet this process lifetime.
+// LoadOrStore atomically claims each mrKey before spawning — only one goroutine
+// ever runs per MR, eliminating both duplicate writes across concurrent refreshes
+// and wasted GET calls after the first successful inject. On error the key is
+// removed so the next refresh can retry. No-op when JiraInstanceURL is not set.
 func (a *GitLabAdapter) injectJiraLinksBackground(ctx context.Context, mrs []domain.MergeRequest) {
 	if a.cfg.JiraInstanceURL == "" {
 		return
@@ -29,10 +31,15 @@ func (a *GitLabAdapter) injectJiraLinksBackground(ctx context.Context, mrs []dom
 		if issueKey == "" {
 			continue
 		}
+		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		if _, loaded := a.injected.LoadOrStore(k, struct{}{}); loaded {
+			continue // already injected or in-flight
+		}
 		mr := mr
 		go func() {
 			err := a.maybeInjectJiraLink(bgCtx, int64(mr.ProjectID), int64(mr.IID), issueKey, logger)
 			if err != nil {
+				a.injected.Delete(k) // allow retry on next refresh
 				logger.Warn("gitlab: jira link inject failed",
 					"project_id", mr.ProjectID, "mr_iid", mr.IID, "issue_key", issueKey, "error", err)
 			}

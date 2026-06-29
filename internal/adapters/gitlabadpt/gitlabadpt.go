@@ -39,8 +39,9 @@ type gitLabClient interface {
 
 // GitLabAdapter implements mrsvc.MergeRequestSource using a live GitLab client.
 type GitLabAdapter struct {
-	client gitLabClient
-	cfg    Config
+	client   gitLabClient
+	cfg      Config
+	injected sync.Map // tracks mrKey → struct{}{} for JIRA link dedup across refreshes
 }
 
 // New constructs a GitLabAdapter.
