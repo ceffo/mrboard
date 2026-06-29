@@ -42,4 +42,6 @@ type MRWriter interface {
 	// ListUsersByUsername looks up a GitLab user by exact username.
 	// Returns nil, nil if no user is found.
 	ListUsersByUsername(ctx context.Context, username string) (*gl.User, error)
+	// UpdateMRDescription replaces the body of an MR with the given description.
+	UpdateMRDescription(ctx context.Context, projectID, mrIID int64, description string) error
 }

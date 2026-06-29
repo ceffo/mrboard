@@ -416,6 +416,23 @@ func (c *Client) SetMRReviewers(ctx context.Context, projectID, mrIID int64, use
 	return nil
 }
 
+// UpdateMRDescription replaces the body of an MR with the given description.
+func (c *Client) UpdateMRDescription(ctx context.Context, projectID, mrIID int64, description string) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: update MR description", "project_id", projectID, "mr_iid", mrIID)
+	_, _, err := c.gl.MergeRequests.UpdateMergeRequest(projectID, mrIID,
+		&gl.UpdateMergeRequestOptions{Description: gl.Ptr(description)},
+		gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: update MR description error", "project_id", projectID, "mr_iid", mrIID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return fmt.Errorf("gitlab: update description project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Info("gitlab: update MR description done", "project_id", projectID, "mr_iid", mrIID,
+		"duration", ilog.FmtDur(time.Since(start)))
+	return nil
+}
+
 // ListUsersByUsername looks up a GitLab user by exact username.
 // Returns nil, nil if no user is found.
 func (c *Client) ListUsersByUsername(ctx context.Context, username string) (*gl.User, error) {

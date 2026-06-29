@@ -1,0 +1,148 @@
+# Iteration 9 Log
+
+## Metadata
+
+- **Task ID**: mrr-9yi.4
+- **Task Title**: tui: render JIRA line 3 on cardWidget (🎫 placeholder → icon + ID)
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T15:51:47.674Z
+- **Ended At**: 2026-06-29T15:57:36.774Z
+- **Duration**: 5m 49s
+- **Input Tokens**: 183
+- **Output Tokens**: 20176
+- **Total Tokens**: 20359
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-6bb
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and reviewing the progress file to understand what's already been done.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Good, I have the context. The previous session (mrr-9yi.3) added `iconResolver` to `Model` and wired up async enrichment. Now I need to implement the card rendering in `cardWidget`. Let me read the relevant files.
+[94m[Bash][0m Check file sizes $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go /Users/moncefnaji/code/github.c...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/jira_icons.go[0m
+Now let me check how JIRA issue key is stored and how the card renders — I need to understand the full domain model and where the JIRA key comes from.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m Find where JIRA issue key is stored $ rg -n "JiraIssueKey\|jiraKey\|jiraIssueKey\|JiraKey\|issueKey\|IssueKey" /Users/moncefnaji/code/gith...
+I see `JiraIssueType` exists but no `JiraIssueKey` field. Let me check the model to understand how issue keys are tracked.
+[94m[Bash][0m Find JIRA key extraction and message handling in TUI $ rg -n "jiraKey\|issueKey\|IssueKey\|JiraIssue\|jiraIssue\|makeJiraFetch\|JiraIssueTypeMsg\|extractJi...
+[94m[Bash][0m Find JIRA key extraction and message handling in TUI $ rg -n "jiraKey\|issueKey\|IssueKey\|JiraIssue\|jiraIssue\|makeJiraFetch\|JiraIssueTypeMsg\|extractJi...
+[94m[Bash][0m Find JIRA key references in internal $ rg -rn "jiraKey\|issueKey\|IssueKey\|JiraIssue\|makeJira\|JiraFetch" /Users/moncefnaji/code/github.c...
+[94m[Bash][0m Find all JIRA references in TUI package $ rg -rn "Jira\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ | head -40
+[94m[Bash][0m Find JIRA references in model.go $ rg -n "Jira\|jira" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -40
+[94m[Bash][0m Check recent commits $ git log --oneline -5
+[94m[Bash][0m Show files changed in mrr-9yi.3 commit $ git show 5acd2f3 --stat
+[94m[Bash][0m Find JIRA references in model.go $ rg -n "Jira\|jira\|IssueType" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head...
+[94m[Bash][0m Find JIRA references in model.go with grep $ grep -n -i "jira\|IssueType\|iconResolver" /Users/moncefnaji/code/github.com/mrboard/internal/tui/mo...
+Good, I can see `domain.ExtractJiraID` is being used. Let me check its implementation and find `newCardWidget` call sites.
+[94m[Bash][0m Find ExtractJiraID function $ grep -n "ExtractJiraID\|JiraIssueURL" /Users/moncefnaji/code/github.com/mrboard/internal/domain/*.go
+[94m[Bash][0m Find newCardWidget call sites $ grep -rn "newCardWidget" /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/jira.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m
+Let me check how `columnWidget` is created in model.go and how the resolver can be threaded through.
+[94m[Bash][0m Find column widget setup in model.go $ grep -n "columnWidget\|newColumnWidget\|iconResolver\|SetCards\|columns" /Users/moncefnaji/code/gith...
+[94m[Bash][0m Find column references in model.go $ grep -n "column\|Column" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -40
+[94m[Bash][0m Find column widget usage in model.go $ grep -n "columns\|Columns\|columnWidget\|newColumn" /Users/moncefnaji/code/github.com/mrboard/intern...
+[94m[Bash][0m Find column references in model.go $ grep -n "columns\|column" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -20
+[94m[Bash][0m Find col variable in model.go $ grep -n "col\b" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -30
+[94m[Bash][0m Find card and column widget usage in model.go $ grep -n "cardWidget\|columnWidget\|SetCards" /Users/moncefnaji/code/github.com/mrboard/internal/tui/...
+[94m[Bash][0m List files in tui package $ ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+[94m[Bash][0m Find card/column widget usage in board.go $ grep -n "SetCards\|cardWidget\|columnWidget\|newColumn" /Users/moncefnaji/code/github.com/mrboard/in...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m
+Now I understand the full chain: `Model` → `boardWidget` → `columnWidget` → `cardWidget`. Let me check how `boardWidget` is set up in model.go.
+[94m[Bash][0m Find boardWidget usage in model.go $ grep -n "board\b\|boardWidget\|newBoardWidget\|SetMRs" /Users/moncefnaji/code/github.com/mrboard/int...
+[94m[Bash][0m Find where SetMRs is called on board $ grep -n "SetMRs\|applyMRFilter\|filteredMRs\|allMRs" /Users/moncefnaji/code/github.com/mrboard/inter...
+Let me check the card_preview_test.go and export_test.go to understand test call sites.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card_preview_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+Now I have all the context needed. Let me implement all changes:
+
+1. `card.go` — add resolver field, `renderLine3`, update `render()` and `measureHeight()`
+2. `column.go` — store resolver, pass it to `newCardWidget`
+3. `board.go` — store resolver, pass it to `newColumnWidget`
+4. `model.go` — pass resolver to `newBoardWidget`
+5. `card_preview_test.go` — update `newCardWidget` call
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "type cardWidget struct {
+	mr            domain.Mer..." → "type cardWidget struct {
+	mr            domain.Mer..."
+Now update `measureHeight` to account for the JIRA line when present:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "// measureHeight returns the number of lines this ..." → "// measureHeight returns the number of lines this ..."
+Now update `render()` to insert line 3:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "	rawLines := []string{c.renderLine1(authorLabel, o..." → "	rawLines := []string{c.renderLine1(authorLabel, o..."
+Now add `renderLine3` method. I'll add it right after `renderLine2`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go[0m edit: "// renderLine2 builds the second card line: !IID +..." → "// renderLine3 builds the optional JIRA line: icon..."
+Now update `column.go` — add `iconResolver` to `columnWidget` and thread it through:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m edit: "type columnWidget struct {
+	phase        domain.MR..." → "type columnWidget struct {
+	phase        domain.MR..."
+Now update `SetCards` in column.go to pass `iconResolver` to `newCardWidget`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m edit: "		c.cards[i] = newCardWidget(mr, c.styles, c.width..." → "		c.cards[i] = newCardWidget(mr, c.styles, c.width..."
+Now update `board.go` — add resolver to `boardWidget` and `newBoardWidget`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m edit: "type boardWidget struct {
+	columns    [4]columnWid..." → "type boardWidget struct {
+	columns      [4]columnW..."
+Now update `model.go` to pass `iconResolver` to `newBoardWidget`:
+[94m[Bash][0m Find newBoardWidget call in model.go $ grep -n "newBoardWidget" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+I need to compute `iconResolver` before the struct literal. Let me see what precedes line 314.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	keys.Jira.SetEnabled(false) // enabled dynamicall..." → "	keys.Jira.SetEnabled(false) // enabled dynamicall..."
+Now update the `iconResolver:` line in the struct literal to use `ir`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		iconResolver:       NewIssueTypeIconResolver(cfg..." → "		iconResolver:       ir,"
+Now fix the `card_preview_test.go` call site:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card_preview_test.go[0m edit: "	c := newCardWidget(mr, styles, cardWidth)" → "	c := newCardWidget(mr, styles, cardWidth, IssueTy..."
+Now run `just check` to verify everything compiles and passes:
+[94m[Bash][0m Run fmt + lint + build + test $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/column.go:33:1: The line is 127 characters long, which exceeds the maximum of 120 characters. (lll)
+func newColumnWidget(phase domain.MRPhase, styles Styles, width, height int, iconResolver IssueTypeIconResolver) columnWidget {
+^
+1 issues:
+* lll: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Line too long in `newColumnWidget`. Let me fix that:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m edit: "func newColumnWidget(phase domain.MRPhase, styles ..." → "func newColumnWidget(
+	phase domain.MRPhase, style..."
+[94m[Bash][0m Run fmt + lint + build + test $ just check 2>&1
+All tests pass. I can see the JIRA line rendering in the test output: `🎫 OD-2245` (placeholder icon since type isn't fetched yet). Now let me verify with agent-tui per the CLAUDE.md requirement.
+[94m[Skill][0m
+[94m[Bash][0m Launch mrboard TUI under agent-tui control $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh
+[94m[Bash][0m Wait for TUI to stabilize $ agent-tui wait --stable
+[94m[Bash][0m Take initial screenshot to verify JIRA line rendering $ agent-tui screenshot
+The JIRA line is rendering correctly. I can see:
+- `📖  OD-2332` (Story icon — enrichment completed)
+- `☑ OD-2362` (Task icon)  
+- `☑ NSDE-4` (Task icon)
+
+Cards without JIRA keys in titles (Draft cards) correctly show no line 3.
+[94m[Bash][0m Clean up agent-tui session $ agent-tui kill
+Now close the bead and update the progress file:
+[94m[Bash][0m Close the bead $ br close mrr-9yi.4 --reason "Rendered JIRA line 3 on cardWidget: icon + key below !IID line, 🎫 plac...
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-29 - mrr-9yi.3" → "## 2026-06-29 - mrr-9yi.4
+- Added `iconResolver Is..."
+Now save a memory for this session:
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-9yi.4: render JIRA line 3 on cardWidget — show 🎫 placeholder → icon + key below !IID line.
+
+## Discoveries
+- Zero-value `IssueTypeIconResolver{}` (nil icons map) is safe in test... (2241 chars)"
+All done. The JIRA line 3 is now rendering on cards:
+
+- **When MR title has a JIRA key and type not yet fetched**: `🎫 OD-2245`
+- **When type is fetched**: `📖 OD-2332` (Story), `☑ OD-2362` (Task), etc.
+- **When no JIRA key in title**: line 3 is omitted entirely
+
+The implementation threads `IssueTypeIconResolver` down `boardWidget → columnWidget → cardWidget` and uses `domain.ExtractJiraID` + `iconResolver.Resolve` in the new `renderLine3()` method. `just check` passes clean, agent-tui confirms the rendering live.
+
+<promise>COMPLETE</promise>

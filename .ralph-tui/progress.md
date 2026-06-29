@@ -142,3 +142,14 @@ When a string literal appears in both a source file (e.g. map key) and two test-
   - `just check` catches test call-site mismatches immediately; always run after signature changes
 
 ---
+
+## 2026-06-29 - mrr-hl4.1
+- Added `UpdateMRDescription(ctx, projectID, mrIID int64, description string) error` to `MRWriter` interface in `pkg/gitlab/interfaces.go`
+- Implemented `UpdateMRDescription` on `*Client` in `pkg/gitlab/client.go` — calls `gl.MergeRequests.UpdateMergeRequest` with `&gl.UpdateMergeRequestOptions{Description: gl.Ptr(description)}`
+- **Files changed:** `pkg/gitlab/interfaces.go`, `pkg/gitlab/client.go`
+- **Learnings:**
+  - `UpdateMergeRequestOptions.Description` is `*string` — use `gl.Ptr(description)` (same helper used for bool/slice fields elsewhere)
+  - `gitlabadpt.gitLabClient` embeds `pkggitlab.MRWriter`, so `UpdateMRDescription` is automatically available in the adapter without touching `gitlabadpt.go`
+  - No mockery regeneration needed — `MRWriter` lives in `pkg/gitlab`, not in `internal/domain/service/` (mockery only covers service ports)
+
+---
