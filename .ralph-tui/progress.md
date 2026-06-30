@@ -15,6 +15,24 @@ In mrr-qtk.3: extracted `DetailFetchResultMsg` to `handleDetailFetchResult` (sav
 
 ---
 
+## 2026-06-30 - mrr-qtk.4
+- Implemented idempotent write dispatch in `handleBatchPreviewConfirmed`
+  - 0-targets path: closes overlay silently (no write, no toast)
+  - N-targets path: fires `makeBatchWriteCmd` per target, each returns `ReviewersSavedMsg`
+- Added `makeBatchWriteCmd` package-level function in `model.go`
+  - Always fetches `GetProjectMembers` (batch editor never pre-populates `stagedReviewer.UserID`)
+  - Calls `SetReviewers` unconditionally for each target
+  - Calls `SaveApprovers` only when approver set differs from current `target.Reviewers` state
+  - Snapshots `staged` and `origApprovers` at call time to avoid data races in the closure
+  - Returns `ReviewersSavedMsg` reusing the existing handler (in-place MR update, toast, optional notify)
+- Files changed: `model.go`
+- **Learnings:**
+  - `stagedReviewer.UserID` is always 0 in the batch editor — the batch editor pre-fills from `domain.ReviewerInfo` which has no UserID. Always `GetProjectMembers` to resolve.
+  - `origApprovers` baseline for change detection in the batch case = current `target.Reviewers[*].IsApprover` (no persistent editor state to read from).
+  - `makeBatchWriteCmd` mirrors `reviewerEditorWidget.saveCmd()` logic exactly; keeping them in sync is the maintenance burden.
+  - Reusing `ReviewersSavedMsg` + `handleReviewersSaved` means each batch target gets its own "Reviewers saved" toast and optional Teams notification — same as single-MR flow.
+---
+
 ## 2026-06-30 - mrr-qtk.3
 - Implemented `batchPreviewWidget` in `internal/tui/batch_preview.go`
   - `previewMRRow` struct: `mr`, `included` (user toggle), `hasChange` (computed at construction)

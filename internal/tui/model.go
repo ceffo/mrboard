@@ -1237,9 +1237,125 @@ func (m Model) handleBatchEditorPreview(msg BatchReviewerEditorPreviewMsg) (tea.
 	return m, nil
 }
 
-func (m Model) handleBatchPreviewConfirmed(_ BatchPreviewConfirmedMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBatchPreviewConfirmed(msg BatchPreviewConfirmedMsg) (tea.Model, tea.Cmd) {
 	m.overlay.closeOverlay()
-	return m, nil
+	if len(msg.Targets) == 0 {
+		return m, nil
+	}
+	cmds := make([]tea.Cmd, len(msg.Targets))
+	for i, mr := range msg.Targets {
+		cmds[i] = makeBatchWriteCmd(m.baseCtx, m.src, msg.Staged, mr)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// makeBatchWriteCmd writes the staged reviewer list to a single target MR.
+// It resolves user IDs via GetProjectMembers (batch editor never pre-populates UserID),
+// calls SetReviewers unconditionally, and calls SaveApprovers only when the approver
+// set differs from the MR's current state.
+func makeBatchWriteCmd(
+	base context.Context,
+	src mrsvc.MergeRequestSource,
+	staged []stagedReviewer,
+	target domain.MergeRequest,
+) tea.Cmd {
+	projectID := int64(target.ProjectID)
+	mrIID := int64(target.IID)
+
+	// Build original approver set from the current MR state for change detection.
+	origApprovers := make(map[string]bool, len(target.Reviewers))
+	for _, r := range target.Reviewers {
+		if r.IsApprover {
+			origApprovers[r.Username] = true
+		}
+	}
+
+	// Snapshot staged list so the closure captures stable data.
+	type snap struct {
+		username   string
+		isApprover bool
+		userID     int64
+	}
+	snapped := make([]snap, len(staged))
+	for i, s := range staged {
+		snapped[i] = snap{username: s.Username, isApprover: s.IsApprover, userID: s.UserID}
+	}
+
+	ctx, cancel := context.WithTimeout(base, fetchTimeout)
+	return func() tea.Msg {
+		defer cancel()
+
+		// Batch editor never resolves user IDs — always fetch project members.
+		needFetch := false
+		for _, s := range snapped {
+			if s.userID == 0 {
+				needFetch = true
+				break
+			}
+		}
+		knownIDs := make(map[string]int64)
+		if needFetch {
+			members, err := src.GetProjectMembers(ctx, projectID)
+			if err != nil {
+				return ReviewersSavedMsg{Err: fmt.Errorf("resolve reviewer IDs: %w", err)}
+			}
+			for _, m := range members {
+				knownIDs[m.Username] = m.UserID
+			}
+		}
+
+		// Build deduplicated reviewer ID list.
+		seen := make(map[int64]bool)
+		var reviewerIDs []int64
+		for _, s := range snapped {
+			id := s.userID
+			if id == 0 {
+				id = knownIDs[s.username]
+			}
+			if id == 0 || seen[id] {
+				continue
+			}
+			reviewerIDs = append(reviewerIDs, id)
+			seen[id] = true
+		}
+
+		if err := src.SetReviewers(ctx, projectID, mrIID, reviewerIDs); err != nil {
+			return ReviewersSavedMsg{Err: err}
+		}
+
+		// Only call SaveApprovers when the approver set differs from current MR state.
+		nowApprovers := make(map[string]bool)
+		var approverIDs []int64
+		for _, s := range snapped {
+			if s.isApprover {
+				nowApprovers[s.username] = true
+				id := s.userID
+				if id == 0 {
+					id = knownIDs[s.username]
+				}
+				if id != 0 {
+					approverIDs = append(approverIDs, id)
+				}
+			}
+		}
+		approversChanged := len(nowApprovers) != len(origApprovers)
+		if !approversChanged {
+			for u := range nowApprovers {
+				if !origApprovers[u] {
+					approversChanged = true
+					break
+				}
+			}
+		}
+		if approversChanged {
+			if err := src.SaveApprovers(ctx, projectID, mrIID, approverIDs); err != nil {
+				return ReviewersSavedMsg{Err: err}
+			}
+		}
+
+		mr, err := src.FetchMR(ctx, projectID, mrIID)
+		return ReviewersSavedMsg{MR: mr, Err: err}
+	}
 }
 
 // makeJiraEnrichCmds returns one fetch command per unique JIRA issue key found

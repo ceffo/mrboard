@@ -1,0 +1,186 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-qtk.3
+- **Task Title**: tui: preview diff screen — selectable rows, per-MR change detection
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-30T03:58:15.734Z
+- **Ended At**: 2026-06-30T04:07:14.517Z
+- **Duration**: 8m 58s
+- **Input Tokens**: 215
+- **Output Tokens**: 30526
+- **Total Tokens**: 30741
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-qtk
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and understanding the current state of the implementation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Show bead details for mrr-qtk.3 $ br show mrr-qtk.3 --format toon 2>/dev/null || br show mrr-qtk.3 2>/dev/null | head -60
+Let me read more context about the epic and check the existing codebase.
+[94m[Bash][0m Show epic details $ br show mrr-qtk --format toon 2>/dev/null | head -80
+[94m[Bash][0m List TUI files $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+Let me read the batch reviewer editor and the iteration logs to understand what was implemented and what's needed.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m
+[94m[Bash][0m List iteration logs $ \ls /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/iterations/
+Let me read the mrr-qtk.3 iteration log to understand what was previously attempted.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/iterations/0cfb0553_2026-06-29_14-22-04_mrr-qtk.3.log[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/iterations/0cfb0553_2026-06-29_19-18-31_mrr-qtk.4.log[0m
+Let me read the key files to understand the existing overlay infrastructure.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/overlay_router.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+Now let me read model.go to understand the current state of the model.
+[94m[Bash][0m Check model.go size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Find batch reviewer editor and preview references in model.go $ rg -n "BatchReviewerEditor|batchReviewerEditor|overlayKindBatch|BatchPreview|batchPreview|ReviewerPr...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me read the key board handling section and the view/rendering parts.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the export_test.go and understand the stagedReviewer type more.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m Find stagedReviewer, marker and icon definitions $ rg -n "stagedReviewer|markerChecked|markerUnchecked|reviewerIcon" /Users/moncefnaji/code/github.com/...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+[94m[Bash][0m Find reviewerIcon function definition $ rg -n "reviewerIcon" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ | head -10
+Let me check the current cyclomatic complexity and understand the coreUpdate function.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Check golangci linter config for complexity limits $ rg -n "gocyclo\|cyclop\|complexity" /Users/moncefnaji/code/github.com/mrboard/.golangci.yml 2>/dev/n...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.golangci.yml[0m
+Let me check the beginning of coreUpdate to count complexity.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Find coreUpdate function definition $ rg -n "func.*coreUpdate" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+Let me check the domain model and styles to understand the available types and styles.
+[94m[Bash][0m Find popup style fields in styles.go $ rg -n "PopupSectionFocused\|PopupSection\b\|PopupItem\b\|PopupBorder\|PopupTitle\|PopupHint\|PopupIt...
+[94m[Bash][0m Find ReviewerState type definition $ rg -n "type ReviewerState\|ReviewerState\b" /Users/moncefnaji/code/github.com/mrboard/internal/domai...
+[94m[Bash][0m Find all Popup fields in styles.go $ rg -n "Popup" /Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go | head -30
+[94m[Bash][0m Find ReviewerState and ReviewerInfo types in domain $ rg -rn "ReviewerState\|ReviewerInfo" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ | he...
+[94m[Bash][0m Find domain reviewer types $ rg -rn "ReviewerState\|type Reviewer" /Users/moncefnaji/code/github.com/mrboard/internal/domain/ | h...
+[94m[Bash][0m List domain files and find Reviewer references $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/domain/ && rg -rn "Reviewer" /Users/moncefnaj...
+[94m[Bash][0m Find ReviewerInfo and ReviewerState in domain/mr.go $ rg -n "ReviewerInfo\|ReviewerState\|IsApprover" /Users/moncefnaji/code/github.com/mrboard/internal/d...
+[94m[Bash][0m Find IsApprover and reviewer types across the codebase $ rg -rn "IsApprover\|ReviewerState\|ReviewerInfo" /Users/moncefnaji/code/github.com/mrboard/ --includ...
+[94m[Bash][0m Find IsApprover and reviewer types across Go files $ rg -rn "IsApprover\|ReviewerState\|ReviewerInfo" /Users/moncefnaji/code/github.com/mrboard/ -g "*.go...
+[94m[Bash][0m Find reviewer types in mr.go $ rg -n "IsApprover\|Reviewer" /Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go | head ...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Now I have a complete picture. Let me implement mrr-qtk.3. I'll start with the simpler files and work up to model.go.
+
+`★ Insight ─────────────────────────────────────`
+The batch preview widget follows the two-phase editor pattern: editor (mrr-qtk.2) → preview → dispatch (mrr-qtk.4). The preview computes change detection by comparing staged reviewers against each MR's current `ReviewerInfo` slice, keyed by `Username`. This ensures the dispatch in the next task can skip API calls for MRs where nothing actually changes.
+`─────────────────────────────────────────────────`
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// BatchReviewerEditorKeyMap holds keybindings for..." → "// BatchReviewerEditorKeyMap holds keybindings for..."
+Now add the new overlay kind:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/overlay_router.go[0m edit: "const (
+	overlayKindNone                overlayKin..." → "const (
+	overlayKindNone                overlayKin..."
+Now update the batch reviewer editor to emit a preview message on Enter:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m edit: "// BatchReviewerEditorClosedMsg is sent when the b..." → "// BatchReviewerEditorClosedMsg is sent when the b..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m edit: "	case key.Matches(kMsg, w.keys.Remove):
+		if w.pan..." → "	case key.Matches(kMsg, w.keys.Remove):
+		if w.pan..."
+Also update the hint line in the render method:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m edit: "	const hintLine = "  tab:switch  ↑/↓ nav  space:ap..." → "	const hintLine = "  tab:switch  ↑/↓ nav  space:ap..."
+Now create the batch preview widget file:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_preview.go[0m "package tui
+
+import (
+	"fmt"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// BatchPreviewBackMsg is sent when the user presse... (5954 chars)"
+Now update model.go. First, let me read the relevant sections more carefully:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me make all the model.go changes. First, add the `batchPreview` field and `batchPreviewKeys`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	batchReviewerEditor     *batchReviewerEditorWidge..." → "	batchReviewerEditor     *batchReviewerEditorWidge..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		batchReviewerEditorKeys: DefaultBatchReviewerEdi..." → "		batchReviewerEditorKeys: DefaultBatchReviewerEdi..."
+Now extract `DetailFetchResultMsg` to a handler to save cyclomatic complexity, then add the new message cases:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case DetailFetchResultMsg:
+		if m.showDetail && m..." → "	case DetailFetchResultMsg:
+		return m.handleDetai..."
+Now add the three new message cases after the existing closed messages:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case ReviewerEditorClosedMsg, BatchReviewerEditor..." → "	case ReviewerEditorClosedMsg, BatchReviewerEditor..."
+Now add the preview overlay case to `handleKey`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case overlayKindBatchReviewerEditor:
+		if m.batch..." → "	case overlayKindBatchReviewerEditor:
+		if m.batch..."
+Now add the preview rendering in the View switch:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		case overlayKindBatchReviewerEditor:
+			if m.bat..." → "		case overlayKindBatchReviewerEditor:
+			if m.bat..."
+Now I need to add the three handler functions and update the `applyTheme` call. Let me find where the other handlers are and where `applyTheme` updates widgets:
+[94m[Bash][0m Find handler and applyTheme references in model.go $ rg -n "handleDetailFetchResult\|handleBatchEditorPreview\|handleBatchPreviewConfirmed\|applyTheme" /...
+[94m[Bash][0m Find handler functions and applyTheme in model.go $ rg -n "func.*Model.*handle\|func.*Model.*applyTheme\|batchReviewerEditor.styles" /Users/moncefnaji/c...
+[94m[Bash][0m Find all model methods $ rg -n "func (m Model)" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -30
+[94m[Bash][0m Find all top-level functions in model.go $ rg -n "^func " /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | head -40
+[94m[Bash][0m Find remaining handler functions in model.go $ rg -n "^func " /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go | tail -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I'll add the batchPreview styles propagation in `applyTheme` and insert the three new handler functions. Let me first update `applyTheme`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if m.batchReviewerEditor != nil {
+		m.batchReview..." → "	if m.batchReviewerEditor != nil {
+		m.batchReview..."
+Now let me find a good place to insert the three new handler functions, right after `handleSprintIssueKeys`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// makeJiraEnrichCmds returns one fetch command pe..." → "func (m Model) handleDetailFetchResult(msg DetailF..."
+Now let's run `just check` to see if everything compiles and passes lint:
+[94m[Bash][0m Run quality checks $ just check 2>&1
+All checks pass. Now let me verify with agent-tui that the feature works correctly at runtime:
+[94m[Skill][0m
+Now let me run agent-tui to verify the batch preview feature works end-to-end.
+[94m[Bash][0m Launch mrboard TUI under agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1 | head -5
+[94m[Bash][0m Wait for TUI to stabilize and take initial screenshot $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+[94m[Bash][0m Wait for data load and screenshot $ agent-tui wait --stable --timeout 20000 2>&1 && agent-tui screenshot 2>&1
+Good, board is loaded. Let me navigate to a card with a JIRA key and test the batch editor → preview flow.
+[94m[Bash][0m Navigate to Needs Review, press E to open batch editor $ agent-tui press ArrowRight 2>&1 && agent-tui wait --stable 2>&1 && agent-tui press "E" 2>&1 && agent...
+The batch editor opens with the hint line showing `↵:preview`. Now let me press Enter to transition to the preview screen.
+[94m[Bash][0m Press Enter to open the preview screen $ agent-tui press Enter 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The preview screen renders correctly — "─ no change" is shown because the staged reviewers were pre-filled from this exact MR. Let me test Esc to go back to the editor, then re-enter and confirm.
+[94m[Bash][0m Press Esc to go back to batch editor $ agent-tui press Escape 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Esc correctly returns to the batch editor. Now let me remove a reviewer to trigger the "will change" indicator, then go to preview:
+[94m[Bash][0m Remove top reviewer (d), then press Enter to preview $ agent-tui press "d" 2>&1 && agent-tui wait --stable 2>&1 && agent-tui press Enter 2>&1 && agent-tui ...
+The change detection is working perfectly. After removing one reviewer, the preview shows "Preview Changes (1 to write)" with `✎` (will change). Let me verify Space toggle and Enter confirm work correctly:
+[94m[Bash][0m Space to toggle row inclusion off $ agent-tui type " " 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+Space toggle works — row goes from `[x]` to `[ ]` and count updates to "0 to write". Let me press Enter to confirm and verify it closes cleanly.
+[94m[Bash][0m Press Enter to confirm and close preview $ agent-tui press Enter 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+All overlays closed cleanly, returning to the board. The full flow is verified:
+- E → batch editor (with `↵:preview` hint)
+- Enter → preview with per-MR change detection (`─` / `✎`)
+- Space → toggles row inclusion, updates "N to write" count reactively
+- Esc → back to batch editor
+- Enter in preview → closes all, returns to board
+[94m[Bash][0m Kill agent-tui session $ agent-tui kill 2>&1
+Now let's close the bead, update the progress file, and flush:
+[94m[Bash][0m Close the bead $ wired E→editor→Enter→preview→Esc→back flow" 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+### gocy..."
+[94m[Bash][0m Flush beads tracker state to JSONL $ br sync --flush-only 2>&1
+`★ Insight ─────────────────────────────────────`
+The `collectTargets()` method uses `included && hasChange` intersection — not just `included`. This is intentional: sending an API write for an MR where nothing would change is wasteful. The preview widget thus doubles as both a user selection tool AND an idempotency gate. mrr-qtk.4 (the dispatch task) gets `BatchPreviewConfirmedMsg.Targets` which is already pre-filtered to only "actionable" MRs.
+`─────────────────────────────────────────────────`
+
+mrr-qtk.3 is complete. The implementation adds:
+
+- **`batch_preview.go`** — new `batchPreviewWidget` with `stagedDiffersFromMR()` change detection, per-row `[x]/[ ]` inclusion toggle, and `✎`/`─` change indicators
+- **`keys.go`** — `Confirm` key added to `BatchReviewerEditorKeyMap`; new `BatchPreviewKeyMap` for the preview screen
+- **`overlay_router.go`** — `overlayKindBatchPreview` constant
+- **`model.go`** — full wiring: field, init, three new handlers, key routing, render; gocyclo kept at 28 by extracting `handleDetailFetchResult`
+
+The flow E→batch editor→Enter→preview→Esc→back / Enter→board all verified with agent-tui.
+
+<promise>COMPLETE</promise>

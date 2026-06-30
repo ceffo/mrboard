@@ -1,0 +1,108 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-qtk.4
+- **Task Title**: tui: idempotent write dispatch — diff staged vs current, skip API if no change
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-30T04:07:15.803Z
+- **Ended At**: 2026-06-30T04:14:06.030Z
+- **Duration**: 6m 50s
+- **Input Tokens**: 153
+- **Output Tokens**: 23359
+- **Total Tokens**: 23512
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-qtk
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and studying the progress file to understand where we are.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-qtk batch preview dispatch idempotent write[0m
+[94m[Bash][0m Show beads task mrr-qtk.4 details $ br show mrr-qtk.4 --format toon 2>/dev/null || br show mrr-qtk.4 2>/dev/null | head -80
+Let me read the key files to understand what's in place and what needs to be done.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_preview.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me look at how the single-reviewer save works to understand the write pattern.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/reviewer_editor.go[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.][0m
+[94m[Bash][0m Check size of mrsvc files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+[94m[Bash][0m Find reviewer save patterns in TUI $ rg -n "ReviewersSaved\|SetReviewers\|SaveReviewers\|UpdateReviewers" /Users/moncefnaji/code/github.c...
+[94m[Bash][0m Find files containing reviewer save logic $ rg -n "ReviewersSavedMsg\|saveReviewersCmd\|stagedReviewer" /Users/moncefnaji/code/github.com/mrboar...
+[94m[Bash][0m Find ReviewersSavedMsg and stagedReviewer definitions across codebase $ rg -rn "ReviewersSavedMsg\|stagedReviewer" /Users/moncefnaji/code/github.com/mrboard/ --type go
+[94m[Bash][0m Find reviewer save message types and staged reviewer $ rg -rn "ReviewersSaved\|SavedMsg\|stagedReviewer" /Users/moncefnaji/code/github.com/mrboard/ --type ...
+[94m[Bash][0m List all TUI Go files $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go | head -30
+[94m[Bash][0m Find reviewer-related message types and methods in TUI $ rg -n "ReviewersSaved\|SavedMsg\|stagedReviewer\|SetReviewers\|SaveApprovers" /Users/moncefnaji/code...
+[94m[Bash][0m Grep for reviewer save message in tui directory $ grep -rn "ReviewersSaved\|SavedMsg\|stagedReviewer" /Users/moncefnaji/code/github.com/mrboard/intern...
+Let me look at the approver editor's save command to understand the exact pattern.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+Let me check the batch reviewer editor to understand what userIDs are available on staged reviewers.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m
+Let me check the full `stagedReviewer` struct and approver_editor.go's save cmd more carefully.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+Let me check the domain types to see if ReviewerInfo carries user IDs.
+[94m[Bash][0m Find ReviewerInfo struct definition $ grep -n "ReviewerInfo\|UserID\|type.*Reviewer" /Users/moncefnaji/code/github.com/mrboard/internal/do...
+[94m[Bash][0m Check ReviewerInfo struct fields $ grep -n "type ReviewerInfo\|UserID\|Username" /Users/moncefnaji/code/github.com/mrboard/internal/dom...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Now I have all the context I need. Let me understand the full picture:
+
+`★ Insight ─────────────────────────────────────`
+- `handleBatchPreviewConfirmed` currently just closes the overlay — the actual API dispatch is the stub left for mrr-qtk.4
+- `BatchPreviewConfirmedMsg.Targets` is already pre-filtered to `included && hasChange` MRs from `collectTargets()`, so the idempotency at the batch level is already handled
+- Per-MR idempotency: `makeBatchWriteCmd` needs to detect if approvers changed vs current MR state and skip `SaveApprovers` if not — same pattern as `reviewerEditorWidget.saveCmd()`
+- All staged reviewers in the batch editor have `UserID == 0` (no member fetch happens in the batch editor), so `GetProjectMembers` is always needed per target MR
+`─────────────────────────────────────────────────`
+
+Now I'll implement the dispatch. Adding `makeBatchWriteCmd` and updating `handleBatchPreviewConfirmed` in model.go.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m Model) handleBatchPreviewConfirmed(_ Batch..." → "func (m Model) handleBatchPreviewConfirmed(msg Bat..."
+Now run the quality checks.
+[94m[Bash][0m Run quality gates: fmt + lint + build + test $ just check 2>&1
+All checks pass. Now I need to verify the TUI flow with agent-tui as required by CLAUDE.md.
+[94m[Bash][0m Check run-tui.sh script $ cat /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh
+[94m[Skill][0m
+Now let me verify the batch preview → confirm flow with agent-tui.
+[94m[Bash][0m Launch the TUI under agent-tui control $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for TUI to stabilize, then screenshot $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+[94m[Bash][0m Press E to open batch reviewer editor, then screenshot $ agent-tui press e 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The editor didn't open — let me check the key binding for batch edit.
+[94m[Bash][0m Find the BatchEdit key binding $ grep -n "BatchEdit\|batch_edit\|batchEdit" /Users/moncefnaji/code/github.com/mrboard/internal/tui/ke...
+The key is uppercase 'E'. Let me navigate to a card with a JIRA key and press it correctly.
+[94m[Bash][0m Navigate right to Needs Review column (has JIRA keys), type uppercase E $ agent-tui press ArrowRight 2>&1 && agent-tui wait --stable 2>&1 && agent-tui type "E" 2>&1
+[94m[Bash][0m Wait for stable, screenshot to see if batch editor opened $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The batch reviewer editor is open showing `!285 boris-grpc` with OD-2332. Now let me press Enter to go to the preview screen.
+[94m[Bash][0m Confirm batch editor → preview screen, screenshot $ agent-tui press Enter 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The preview shows "0 to write" because the staged list matches the current MR state — `─` (no change) is correct. Now let me press Enter to confirm and verify the overlay closes cleanly.
+[94m[Bash][0m Confirm preview (0 targets) → overlay should close $ agent-tui press Enter 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The 0-targets path works: overlay closes cleanly. Let me also verify the Esc-from-preview → back-to-editor flow.
+[94m[Bash][0m E → batch editor → Enter → preview screen $ agent-tui type "E" 2>&1 && agent-tui wait --stable 2>&1 && agent-tui press Enter 2>&1 && agent-tui w...
+[94m[Bash][0m Esc from preview → should return to batch editor $ agent-tui press Escape 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+All flows verified. Let me close the session and finish up.
+[94m[Bash][0m Kill agent-tui session $ agent-tui kill 2>&1
+Now close the bead, sync, and update the progress log.
+[94m[Bash][0m Close bead and flush tracker to JSONL $ idempotent approver-change detection mirrors single-MR editor" 2>&1 && br sync --flush-only 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## 2026-06-30 - mrr-qtk.3" → "## 2026-06-30 - mrr-qtk.4
+- Implemented idempotent..."
+Now save a session summary to engram memory.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-qtk.4: idempotent write dispatch — when the batch preview is confirmed, fire per-MR API writes for targets that have detected changes.
+
+## Discoveries
+- `stagedReviewer.UserID` i... (2114 chars)"
+<promise>COMPLETE</promise>
+
+`★ Insight ─────────────────────────────────────`
+- **Two-level idempotency**: Change detection happens at the preview layer (`stagedDiffersFromMR` → `collectTargets`), so `handleBatchPreviewConfirmed` only dispatches writes for MRs that actually differ. Within each write, `SaveApprovers` is further skipped if the approver set is unchanged — same pattern as the single-MR editor.
+- **Closure snapshot discipline**: `makeBatchWriteCmd` captures `origApprovers` and `snapped` at call time (before any goroutine runs), preventing data races where model state could change between when the user confirms and when the API call resolves.
+- **Result reuse**: Returning `ReviewersSavedMsg` from batch writes reuses the entire single-MR success path — in-place board update, "Reviewers saved" toast, and optional Teams notification — at zero additional handler code.
+`─────────────────────────────────────────────────`
+
+mrr-qtk.4 is complete. `handleBatchPreviewConfirmed` now dispatches one `makeBatchWriteCmd` per confirmed target (skipping writes when there are 0 targets), and each cmd mirrors the single-MR save logic: resolve user IDs via `GetProjectMembers`, call `SetReviewers`, conditionally call `SaveApprovers`, then `FetchMR` → `ReviewersSavedMsg`. All quality gates pass and the full E→editor→preview→confirm/back navigation is verified in agent-tui.
