@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +33,9 @@ type Config struct {
 	CacheDir string
 	// TTL is the cache lifetime. Zero disables caching.
 	TTL time.Duration
+	// LinkIconURL is the URL of a 16×16 icon shown next to remote links in JIRA.
+	// Empty string omits the icon field from the payload.
+	LinkIconURL string
 }
 
 const (
@@ -180,7 +182,7 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 		Object: pkgjira.RemoteLinkObject{
 			Title: mrTitle,
 			URL:   mrURL,
-			Icon:  gitLabIcon(mrURL),
+			Icon:  a.linkIcon(),
 		},
 	}
 	if err := a.client.CreateOrUpdateRemoteLink(ctx, issueKey, link); err != nil {
@@ -193,17 +195,13 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 	return nil
 }
 
-// gitLabIcon derives a GitLab favicon icon from the MR web URL.
-// Returns nil when mrURL cannot be parsed or has no host.
-func gitLabIcon(mrURL string) *pkgjira.RemoteLinkIcon {
-	u, err := url.Parse(mrURL)
-	if err != nil || u.Host == "" {
+// linkIcon returns the configured remote link icon, or nil when no icon URL
+// was configured. The adapter has no knowledge of what the icon represents.
+func (a *JiraAdapter) linkIcon() *pkgjira.RemoteLinkIcon {
+	if a.cfg.LinkIconURL == "" {
 		return nil
 	}
-	return &pkgjira.RemoteLinkIcon{
-		Title:    "GitLab",
-		URL16x16: u.Scheme + "://" + u.Host + "/favicon.ico",
-	}
+	return &pkgjira.RemoteLinkIcon{URL16x16: a.cfg.LinkIconURL}
 }
 
 // readCache reads a cache entry from filename and JSON-unmarshals its value

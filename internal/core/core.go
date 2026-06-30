@@ -98,7 +98,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			Email:       j.Email,
 			APIToken:    j.APIToken,
 		})
-		adpt := jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL}, logger)
+		adpt := jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL, LinkIconURL: j.RemoteLinkIconURL}, logger)
 		jiraEnricher = adpt
 		jiraLinker = adpt
 	}

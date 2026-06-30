@@ -56,6 +56,8 @@ type Jira struct {
 	BoardID        int               `mapstructure:"board_id"`         // optional; enables sprint filter (S key)
 	CacheTTL       time.Duration     `mapstructure:"cache_ttl"`        // default 24h
 	IssueTypeIcons map[string]string `mapstructure:"issue_type_icons"` // override default emoji map
+	// RemoteLinkIconURL is a 16×16 icon URL shown on remote links in JIRA. Empty = no icon.
+	RemoteLinkIconURL string `mapstructure:"remote_link_icon_url"`
 }
 
 // AppConfig is the top-level application configuration.
