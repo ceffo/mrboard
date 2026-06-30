@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0] - 2026-06-30
+
+### Added
+- JIRA Remote Issue Links: mrboard now writes a backlink on each JIRA issue pointing to its GitLab MR, complementing the existing MR-to-JIRA link. Links carry a descriptive title and a GitLab favicon icon, and writes are logged at Info level for visibility.
+- Remote link icon URL is configurable via `jira.remote_link_icon_url` in `mrboard.yaml` instead of being hardcoded.
+
+### Changed
+- Remote link writes use a 3-layer dedup strategy (session cache, disk cache, GET-before-write) to avoid redundant JIRA API calls when the link content hasn't changed.
+
 ## [0.6.0] - 2026-06-30
 
 ### Added
