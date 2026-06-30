@@ -149,6 +149,7 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 	}
 
 	// Layer 3: GET-before-write (only on cold disk miss)
+	action := "update" // disk cache existed but title changed
 	if !diskHit {
 		existing, err := a.client.GetRemoteLink(ctx, issueKey, globalID)
 		if err != nil {
@@ -160,9 +161,19 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 			a.sessionMap.Store(globalID, mrTitle)
 			return nil
 		}
+		if existing == "" {
+			action = "create"
+		}
 	}
 
 	// Write the remote link (create or update)
+	a.logger.Info("jiraadpt: writing remote link",
+		"action", action,
+		"issueKey", issueKey,
+		"globalId", globalID,
+		"title", mrTitle,
+		"url", mrURL,
+	)
 	link := pkgjira.RemoteLink{
 		GlobalID:     globalID,
 		Relationship: "mentioned in",
@@ -176,6 +187,7 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 		return fmt.Errorf("jiraadpt: upsert remote link %q on %q: %w", globalID, issueKey, err)
 	}
 
+	a.logger.Info("jiraadpt: remote link written", "action", action, "issueKey", issueKey, "globalId", globalID)
 	a.writeCache(filename, mrTitle)
 	a.sessionMap.Store(globalID, mrTitle)
 	return nil
