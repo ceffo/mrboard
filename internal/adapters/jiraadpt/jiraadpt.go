@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
@@ -21,6 +22,8 @@ type jiraClient interface {
 	GetIssue(ctx context.Context, issueKey string) (*pkgjira.Issue, error)
 	GetActiveSprint(ctx context.Context, boardID int) (*pkgjira.Sprint, error)
 	GetSprintIssueKeys(ctx context.Context, sprintID int) ([]string, error)
+	GetRemoteLink(ctx context.Context, issueKey, globalID string) (string, error)
+	CreateOrUpdateRemoteLink(ctx context.Context, issueKey string, link pkgjira.RemoteLink) error
 }
 
 // Config holds adapter-specific settings.
@@ -43,12 +46,13 @@ type cacheEntry struct {
 	ExpiresAt time.Time       `json:"e"`
 }
 
-// JiraAdapter implements jirasvc.JiraEnricher backed by a live JIRA client
-// and a write-through JSON disk cache.
+// JiraAdapter implements jirasvc.JiraEnricher and jirasvc.JiraLinker backed
+// by a live JIRA client and a write-through JSON disk cache.
 type JiraAdapter struct {
-	client jiraClient
-	cfg    Config
-	logger *slog.Logger
+	client     jiraClient
+	cfg        Config
+	logger     *slog.Logger
+	sessionMap sync.Map // globalID → last-written mrTitle; resets on process restart
 }
 
 // New returns a JiraAdapter wired to the given client, config, and logger.
@@ -113,6 +117,63 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int)
 
 	a.writeCache(filename, keys)
 	return keys, nil
+}
+
+const remoteLinksCacheSubdir = "remotelinks"
+
+// UpsertRemoteLink implements jirasvc.JiraLinker.
+// It is idempotent across three layers:
+//  1. Session sync.Map: skips the call entirely if this globalID+title was
+//     already written in this process lifetime.
+//  2. Disk cache: skips if the persisted last-written title matches mrTitle.
+//  3. GET-before-write (only on disk-cache miss): fetches the current JIRA
+//     state before writing, so a first-run against a JIRA instance that already
+//     has the correct link does not generate a spurious change-history entry.
+func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, mrTitle, mrURL string) error {
+	// Layer 1: session dedup
+	if v, ok := a.sessionMap.Load(globalID); ok && v.(string) == mrTitle {
+		a.logger.Debug("jiraadpt: remote link session hit", "globalId", globalID)
+		return nil
+	}
+
+	filename := a.cacheFile(filepath.Join(remoteLinksCacheSubdir, sanitizeKey(globalID)+".json"))
+
+	// Layer 2: disk cache
+	var cachedTitle string
+	diskHit := a.readCache(filename, &cachedTitle)
+	if diskHit && cachedTitle == mrTitle {
+		a.logger.Debug("jiraadpt: remote link disk cache hit", "globalId", globalID)
+		a.sessionMap.Store(globalID, mrTitle)
+		return nil
+	}
+
+	// Layer 3: GET-before-write (only on cold disk miss)
+	if !diskHit {
+		existing, err := a.client.GetRemoteLink(ctx, issueKey, globalID)
+		if err != nil {
+			return fmt.Errorf("jiraadpt: get remote link %q on %q: %w", globalID, issueKey, err)
+		}
+		if existing == mrTitle {
+			a.logger.Debug("jiraadpt: remote link JIRA already current", "globalId", globalID)
+			a.writeCache(filename, mrTitle)
+			a.sessionMap.Store(globalID, mrTitle)
+			return nil
+		}
+	}
+
+	// Write the remote link (create or update)
+	link := pkgjira.RemoteLink{
+		GlobalID:     globalID,
+		Relationship: "mentioned in",
+		Object:       pkgjira.RemoteLinkObject{Title: mrTitle, URL: mrURL},
+	}
+	if err := a.client.CreateOrUpdateRemoteLink(ctx, issueKey, link); err != nil {
+		return fmt.Errorf("jiraadpt: upsert remote link %q on %q: %w", globalID, issueKey, err)
+	}
+
+	a.writeCache(filename, mrTitle)
+	a.sessionMap.Store(globalID, mrTitle)
+	return nil
 }
 
 // readCache reads a cache entry from filename and JSON-unmarshals its value
