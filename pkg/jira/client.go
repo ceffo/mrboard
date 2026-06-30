@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +10,19 @@ import (
 	"strings"
 	"time"
 )
+
+// RemoteLink represents a JIRA remote issue link for POST /rest/api/3/issue/{key}/remotelink.
+type RemoteLink struct {
+	GlobalID     string           `json:"globalId"`
+	Relationship string           `json:"relationship"`
+	Object       RemoteLinkObject `json:"object"`
+}
+
+// RemoteLinkObject is the linked resource embedded in a RemoteLink.
+type RemoteLinkObject struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
 
 // Issue is a minimal representation of a JIRA issue.
 type Issue struct {
@@ -110,6 +124,72 @@ func (c *Client) GetSprintIssueKeys(ctx context.Context, sprintID int) ([]string
 		startAt += len(body.Issues)
 	}
 	return keys, nil
+}
+
+// GetRemoteLink returns the title of the existing remote link identified by
+// globalID on the given issue. Returns ("", nil) when the link does not exist
+// (HTTP 404 or empty result set).
+func (c *Client) GetRemoteLink(ctx context.Context, issueKey, globalID string) (string, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s/remotelink?globalId=%s", c.instanceURL, issueKey, globalID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", c.authHeader)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("jira: get remote link %q on %q: HTTP %d", globalID, issueKey, resp.StatusCode)
+	}
+
+	var links []struct {
+		Object RemoteLinkObject `json:"object"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
+		return "", fmt.Errorf("jira: decode remote links for %q: %w", issueKey, err)
+	}
+	if len(links) == 0 {
+		return "", nil
+	}
+	return links[0].Object.Title, nil
+}
+
+// CreateOrUpdateRemoteLink creates or updates a remote link on the given JIRA
+// issue. JIRA upserts by globalId — if a link with the same globalId already
+// exists it is updated in place.
+func (c *Client) CreateOrUpdateRemoteLink(ctx context.Context, issueKey string, link RemoteLink) error {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s/remotelink", c.instanceURL, issueKey)
+	body, err := json.Marshal(link)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", c.authHeader)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("jira: create remote link on %q: HTTP %d", issueKey, resp.StatusCode)
+	}
+	return nil
 }
 
 // get performs an authenticated GET request and JSON-decodes the response body

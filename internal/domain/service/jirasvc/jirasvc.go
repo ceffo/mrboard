@@ -15,3 +15,13 @@ type JiraEnricher interface {
 	// sprint for the given JIRA board ID. Returns nil when no active sprint exists.
 	GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error)
 }
+
+// JiraLinker is the driven port for writing JIRA remote issue links.
+type JiraLinker interface {
+	// UpsertRemoteLink writes a remote link from the JIRA issue identified by
+	// issueKey back to the GitLab MR. It is idempotent: the JIRA API is only
+	// called when the link title differs from the last-written value (or when
+	// no link has been written yet). globalID must be stable across fetches
+	// (format: "mrboard:{projectID}:{mrIID}").
+	UpsertRemoteLink(ctx context.Context, issueKey, globalID, mrTitle, mrURL string) error
+}

@@ -28,3 +28,4 @@ packages:
       structname: "Mock{{.InterfaceName}}"
     interfaces:
       JiraEnricher:
+      JiraLinker:
