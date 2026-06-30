@@ -11,6 +11,7 @@ const (
 	overlayKindSettings                        // settings popup
 	overlayKindReviewerEditor                  // reviewer editor popup
 	overlayKindBatchReviewerEditor             // batch reviewer editor popup
+	overlayKindBatchPreview                    // batch preview screen (confirm selection before apply)
 )
 
 // overlayRouter is a single-active-overlay state machine. Only one exclusive

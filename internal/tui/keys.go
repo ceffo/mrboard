@@ -185,12 +185,13 @@ type BatchReviewerEditorKeyMap struct {
 	Tab            key.Binding
 	ToggleApprover key.Binding
 	Remove         key.Binding
+	Confirm        key.Binding
 	Close          key.Binding
 }
 
 // ShortHelp implements help.KeyMap.
 func (k BatchReviewerEditorKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Tab, k.ToggleApprover, k.Remove, k.Close}
+	return []key.Binding{k.Up, k.Down, k.Tab, k.ToggleApprover, k.Remove, k.Confirm, k.Close}
 }
 
 // FullHelp implements help.KeyMap.
@@ -205,7 +206,34 @@ var DefaultBatchReviewerEditorKeyMap = BatchReviewerEditorKeyMap{
 	Tab:            key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch panels")),
 	ToggleApprover: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "approver")),
 	Remove:         key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "remove")),
+	Confirm:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "preview")),
 	Close:          key.NewBinding(key.WithKeys("E", "esc"), key.WithHelp("E/esc", "cancel")),
+}
+
+// BatchPreviewKeyMap holds keybindings for the batch preview screen.
+type BatchPreviewKeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Toggle  key.Binding
+	Confirm key.Binding
+	Back    key.Binding
+}
+
+// ShortHelp implements help.KeyMap.
+func (k BatchPreviewKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.Confirm, k.Back}
+}
+
+// FullHelp implements help.KeyMap.
+func (k BatchPreviewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// DefaultBatchPreviewKeyMap is the default keybinding set for the batch preview screen.
+var DefaultBatchPreviewKeyMap = BatchPreviewKeyMap{
+	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "include")),
+	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
+	Back:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 }
 
 // DefaultDiffViewKeyMap is the default keybinding set for the diff view.

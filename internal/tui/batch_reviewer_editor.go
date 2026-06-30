@@ -13,6 +13,13 @@ import (
 // BatchReviewerEditorClosedMsg is sent when the batch reviewer editor is dismissed.
 type BatchReviewerEditorClosedMsg struct{}
 
+// BatchReviewerEditorPreviewMsg is sent when the user confirms the staged reviewer list
+// and wants to proceed to the per-MR preview screen.
+type BatchReviewerEditorPreviewMsg struct {
+	Staged   []stagedReviewer
+	Siblings []domain.MergeRequest
+}
+
 const batchEditorMaxVisible = 8
 
 // batchReviewerEditorPanel identifies which panel owns keyboard focus.
@@ -134,6 +141,15 @@ func (w *batchReviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /
 			}
 			w.adjustScrollReviewers()
 		}
+
+	case key.Matches(kMsg, w.keys.Confirm):
+		staged := make([]stagedReviewer, len(w.staged))
+		copy(staged, w.staged)
+		siblings := make([]domain.MergeRequest, len(w.siblings))
+		copy(siblings, w.siblings)
+		return w, func() tea.Msg {
+			return BatchReviewerEditorPreviewMsg{Staged: staged, Siblings: siblings}
+		}
 	}
 	return w, nil
 }
@@ -157,7 +173,7 @@ func (w *batchReviewerEditorWidget) adjustScrollSiblings() {
 func (w *batchReviewerEditorWidget) render() string {
 	var sb strings.Builder
 
-	const hintLine = "  tab:switch  ↑/↓ nav  space:approver  d:remove  esc:cancel"
+	const hintLine = "  tab:switch  ↑/↓ nav  space:approver  d:remove  ↵:preview  esc:cancel"
 
 	// Title line: MR ref left, widget title right.
 	repoName := w.focusedMR.ProjectPath

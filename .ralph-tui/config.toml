@@ -7,3 +7,7 @@ subagentTracingDetail = "full"
 
 [agentOptions]
 [trackerOptions]
+[errorHandling]
+strategy = "retry"
+maxRetries = 2
+retryDelayMs = 5000

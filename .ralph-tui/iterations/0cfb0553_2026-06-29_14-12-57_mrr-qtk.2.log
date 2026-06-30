@@ -1,0 +1,195 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-qtk.2
+- **Task Title**: tui: batchReviewerEditorWidget — E key, pre-fill from focused card, list sibling MRs
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-06-29T18:12:57.794Z
+- **Ended At**: 2026-06-29T18:22:03.517Z
+- **Duration**: 9m 5s
+- **Input Tokens**: 192
+- **Output Tokens**: 29967
+- **Total Tokens**: 30159
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-0bw
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+I'll start by loading memory context and studying the progress file to understand where we are.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-qtk batch reviewer editor widget[0m
+[94m[Bash][0m Show bead details for mrr-qtk.2 $ br show mrr-qtk.2 --format toon 2>/dev/null
+[94m[Bash][0m Show the parent epic details $ br show mrr-qtk --format toon 2>/dev/null
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mreviewer editor widget overlay TUI[0m
+Let me study the existing reviewer editor widget as a pattern reference, then look at the model's SiblingMRs.
+[94m[Bash][0m Check file sizes in tui package $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go | sort -rn | head -20
+[94m[Bash][0m List TUI package files $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/overlay_router.go[0m
+Now let me read the model.go to understand how the reviewer editor is wired in and what changes I'll need to make for the batch editor.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me read the keys.go and styles.go to understand what I need to add.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go[0m
+Let me check the export_test.go and filter.go to understand what's tested.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+Let me check where `reviewerIcon`, `markerChecked`, and `markerUnchecked` are defined.
+[94m[Bash][0m Find helper constants/functions used in approver_editor $ rg -n "markerChecked|markerUnchecked|reviewerIcon" /Users/moncefnaji/code/github.com/mrboard/interna...
+[94m[Bash][0m Find file where reviewerIcon is defined $ rg -n "func reviewerIcon\|markerChecked\|markerUnchecked" /Users/moncefnaji/code/github.com/mrboard/...
+`★ Insight ─────────────────────────────────────`
+1. `markerChecked`/`markerUnchecked` live in `settings_widget.go` and `reviewerIcon` in `card.go` — both are package-private and reusable from the new widget since they're in the same `tui` package.
+2. `stagedReviewer` is defined in `approver_editor.go` and can be reused directly — the batch editor pre-fills the same structure from the focused MR, keeping the reviewer representation consistent.
+3. The overlay routing pattern (`overlayRouter` + case in `handleKey` + case in `renderContent`) is the established three-point wiring pattern; every new overlay must be wired at all three sites.
+`─────────────────────────────────────────────────`
+
+Now I'll implement all four changes in order.
+
+**Step 1: Create `batch_reviewer_editor.go`**
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m "package tui
+
+import (
+	"fmt"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// BatchReviewerEditorClosedMsg is sent when the ba... (8240 chars)"
+**Step 2: Add `BatchEdit` key to `KeyMap` and `BatchReviewerEditorKeyMap` to `keys.go`**
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "	Reviewers   key.Binding
+	Diff        key.Binding
+..." → "	Reviewers   key.Binding
+	BatchEdit   key.Binding
+..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "	k.ToggleView, k.Settings, k.Reviewers, k.Diff, k...." → "	k.ToggleView, k.Settings, k.Reviewers, k.BatchEdi..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "	Reviewers:   key.NewBinding(key.WithKeys("v"), ke..." → "	Reviewers:   key.NewBinding(key.WithKeys("v"), ke..."
+Now add `BatchReviewerEditorKeyMap` at the end of keys.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// DefaultDiffViewKeyMap is the default keybinding..." → "// BatchReviewerEditorKeyMap holds keybindings for..."
+**Step 3: Add `overlayKindBatchReviewerEditor` to overlay_router.go**
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/overlay_router.go[0m edit: "const (
+	overlayKindNone           overlayKind = i..." → "const (
+	overlayKindNone                overlayKin..."
+**Step 4: Wire into model.go** — add field, initialize, handle key, handle message, render, apply theme.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	reviewerEditor     *reviewerEditorWidget
+	diffVie..." → "	reviewerEditor          *reviewerEditorWidget
+	ba..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		reviewerEditorKeys: DefaultReviewerEditorKeyMap,..." → "		reviewerEditorKeys:      DefaultReviewerEditorKe..."
+Now handle `BatchReviewerEditorClosedMsg` in `coreUpdate`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case ReviewerEditorClosedMsg:
+		m.overlay.closeOv..." → "	case ReviewerEditorClosedMsg:
+		m.overlay.closeOv..."
+Handle `overlayKindBatchReviewerEditor` in `handleKey`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case overlayKindReviewerEditor:
+		if m.reviewerEd..." → "	case overlayKindReviewerEditor:
+		if m.reviewerEd..."
+Handle `E` key in `handleKeyBoard` (insert after the existing `Reviewers` case):
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case key.Matches(msg, m.keys.Reviewers):
+		if mr ..." → "	case key.Matches(msg, m.keys.Reviewers):
+		if mr ..."
+Now wire the batch editor render into `renderContent` and `applyTheme`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		case overlayKindReviewerEditor:
+			if m.reviewer..." → "		case overlayKindReviewerEditor:
+			if m.reviewer..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if m.reviewerEditor != nil {
+		m.reviewerEditor.s..." → "	if m.reviewerEditor != nil {
+		m.reviewerEditor.s..."
+Now run the quality checks:
+[94m[Bash][0m Run full quality gate: fmt + lint + build + test $ just check 2>&1
+
+[91m[Error: Exit code 1
+golangci-lint fmt
+golangci-lint run --allow-parallel-runners --timeout 5m
+internal/tui/model.go:468:1: cyclomatic complexity 31 of func `(Model).coreUpdate` is high (> 30) (gocyclo)
+func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+^
+internal/tui/model.go:252:1: The line is 122 characters long, which exceeds the maximum of 120 characters. (lll)
+	sprintIssueKeys         map[string]bool                  // active sprint keys; nil until loaded or when no active sprint
+^
+2 issues:
+* gocyclo: 1
+* lll: 1
+error: recipe `lint` failed on line 17 with exit code 1][0m
+Two issues to fix: line 252 too long (formatter aligned new fields), and `coreUpdate` cyclomatic complexity +1 from the new case. I'll shorten the comment and merge the two "closed" cases.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	sprintIssueKeys         map[string]bool          ..." → "	sprintIssueKeys         map[string]bool // active..."
+Now merge the two "closed" overlay cases to keep complexity at 30:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case ReviewerEditorClosedMsg:
+		m.overlay.closeOv..." → "	case ReviewerEditorClosedMsg, BatchReviewerEditor..."
+[94m[Bash][0m Run quality gate again after fixes $ just check 2>&1
+All clean — 0 issues, build passes, all tests green. Now verify visually with agent-tui.
+[94m[Skill][0m
+Verifying the E key and batch reviewer editor widget visually with agent-tui.
+[94m[Bash][0m Launch TUI under agent-tui control $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1 | head -5
+[94m[Bash][0m Wait for TUI stability then screenshot initial state $ agent-tui wait --stable && agent-tui screenshot
+Board is loaded. Let me navigate to an MR with a JIRA key (OD-2332 in `Needs Review`) to test sibling grouping, then press E.
+[94m[Bash][0m Move focus to Needs Review column and screenshot $ agent-tui press ArrowRight && agent-tui wait --stable && agent-tui screenshot
+Focused on MR !285 with OD-2332. Pressing E to open the batch editor.
+[94m[Bash][0m Press E to open batch reviewer editor, then screenshot $ agent-tui type "E" && agent-tui wait --stable && agent-tui screenshot
+The widget opened correctly — title, JIRA badge, reviewer list pre-filled, sibling MR listed. Let me test Tab to switch panels and navigation.
+[94m[Bash][0m Tab to switch focus to siblings panel $ agent-tui press Tab && agent-tui wait --stable && agent-tui screenshot
+Tab panel switch works — `▶ Apply to (1 MR)` is now focused. Let me test Esc to close.
+[94m[Bash][0m Press Esc to close the batch editor and verify it closes $ agent-tui press Escape && agent-tui wait --stable && agent-tui screenshot
+Esc closes cleanly. Let me also test on a Draft card (no JIRA key) to verify the "no sibling MRs" path.
+[94m[Bash][0m Navigate to Draft column, open batch editor on MR without JIRA key $ agent-tui press ArrowLeft && agent-tui wait --stable && agent-tui type "E" && agent-tui wait --stabl...
+Both paths work correctly. Now clean up and close.
+[94m[Bash][0m Close batch editor and kill TUI session $ agent-tui press Escape && agent-tui kill
+`★ Insight ─────────────────────────────────────`
+1. **Merging type-switch cases** (`case ReviewerEditorClosedMsg, BatchReviewerEditorClosedMsg`) is the right tool to keep cyclomatic complexity under the `gocyclo` limit of 30 — both cases share identical semantics (close the overlay), so no information is lost.
+2. The **`▶` indicator** as a section-focus marker reuses `PopupSectionFocused` style without any new styles — the existing style set already has visual contrast between `PopupSection` (unfocused) and `PopupSectionFocused` (focused), making panel switching immediately obvious.
+3. MRs without a JIRA key gracefully produce `Apply to (0 MRs) / (no sibling MRs)` — the nil-siblings path handles the `SiblingMRs("")` return value correctly since `ExtractJiraID` returns `""` for titles with no JIRA pattern.
+`─────────────────────────────────────────────────`
+
+Now close the bead, sync, and document learnings.
+[94m[Bash][0m Close the bead $ br close mrr-qtk.2 --reason "Implemented batchReviewerEditorWidget: E key opens overlay pre-filled f...
+[94m[Bash][0m Flush beads state to JSONL $ br sync --flush-only 2>&1
+[94m[Bash][0m Check what files changed $ git diff --stat HEAD 2>&1 | head -20
+Now append to the progress log:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	sprintIssueKeys         map[string]bool // active..." → "	sprintIssueKeys map[string]bool // active sprint ..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: 	sprintIssueKeys         map[string]bool // active sprint keys; nil when no active sprint</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/progress.md[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/moncefnaji/code/github.com/mrboard.][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+" → "---
+
+## 2026-06-29 - mrr-qtk.2
+- Created `internal..."
+
+[91m[Error: <tool_use_error>Found 5 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: ---
+</tool_use_error>][0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - The `[sprint]` badge renders independently of ..." → "  - The `[sprint]` badge renders independently of ..."
+Now save a memory for this session and signal completion.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-qtk.2: batchReviewerEditorWidget — E key, pre-fill from focused card, list sibling MRs.
+
+## Discoveries
+- Adding a new case to `coreUpdate`'s type switch pushed `gocyclo` from 30... (2266 chars)"
+<promise>COMPLETE</promise>

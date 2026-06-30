@@ -209,6 +209,7 @@ type Model struct {
 	settings                settingsWidget
 	reviewerEditor          *reviewerEditorWidget
 	batchReviewerEditor     *batchReviewerEditorWidget
+	batchPreview            *batchPreviewWidget
 	diffView                diffViewWidget
 	diffViewKeys            DiffViewKeyMap
 	overlay                 overlayRouter
@@ -217,6 +218,7 @@ type Model struct {
 	settingsKeys            SettingsKeyMap
 	reviewerEditorKeys      ReviewerEditorKeyMap
 	batchReviewerEditorKeys BatchReviewerEditorKeyMap
+	batchPreviewKeys        BatchPreviewKeyMap
 	styles                  Styles
 	theme                   theme.Theme[ColorKey]
 	themeName               string // currently active theme name
@@ -339,6 +341,7 @@ func New(
 		settingsKeys:            DefaultSettingsKeyMap,
 		reviewerEditorKeys:      DefaultReviewerEditorKeyMap,
 		batchReviewerEditorKeys: DefaultBatchReviewerEditorKeyMap,
+		batchPreviewKeys:        DefaultBatchPreviewKeyMap,
 		diffViewKeys:            DefaultDiffViewKeyMap,
 		diffView:                newDiffViewWidget(styles),
 		styles:                  styles,
@@ -508,16 +511,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case DetailFetchResultMsg:
-		if m.showDetail && m.detail.mr != nil &&
-			m.detail.mr.ProjectID == msg.ProjectID && m.detail.mr.IID == msg.MRIID {
-			if msg.Err == nil {
-				m.detail.mr.Description = msg.Description
-				m.detail.SetThreads(msg.Threads)
-			} else {
-				m.detail.loading = false
-			}
-		}
-		return m, nil
+		return m.handleDetailFetchResult(msg)
 
 	case DiffFetchResultMsg:
 		return m.handleDiffFetchResult(msg)
@@ -538,6 +532,16 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ReviewerEditorClosedMsg, BatchReviewerEditorClosedMsg:
 		m.overlay.closeOverlay()
 		return m, nil
+
+	case BatchReviewerEditorPreviewMsg:
+		return m.handleBatchEditorPreview(msg)
+
+	case BatchPreviewBackMsg:
+		m.overlay.openOverlay(overlayKindBatchReviewerEditor)
+		return m, nil
+
+	case BatchPreviewConfirmedMsg:
+		return m.handleBatchPreviewConfirmed(msg)
 
 	case ReviewersSavedMsg:
 		return m.handleReviewersSaved(msg)
@@ -597,6 +601,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.batchReviewerEditor != nil {
 			updated, cmd := m.batchReviewerEditor.Update(msg)
 			m.batchReviewerEditor = updated.(*batchReviewerEditorWidget)
+			return m, cmd
+		}
+	case overlayKindBatchPreview:
+		if m.batchPreview != nil {
+			updated, cmd := m.batchPreview.Update(msg)
+			m.batchPreview = updated.(*batchPreviewWidget)
 			return m, cmd
 		}
 	case overlayKindDiffView:
@@ -1059,6 +1069,10 @@ func (m Model) renderContent() string {
 			if m.batchReviewerEditor != nil {
 				return m.renderWithOverlay(board, m.batchReviewerEditor.render())
 			}
+		case overlayKindBatchPreview:
+			if m.batchPreview != nil {
+				return m.renderWithOverlay(board, m.batchPreview.render())
+			}
 		}
 		return board
 	}
@@ -1204,6 +1218,30 @@ func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
+func (m Model) handleDetailFetchResult(msg DetailFetchResultMsg) (tea.Model, tea.Cmd) {
+	if m.showDetail && m.detail.mr != nil &&
+		m.detail.mr.ProjectID == msg.ProjectID && m.detail.mr.IID == msg.MRIID {
+		if msg.Err == nil {
+			m.detail.mr.Description = msg.Description
+			m.detail.SetThreads(msg.Threads)
+		} else {
+			m.detail.loading = false
+		}
+	}
+	return m, nil
+}
+
+func (m Model) handleBatchEditorPreview(msg BatchReviewerEditorPreviewMsg) (tea.Model, tea.Cmd) {
+	m.batchPreview = newBatchPreviewWidget(msg.Staged, msg.Siblings, m.styles, m.batchPreviewKeys)
+	m.overlay.openOverlay(overlayKindBatchPreview)
+	return m, nil
+}
+
+func (m Model) handleBatchPreviewConfirmed(_ BatchPreviewConfirmedMsg) (tea.Model, tea.Cmd) {
+	m.overlay.closeOverlay()
+	return m, nil
+}
+
 // makeJiraEnrichCmds returns one fetch command per unique JIRA issue key found
 // in allMRs. Returns nil when jiraEnricher is nil or no keys are found.
 func (m *Model) makeJiraEnrichCmds() tea.Cmd {
@@ -1296,6 +1334,9 @@ func (m *Model) applyTheme() {
 	}
 	if m.batchReviewerEditor != nil {
 		m.batchReviewerEditor.styles = m.styles
+	}
+	if m.batchPreview != nil {
+		m.batchPreview.styles = m.styles
 	}
 }
 

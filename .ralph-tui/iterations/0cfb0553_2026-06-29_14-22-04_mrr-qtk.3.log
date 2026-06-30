@@ -1,0 +1,98 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-qtk.3
+- **Task Title**: tui: preview diff screen — selectable rows, per-MR change detection
+- **Status**: failed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-06-29T18:22:04.730Z
+- **Ended At**: 2026-06-29T23:18:30.320Z
+- **Duration**: 4h 56m 25s
+- **Input Tokens**: 6323
+- **Output Tokens**: 38182
+- **Total Tokens**: 44505
+- **Agent**: claude
+- **Model**: claude-sonnet-4-6
+- **Epic**: mrr-0bw
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress file and understanding the current state of the codebase.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+Now let me look at the bead details and search memory for context.
+[94m[Bash][0m Show bead details for mrr-qtk.3 $ br show mrr-qtk.3 --format toon
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mbatch reviewer editor preview diff selectable rows[0m
+Let me get the full architecture memory and look at the current batch reviewer editor implementation.
+[94m[mcp__plugin_engram_engram__mem_get_observation][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/batch_reviewer_editor.go[0m
+Now let me look at the relevant files to understand the existing overlay/key infrastructure.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/overlay_router.go[0m
+Let me check the model.go for how the batch editor is currently integrated, and look at domain types for MRs.
+[94m[Bash][0m Check model.go size $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Find batch reviewer editor references in model.go $ rg -n "BatchReviewerEditor|batchReviewerEditor|overlayKindBatch" /Users/moncefnaji/code/github.com/m...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me find the `stagedReviewer` type and understand the domain model better.
+[94m[Bash][0m Find stagedReviewer type definition $ rg -n "stagedReviewer" /Users/moncefnaji/code/github.com/mrboard/internal/tui/
+[94m[Bash][0m Find domain types for MR and ReviewerInfo $ rg -n "ReviewerInfo|MergeRequest" /Users/moncefnaji/code/github.com/mrboard/internal/domain/types.go...
+[94m[Bash][0m Find domain types $ rg -n "type MergeRequest|type ReviewerInfo|ReviewerInfo" /Users/moncefnaji/code/github.com/mrboard/i...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+Let me check the coreUpdate function to understand the current complexity and the review of domain MR type.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+Let me check for the marker constants and the render utilities used in the existing widget.
+[94m[Bash][0m Find marker constants and reviewerIcon $ rg -n "markerChecked|markerUnchecked|reviewerIcon|PopupItemMarker" /Users/moncefnaji/code/github.com...
+[94m[Bash][0m Find overlay render helpers and popup styles $ rg -n "renderWithOverlay|PopupBorder|PopupTitle|PopupHint" /Users/moncefnaji/code/github.com/mrboard...
+Now let me look at how the model's View renders overlays and how applyTheme works.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me check the model struct fields area and the New() function to see where to add the new fields.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Let me read the full coreUpdate to count all branches precisely.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: authentication_failed][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+
+[91m[Error: unknown][0m
+Request timed out
+
+[91m[Error: server_error][0m

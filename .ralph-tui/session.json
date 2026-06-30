@@ -1,81 +1,46 @@
 {
   "version": 1,
-  "sessionId": "0cfb0553-366f-479d-823e-40e5718b8abf",
+  "sessionId": "7c242bf5-7dfe-4ccc-98b7-16688cc111fd",
   "status": "running",
-  "startedAt": "2026-06-29T17:52:44.905Z",
-  "updatedAt": "2026-06-29T18:22:03.545Z",
-  "currentIteration": 4,
+  "startedAt": "2026-06-30T03:58:11.604Z",
+  "updatedAt": "2026-06-30T04:07:14.549Z",
+  "currentIteration": 0,
   "maxIterations": 10,
-  "tasksCompleted": 4,
+  "tasksCompleted": 0,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
     "plugin": "beads-rust",
-    "epicId": "mrr-0bw",
-    "totalTasks": 3,
+    "epicId": "mrr-qtk",
+    "totalTasks": 4,
     "tasks": [
       {
-        "id": "mrr-0bw.1",
-        "title": "jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API",
+        "id": "mrr-qtk.1",
+        "title": "tui: index MRs by JIRA ID in board model for sibling lookup",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
-        "id": "mrr-0bw.2",
-        "title": "tui: sprint filter state in board model (active sprint issue key set)",
+        "id": "mrr-qtk.2",
+        "title": "tui: batchReviewerEditorWidget — E key, pre-fill from focused card, list sibling MRs",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
-        "id": "mrr-0bw.3",
-        "title": "tui: S key toggle + board header sprint indicator; disable if board_id absent",
-        "status": "completed",
-        "completedInSession": true
+        "id": "mrr-qtk.3",
+        "title": "tui: preview diff screen — selectable rows, per-MR change detection",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "mrr-qtk.4",
+        "title": "tui: idempotent write dispatch — diff staged vs current, skip API if no change",
+        "status": "open",
+        "completedInSession": false
       }
     ]
   },
-  "iterations": [
-    {
-      "iteration": 1,
-      "status": "completed",
-      "taskId": "mrr-0bw.1",
-      "taskTitle": "jiraadpt: implement GetActiveSprintIssueKeys via JIRA Agile API",
-      "taskCompleted": true,
-      "durationMs": 69455,
-      "startedAt": "2026-06-29T17:52:49.249Z",
-      "endedAt": "2026-06-29T17:53:58.704Z"
-    },
-    {
-      "iteration": 2,
-      "status": "completed",
-      "taskId": "mrr-0bw.2",
-      "taskTitle": "tui: sprint filter state in board model (active sprint issue key set)",
-      "taskCompleted": true,
-      "durationMs": 303451,
-      "startedAt": "2026-06-29T17:53:59.981Z",
-      "endedAt": "2026-06-29T17:59:03.432Z"
-    },
-    {
-      "iteration": 3,
-      "status": "completed",
-      "taskId": "mrr-0bw.3",
-      "taskTitle": "tui: S key toggle + board header sprint indicator; disable if board_id absent",
-      "taskCompleted": true,
-      "durationMs": 196660,
-      "startedAt": "2026-06-29T17:59:04.725Z",
-      "endedAt": "2026-06-29T18:02:21.385Z"
-    },
-    {
-      "iteration": 4,
-      "status": "completed",
-      "taskId": "mrr-qtk.1",
-      "taskTitle": "tui: index MRs by JIRA ID in board model for sibling lookup",
-      "taskCompleted": true,
-      "durationMs": 328841,
-      "startedAt": "2026-06-29T18:07:27.731Z",
-      "endedAt": "2026-06-29T18:12:56.572Z"
-    }
-  ],
+  "iterations": [],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
   "activeTaskIds": [],
