@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0] - 2026-06-30
+
+### Added
+- JIRA issue line on cards: each card now shows a dedicated third line with an issue-type icon and the JIRA key (e.g. `🐛 OD-3345`). Icons are fetched asynchronously in the background with a 🎫 placeholder while loading, backed by a 24-hour disk cache to minimise API traffic. Icon-to-type mapping is configurable per issue type in `mrboard.yaml`.
+- Auto-inject JIRA backlink into MR descriptions: when fetching MRs, the adapter appends a JIRA link to the MR body if the `<!-- mrboard -->` marker is absent — keeping GitLab MR descriptions in sync with their linked tickets automatically.
+- Sprint filter (`S` key): toggles the board to show only MRs whose JIRA issue is part of the active sprint. The board header displays a sprint indicator when the filter is active. Requires `jira.board_id` in config.
+- Batch reviewer editor (`E` key): opens a full-screen editor pre-filled from the focused card's current reviewers, listing all sibling MRs under the same JIRA ticket. A preview diff screen shows per-MR reviewer changes before committing; writes are skipped for MRs where nothing changed, making the operation idempotent.
+
+### Fixed
+- JIRA icon rendering: replaced ambiguous-width emoji (e.g. `☑️`) with terminal-safe alternatives to eliminate one-column layout gaps caused by width-detection mismatches between the renderer and terminal emulator.
+- Eliminated a TOCTOU race and redundant GitLab API calls in the background JIRA description injection path.
+
 ## [0.5.0] - 2026-06-17
 
 ### Added
