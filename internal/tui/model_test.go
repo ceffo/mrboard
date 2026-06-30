@@ -28,7 +28,7 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(initialMRs, nil).Maybe()
 
 	cfg := &config.Config{CurrentUser: currentUser}
-	m := New(context.Background(), cfg, src, noopStore{}, nil, nil, "dev", Options{})
+	m := New(context.Background(), cfg, src, noopStore{}, nil, nil, nil, "dev", Options{})
 
 	// Deliver results directly without running the real fetch.
 	next, _ := m.Update(FetchResultMsg{MRs: initialMRs})
@@ -71,7 +71,7 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchErrMsg{Err: errors.New("network down")})
 	m2 := next.(Model)
 
@@ -89,7 +89,7 @@ func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{
 		MRs:    someMRs(),
 		Errors: []error{errors.New("source A failed")},

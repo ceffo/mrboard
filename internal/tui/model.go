@@ -183,6 +183,13 @@ type SprintIssueKeysMsg struct {
 	Err  error
 }
 
+// JiraLinkResultMsg carries the result of a background UpsertRemoteLink call.
+type JiraLinkResultMsg struct {
+	IssueKey string
+	GlobalID string
+	Err      error
+}
+
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
 type TeamResolvedMsg struct {
 	Roster           []domain.User
@@ -249,6 +256,7 @@ type Model struct {
 	alerts                  toast.Model
 	jiraBaseURL             string
 	jiraEnricher            jirasvc.JiraEnricher             // nil when JIRA is not configured
+	jiraLinker              jirasvc.JiraLinker               // nil when JIRA is not configured
 	iconResolver            IssueTypeIconResolver            // maps JIRA issue type names to emoji
 	teamRoster              []domain.User                    // resolved once at startup from type:user sources
 	sprintIssueKeys         map[string]bool                  // active sprint keys; nil when no active sprint
@@ -265,6 +273,7 @@ func New(
 	store domain.StateStore,
 	notifier domain.Notifier,
 	jiraEnricher jirasvc.JiraEnricher,
+	jiraLinker jirasvc.JiraLinker,
 	version string,
 	opts Options,
 ) Model {
@@ -363,6 +372,7 @@ func New(
 		notifier:                notifier,
 		jiraBaseURL:             cfg.Jira.InstanceURL,
 		jiraEnricher:            jiraEnricher,
+		jiraLinker:              jiraLinker,
 		iconResolver:            ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
@@ -502,7 +512,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prevFocusMR = nil
 		}
 		m.updateJiraKey()
-		return m, m.makeJiraEnrichCmds()
+		return m, tea.Batch(m.makeJiraEnrichCmds(), m.makeJiraLinkCmds())
 
 	case FetchErrMsg:
 		m.isRefreshing = false
@@ -554,6 +564,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SprintIssueKeysMsg:
 		return m.handleSprintIssueKeys(msg)
+
+	case JiraLinkResultMsg:
+		return m.handleJiraLinkResult(msg)
 
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
@@ -1400,6 +1413,47 @@ func makeSprintFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, boa
 		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
 		return SprintIssueKeysMsg{Keys: keys, Err: err}
 	}
+}
+
+// makeJiraLinkCmds returns one UpsertRemoteLink command per MR that has a JIRA
+// key in its title. Returns nil when jiraLinker is nil or no MRs have JIRA keys.
+func (m *Model) makeJiraLinkCmds() tea.Cmd {
+	if m.jiraLinker == nil {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, mr := range m.allMRs {
+		issueKey := domain.ExtractJiraID(mr.Title)
+		if issueKey == "" || mr.WebURL == "" {
+			continue
+		}
+		cmds = append(cmds, makeJiraLinkCmd(m.baseCtx, m.jiraLinker, mr, issueKey))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// makeJiraLinkCmd returns a Cmd that calls UpsertRemoteLink for a single MR.
+// The globalId format is load-bearing per ADR-0003: changing it orphans existing links.
+func makeJiraLinkCmd(base context.Context, linker jirasvc.JiraLinker, mr domain.MergeRequest, issueKey string) tea.Cmd {
+	globalID := fmt.Sprintf("mrboard:%d:%d", mr.ProjectID, mr.IID)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		defer cancel()
+		err := linker.UpsertRemoteLink(ctx, issueKey, globalID, mr.Title, mr.WebURL)
+		return JiraLinkResultMsg{IssueKey: issueKey, GlobalID: globalID, Err: err}
+	}
+}
+
+// handleJiraLinkResult surfaces write failures as toast alerts; successes are silent.
+func (m Model) handleJiraLinkResult(msg JiraLinkResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err == nil {
+		return m, nil
+	}
+	m.logger.Warn("tui: jira remote link failed", "issueKey", msg.IssueKey, "globalId", msg.GlobalID, "err", msg.Err)
+	return m, m.toast(toast.ErrorAlert, "JIRA link failed: "+msg.IssueKey)
 }
 
 // handleDiffFetchResult handles DiffFetchResultMsg: stores the MRDiff and triggers file 0 render.
