@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,7 +166,11 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 	link := pkgjira.RemoteLink{
 		GlobalID:     globalID,
 		Relationship: "mentioned in",
-		Object:       pkgjira.RemoteLinkObject{Title: mrTitle, URL: mrURL},
+		Object: pkgjira.RemoteLinkObject{
+			Title: mrTitle,
+			URL:   mrURL,
+			Icon:  gitLabIcon(mrURL),
+		},
 	}
 	if err := a.client.CreateOrUpdateRemoteLink(ctx, issueKey, link); err != nil {
 		return fmt.Errorf("jiraadpt: upsert remote link %q on %q: %w", globalID, issueKey, err)
@@ -174,6 +179,19 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 	a.writeCache(filename, mrTitle)
 	a.sessionMap.Store(globalID, mrTitle)
 	return nil
+}
+
+// gitLabIcon derives a GitLab favicon icon from the MR web URL.
+// Returns nil when mrURL cannot be parsed or has no host.
+func gitLabIcon(mrURL string) *pkgjira.RemoteLinkIcon {
+	u, err := url.Parse(mrURL)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	return &pkgjira.RemoteLinkIcon{
+		Title:    "GitLab",
+		URL16x16: u.Scheme + "://" + u.Host + "/favicon.ico",
+	}
 }
 
 // readCache reads a cache entry from filename and JSON-unmarshals its value

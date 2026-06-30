@@ -1437,12 +1437,19 @@ func (m *Model) makeJiraLinkCmds() tea.Cmd {
 
 // makeJiraLinkCmd returns a Cmd that calls UpsertRemoteLink for a single MR.
 // The globalId format is load-bearing per ADR-0003: changing it orphans existing links.
+// The display title is "!{IID} {repoName}: {mrTitle}" — repo name is the last path
+// segment of ProjectPath so it stays short and human-readable in JIRA.
 func makeJiraLinkCmd(base context.Context, linker jirasvc.JiraLinker, mr domain.MergeRequest, issueKey string) tea.Cmd {
 	globalID := fmt.Sprintf("mrboard:%d:%d", mr.ProjectID, mr.IID)
+	repoName := mr.ProjectPath
+	if i := strings.LastIndex(repoName, "/"); i >= 0 {
+		repoName = repoName[i+1:]
+	}
+	displayTitle := fmt.Sprintf("!%d %s: %s", mr.IID, repoName, mr.Title)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
 		defer cancel()
-		err := linker.UpsertRemoteLink(ctx, issueKey, globalID, mr.Title, mr.WebURL)
+		err := linker.UpsertRemoteLink(ctx, issueKey, globalID, displayTitle, mr.WebURL)
 		return JiraLinkResultMsg{IssueKey: issueKey, GlobalID: globalID, Err: err}
 	}
 }

@@ -20,8 +20,15 @@ type RemoteLink struct {
 
 // RemoteLinkObject is the linked resource embedded in a RemoteLink.
 type RemoteLinkObject struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
+	Title string          `json:"title"`
+	URL   string          `json:"url"`
+	Icon  *RemoteLinkIcon `json:"icon,omitempty"`
+}
+
+// RemoteLinkIcon is the small icon shown next to a remote link in JIRA.
+type RemoteLinkIcon struct {
+	Title    string `json:"title,omitempty"`
+	URL16x16 string `json:"url16x16,omitempty"`
 }
 
 // Issue is a minimal representation of a JIRA issue.
