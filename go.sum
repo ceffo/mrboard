@@ -18,10 +18,6 @@ github.com/aymanbagabas/go-udiff v0.4.1 h1:OEIrQ8maEeDBXQDoGCbbTTXYJMYRCRO1fnodZ
 github.com/aymanbagabas/go-udiff v0.4.1/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=
 github.com/aymerick/douceur v0.2.0 h1:Mv+mAeH1Q+n9Fr+oyamOlAkUNPWPlA8PPGR0QAaYuPk=
 github.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=
-github.com/ceffo/toast v0.1.0 h1:zikvLAT7vMWF5hCRdCsAFoh9SOPpQWiQrWOTaexa4H8=
-github.com/ceffo/toast v0.1.0/go.mod h1:kYmG7Ntql5C2GBQY7YwnpY8B8gaELeLR0xdiZlo93G4=
-github.com/ceffo/toast v0.2.0 h1:U8hwiheE/knp7VA5+GiFWCKwoJY7vNQNu/aI9GG7M8Y=
-github.com/ceffo/toast v0.2.0/go.mod h1:kYmG7Ntql5C2GBQY7YwnpY8B8gaELeLR0xdiZlo93G4=
 github.com/ceffo/toast v0.2.1 h1:wzgnQAKVisktk/aXQvU4+TJi7pJmWfAJ9oDwsGtzh10=
 github.com/ceffo/toast v0.2.1/go.mod h1:pyMTES+18Q+kNBSMDBnd15nwN5/b41KsrMfM2ptZFFk=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=

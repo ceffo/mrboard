@@ -149,7 +149,12 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 		rightW = lip.Width(rightRendered)
 	}
 
-	availAuthorW := max(width-rightW, 0)
+	// Reserve 1-char gap so author and duration never run together.
+	sep := 0
+	if rightW > 0 {
+		sep = 1
+	}
+	availAuthorW := max(width-rightW-sep, 0)
 	authorTrunc := truncateWidth(authorLabel, availAuthorW)
 	authorStyled := c.styles.CardAuthor.Render(authorTrunc)
 	authorW := lip.Width(authorStyled)
@@ -161,6 +166,11 @@ func (c cardWidget) renderLine1(authorLabel string, openDur time.Duration, width
 	return authorStyled + strings.Repeat(" ", pad) + rightRendered
 }
 
+// iconDisplayCols is the target display width for JIRA issue type icons.
+// All default icons are 2-wide emoji; user-configured 1-wide text icons are
+// padded to this width so the key always starts at the same column.
+const iconDisplayCols = 2
+
 // renderLine3 builds the optional JIRA line: icon + issue key.
 // Returns "" when the MR title contains no extractable JIRA key.
 // Uses 🎫 as a loading placeholder until JiraIssueType is populated.
@@ -170,6 +180,9 @@ func (c cardWidget) renderLine3() string {
 		return ""
 	}
 	icon := c.iconResolver.Resolve(c.mr.JiraIssueType)
+	if lip.Width(icon) < iconDisplayCols {
+		icon += " "
+	}
 	return c.styles.CardMeta.Render(icon + " " + key)
 }
 

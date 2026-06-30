@@ -21,14 +21,14 @@ func TestIssueTypeIconResolver_Defaults(t *testing.T) {
 		{testBugTitle, "🐛"},
 		{issueTypeBug, "🐛"}, // lowercase key
 		{"BUG", "🐛"},        // upper-case
-		{"Story", "📖"},
-		{issueTypeStory, "📖"},
-		{"Task", "☑️"},
-		{issueTypeTask, "☑️"},
+		{"Story", "🔖"},
+		{issueTypeStory, "🔖"},
+		{"Task", "📝"},
+		{issueTypeTask, "📝"},
 		{"Epic", "⚡"},
 		{issueTypeEpic, "⚡"},
-		{"Subtask", "↩️"},
-		{issueTypeSubtask, "↩️"},
+		{"Subtask", "📎"},
+		{issueTypeSubtask, "📎"},
 		{testUnknownFB, unknownIssueTypeIcon},
 		{"", unknownIssueTypeIcon},
 		{testTechDebt, unknownIssueTypeIcon},
@@ -57,7 +57,7 @@ func TestIssueTypeIconResolver_Overrides(t *testing.T) {
 		{"tech debt", "🔧"},  // case-insensitive
 		{testBugTitle, "🔴"}, // override wins over default
 		{issueTypeBug, "🔴"}, // same override, lowercase input
-		{"Story", "📖"},      // unchanged default
+		{"Story", "🔖"},      // unchanged default
 		{testUnknownFB, unknownIssueTypeIcon},
 		{"", unknownIssueTypeIcon},
 	}

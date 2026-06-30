@@ -15,10 +15,10 @@ const (
 // their emoji icons. Lookup is case-insensitive.
 var defaultIssueTypeIcons = map[string]string{
 	issueTypeBug:     "🐛",
-	issueTypeStory:   "📖",
-	issueTypeTask:    "☑️",
+	issueTypeStory:   "🔖",
+	issueTypeTask:    "📝",
 	issueTypeEpic:    "⚡",
-	issueTypeSubtask: "↩️",
+	issueTypeSubtask: "📎",
 }
 
 // unknownIssueTypeIcon is returned when no match is found in the resolver map.
