@@ -27,6 +27,7 @@ type Core struct {
 	StateStore   domain.StateStore
 	Notifier     domain.Notifier
 	JiraEnricher jirasvc.JiraEnricher // nil when JIRA is not configured
+	JiraLinker   jirasvc.JiraLinker   // nil when JIRA is not configured; same adapter instance as JiraEnricher
 	Config       *config.AppConfig
 	Logger       *slog.Logger
 	logCloser    io.Closer
@@ -86,15 +87,20 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		}, logger)
 	}
 
-	// 5. JIRA adapter (optional — only wired when all three credentials are present)
+	// 5. JIRA adapter (optional — only wired when all three credentials are present).
+	// The same *jiraadpt.JiraAdapter instance satisfies both JiraEnricher and
+	// JiraLinker so the session sync.Map for remote-link dedup is shared.
 	var jiraEnricher jirasvc.JiraEnricher
+	var jiraLinker jirasvc.JiraLinker
 	if j := cfg.Jira; j.InstanceURL != "" && j.Email != "" && j.APIToken != "" {
 		jiraClient := pkgjira.NewClient(pkgjira.Config{
 			InstanceURL: j.InstanceURL,
 			Email:       j.Email,
 			APIToken:    j.APIToken,
 		})
-		jiraEnricher = jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL}, logger)
+		adpt := jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL}, logger)
+		jiraEnricher = adpt
+		jiraLinker = adpt
 	}
 
 	return &Core{
@@ -102,6 +108,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		StateStore:   store,
 		Notifier:     notifier,
 		JiraEnricher: jiraEnricher,
+		JiraLinker:   jiraLinker,
 		Config:       cfg,
 		Logger:       logger,
 		logCloser:    closer,
