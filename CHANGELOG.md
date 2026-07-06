@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.5] - 2026-07-06
+
+### Added
+- Keybinding context system: every action is now declared once in `keys.go` with a priority and category, registered into named contexts (`board`, `reviewer-search`, `editor`, etc.). The active context stack is derived automatically from model state, eliminating eight manual `SetKeyMap` call sites.
+- `?` help modal: press `?` from anywhere to open a centered, contextual help card grouped by category. The modal layers above any open overlay without disrupting it.
+- Smarter footer: slots are filled by descending action priority; `?` and `q` are always pinned and the version string is always pinned to the right — no more crowded or missing hints at narrow widths.
+- Reviewer search now captures all keystrokes in its own context, so typing `q`, `?`, `j`, `k`, or `v` into the search query no longer quits, opens help, or moves the cursor.
+
+## [0.7.4] - 2026-07-06
+
+### Fixed
+- Teams notifications now fire only when the approver list changes, preventing noisy duplicate pings on unrelated MR updates.
+
+## [0.7.3] - 2026-07-06
+
+### Fixed
+- Config-free subcommands (e.g. `version`, `--help`) no longer attempt to boot the core service, avoiding spurious config-not-found errors for commands that don't need a config file.
+
 ## [0.7.2] - 2026-07-06
 
 ### Fixed
