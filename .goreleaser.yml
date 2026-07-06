@@ -45,8 +45,6 @@ homebrew_casks:
     description: "GitLab MR review board for daily standups"
     generate_completions_from_executable:
       executable: "mrboard"
-      args:
-        - completion
       base_name: "mrboard"
       shell_parameter_format: cobra
       shells:
