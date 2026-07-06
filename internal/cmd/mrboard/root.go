@@ -41,8 +41,7 @@ Config search path (first match wins):
 
 Environment:
   GITLAB_TOKEN     Override gitlab.token from config`,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load(cfgPath)
 			if err != nil {
