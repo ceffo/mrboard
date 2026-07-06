@@ -12,6 +12,14 @@ require-template-schema-exists: true
 log-level: warn
 
 packages:
+  github.com/ceffo/mrboard/internal/domain:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName}}.go"
+      structname: "Mock{{.InterfaceName}}"
+    interfaces:
+      Notifier:
   github.com/ceffo/mrboard/internal/domain/service/mrsvc:
     config:
       dir: "{{.InterfaceDir}}/mocks"

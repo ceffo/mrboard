@@ -1157,8 +1157,9 @@ func (m Model) handleMembersLoaded(msg MembersLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleReviewersSaved closes the editor, updates the MR in-place, and fires
-// a Teams notification automatically if a notifier is configured.
+// handleReviewersSaved closes the editor, updates the MR in-place, and fires a
+// Teams notification automatically when a notifier is configured and the write
+// changed the approver set (plain reviewer edits do not notify).
 func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) {
 	m.overlay.closeOverlay()
 	if msg.Err != nil {
@@ -1177,7 +1178,9 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 	m.updateJiraKey()
 
 	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Reviewers saved")}
-	if m.notifier != nil {
+	// Only ping Teams when the approver set actually changed — a plain reviewer
+	// reassignment is not notification-worthy.
+	if m.notifier != nil && msg.ApproversChanged {
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
 	return m, tea.Batch(cmds...)
@@ -1367,7 +1370,10 @@ func makeBatchWriteCmd(
 		}
 
 		mr, err := src.FetchMR(ctx, projectID, mrIID)
-		return ReviewersSavedMsg{MR: mr, Err: err}
+		if err == nil {
+			applyStagedApproverFlags(&mr, nowApprovers)
+		}
+		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
 	}
 }
 

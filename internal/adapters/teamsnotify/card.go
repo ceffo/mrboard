@@ -29,6 +29,10 @@ type adaptiveCard struct {
 	Body    []any           `json:"body"`
 	Actions []openURLAction `json:"actions,omitempty"`
 	MsTeams *msTeamsExt     `json:"msteams,omitempty"`
+	// FallbackText drives the OS/Teams push-notification preview (the toast
+	// text). Without it Teams shows a generic "Card"; the connector's bot name
+	// ("Workflows") is fixed by Power Automate and cannot be set here.
+	FallbackText string `json:"fallbackText,omitempty"`
 }
 
 type msTeamsExt struct {
@@ -96,6 +100,7 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 
 	var entities []mentionEntity
 	var mentionParts []string
+	var approverNames []string
 	for _, r := range mr.Reviewers {
 		if !r.IsApprover {
 			continue
@@ -104,6 +109,7 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		if name, ok := cfg.UserMappings[r.Username]; ok {
 			displayName = name
 		}
+		approverNames = append(approverNames, displayName)
 		tag := fmt.Sprintf("<at>%s</at>", displayName)
 		mentionParts = append(mentionParts, tag)
 
@@ -142,13 +148,25 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 	}
 
 	return adaptiveCard{
-		Type:    typeAdaptive,
-		Schema:  schemaAdaptive,
-		Version: versionAdaptive,
-		Body:    body,
-		Actions: actions,
-		MsTeams: msTeams,
+		Type:         typeAdaptive,
+		Schema:       schemaAdaptive,
+		Version:      versionAdaptive,
+		Body:         body,
+		Actions:      actions,
+		MsTeams:      msTeams,
+		FallbackText: fallbackSummary(mr, projectName, approverNames),
 	}
+}
+
+// fallbackSummary builds the one-line push-notification preview shown by the
+// OS/Teams toast. It front-loads the MR title (what a human recognises at a
+// glance), then the !IID and project, then the approvers being pinged.
+func fallbackSummary(mr domain.MergeRequest, projectName string, approvers []string) string {
+	summary := fmt.Sprintf("%s · !%d %s", mr.Title, mr.IID, projectName)
+	if len(approvers) > 0 {
+		summary += " — 👌 " + strings.Join(approvers, ", ")
+	}
+	return summary
 }
 
 func countApprovers(mr domain.MergeRequest) int {

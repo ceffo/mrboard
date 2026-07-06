@@ -20,9 +20,13 @@ type MembersLoadedMsg struct {
 }
 
 // ReviewersSavedMsg carries the refreshed MR after saving reviewers (or an error).
+// ApproversChanged reports whether the write actually modified the "Approvers"
+// rule; the auto-notification only fires when it did (a plain reviewer
+// reassignment is not worth pinging the channel about).
 type ReviewersSavedMsg struct {
-	MR  domain.MergeRequest
-	Err error
+	MR               domain.MergeRequest
+	ApproversChanged bool
+	Err              error
 }
 
 // ReviewerEditorClosedMsg is sent when the editor is dismissed without saving.
@@ -457,7 +461,21 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 		}
 
 		mr, err := src.FetchMR(ctx, projectID, mrIID)
-		return ReviewersSavedMsg{MR: mr, Err: err}
+		if err == nil {
+			applyStagedApproverFlags(&mr, nowApprovers)
+		}
+		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
+	}
+}
+
+// applyStagedApproverFlags overlays the just-written approver set onto the MR's
+// reviewers. GitLab's approval-rule read is eventually consistent, so a FetchMR
+// fired immediately after SaveApprovers can return stale EligibleApprovers and
+// drop the IsApprover flag. Trusting the staged intent instead keeps both the
+// notification card and the board display correct until the next full refresh.
+func applyStagedApproverFlags(mr *domain.MergeRequest, approvers map[string]bool) {
+	for i := range mr.Reviewers {
+		mr.Reviewers[i].IsApprover = approvers[mr.Reviewers[i].Username]
 	}
 }
 
