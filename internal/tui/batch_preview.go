@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
@@ -94,27 +93,27 @@ func (w *batchPreviewWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint
 		return w, nil
 	}
 	switch {
-	case key.Matches(kMsg, w.keys.Back):
+	case w.keys.Back.Match(kMsg):
 		return w, func() tea.Msg { return BatchPreviewBackMsg{} }
 
-	case key.Matches(kMsg, w.keys.Up):
+	case w.keys.Up.Match(kMsg):
 		if w.cursor > 0 {
 			w.cursor--
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.Down):
+	case w.keys.Down.Match(kMsg):
 		if w.cursor < len(w.rows)-1 {
 			w.cursor++
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.Toggle):
+	case w.keys.Toggle.Match(kMsg):
 		if w.cursor < len(w.rows) {
 			w.rows[w.cursor].included = !w.rows[w.cursor].included
 		}
 
-	case key.Matches(kMsg, w.keys.Confirm):
+	case w.keys.Confirm.Match(kMsg):
 		targets := w.collectTargets()
 		staged := make([]stagedReviewer, len(w.staged))
 		copy(staged, w.staged)

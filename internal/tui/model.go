@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 
@@ -81,7 +80,7 @@ func sortLabel(field sortField, desc bool) string {
 	if desc {
 		dir = "↓"
 	}
-	return "sort:" + field.display() + dir
+	return field.display() + dir
 }
 
 // advanceSort cycles to the next sort state.
@@ -220,7 +219,9 @@ type Model struct {
 	diffView                diffViewWidget
 	diffViewKeys            DiffViewKeyMap
 	overlay                 overlayRouter
-	keys                    KeyMap
+	showHelp                bool // '?' help modal open
+	helpModal               helpModalWidget
+	keys                    *BoardKeyMap // points at DefaultBoardKeyMap, shared with BoardCtx
 	detailKeys              DetailKeyMap
 	settingsKeys            SettingsKeyMap
 	reviewerEditorKeys      ReviewerEditorKeyMap
@@ -313,28 +314,21 @@ func New(
 	if cfg.LifetimeErrorAfter > 0 {
 		styles.LifetimeError = cfg.LifetimeErrorAfter
 	}
-	keys := DefaultKeyMap
+	// The model shares the package-level board keymap with BoardCtx so that
+	// enablement changes are visible to dispatch, footer, and help modal
+	// alike. Enablement is set both ways to stay deterministic across tests.
+	keys := &DefaultBoardKeyMap
+	keys.ToggleView.SetEnabled(cfg.CurrentUser != "")
+	keys.Notify.SetEnabled(notifier != nil)
+	keys.Sprint.SetEnabled(cfg.Jira.BoardID != 0)
+	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
 
 	sf := sortFieldFromState(st.SortField)
-	keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(sf, st.SortDesc)))
 
 	viewMode := st.ViewMode
 	if viewMode == domain.ViewMine && cfg.CurrentUser == "" {
 		viewMode = domain.ViewAll
 	}
-	if viewMode == domain.ViewMine {
-		keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
-	}
-	if cfg.CurrentUser == "" {
-		keys.ToggleView.SetEnabled(false)
-	}
-	if notifier == nil {
-		keys.Notify.SetEnabled(false)
-	}
-	if cfg.Jira.BoardID == 0 {
-		keys.Sprint.SetEnabled(false)
-	}
-	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
 
 	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
 
@@ -342,7 +336,8 @@ func New(
 		state:                   stateLoading,
 		header:                  newHeaderWidget(styles),
 		board:                   newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir),
-		footer:                  newFooterWidget(keys, styles, version),
+		footer:                  newFooterWidget(styles, version),
+		helpModal:               newHelpModalWidget(styles),
 		sp:                      newSpinnerWidget(),
 		detail:                  newDetailWidget(styles),
 		keys:                    keys,
@@ -382,6 +377,7 @@ func New(
 	if viewMode == domain.ViewMine {
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
 	}
+	m.header.SetSort(sortLabel(sf, st.SortDesc))
 	logger.Info("tui: starting", "version", version, "theme", themeName, "mode", themeMode, "view", int(viewMode))
 	return m
 }
@@ -492,6 +488,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.header.SetWidth(msg.Width)
 		m.footer.SetWidth(msg.Width)
+		m.helpModal.SetSize(msg.Width, msg.Height)
 		m.resizeBoard()
 		return m, nil
 
@@ -587,12 +584,69 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// baseStack returns the derived context stack (bottom → top) excluding the
+// help modal. It is computed from model state on every use, so the footer and
+// help modal can never drift out of sync with the actual focus.
+func (m Model) baseStack() []*Context {
+	stack := []*Context{BaseCtx}
+	if m.state != stateBoard || m.isRefreshing {
+		return stack
+	}
+	switch m.overlay.active() {
+	case overlayKindDiffView:
+		return append(stack, DiffViewCtx)
+	case overlayKindSettings:
+		return append(stack, SettingsCtx)
+	case overlayKindReviewerEditor:
+		if m.reviewerEditor != nil {
+			return append(stack, m.reviewerEditor.Context())
+		}
+	case overlayKindBatchReviewerEditor:
+		return append(stack, BatchEditorCtx)
+	case overlayKindBatchPreview:
+		return append(stack, BatchPreviewCtx)
+	case overlayKindNone:
+	}
+	if m.showDetail {
+		return append(stack, DetailCtx)
+	}
+	return append(stack, BoardCtx)
+}
+
+// contextStack is baseStack plus the help modal context when it is open.
+func (m Model) contextStack() []*Context {
+	stack := m.baseStack()
+	if m.showHelp {
+		stack = append(stack, HelpCtx)
+	}
+	return stack
+}
+
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, m.keys.Quit) {
+	// The help modal owns all key input while open.
+	if m.showHelp {
+		if DefaultHelpKeyMap.Close.Match(msg) {
+			m.showHelp = false
+		}
+		return m, nil
+	}
+
+	stack := m.baseStack()
+	top := stack[len(stack)-1]
+	captures := top.CapturesText()
+
+	// Base-context keys apply unless shadowed by the top context or consumed
+	// by a focused text input; ctrl+c quits unconditionally.
+	if DefaultBaseKeyMap.Quit.Match(msg) &&
+		(msg.String() == "ctrl+c" || (!captures && !top.binds(msg.String()))) {
 		if m.fetchCancel != nil {
 			m.fetchCancel()
 		}
 		return m, tea.Quit
+	}
+	if !captures && !top.binds(msg.String()) && DefaultBaseKeyMap.Help.Match(msg) {
+		m.showHelp = true
+		return m, nil
 	}
 
 	if m.state != stateBoard || m.isRefreshing {
@@ -635,18 +689,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleKeyDetail handles keys while the detail panel owns focus.
 func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.CloseDetail):
+	case m.detailKeys.Close.Match(msg):
 		m.closeDetail()
 		return m, nil
-	case key.Matches(msg, m.detailKeys.ScrollUp):
+	case m.detailKeys.ScrollUp.Match(msg):
 		m.detail.ScrollUp()
-	case key.Matches(msg, m.detailKeys.ScrollDown):
+	case m.detailKeys.ScrollDown.Match(msg):
 		m.detail.ScrollDown()
-	case key.Matches(msg, m.keys.Open):
+	case m.detailKeys.Open.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			return m, openBrowser(mr.WebURL)
 		}
-	case key.Matches(msg, m.keys.Diff):
+	case m.detailKeys.Diff.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			m.openDiffView(mr)
 			return m, m.fetchDiffCmd(mr)
@@ -658,27 +712,27 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleKeyDiff handles keys while the diff view owns focus.
 func (m Model) handleKeyDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.diffViewKeys.Close):
+	case m.diffViewKeys.Close.Match(msg):
 		m.closeDiffView()
-	case key.Matches(msg, m.diffViewKeys.PrevFile):
+	case m.diffViewKeys.PrevFile.Match(msg):
 		m.diffView.PrevFile()
 		return m, (&m).maybeRenderCurrentFile()
-	case key.Matches(msg, m.diffViewKeys.NextFile):
+	case m.diffViewKeys.NextFile.Match(msg):
 		m.diffView.NextFile()
 		return m, (&m).maybeRenderCurrentFile()
-	case key.Matches(msg, m.diffViewKeys.ScrollUp):
+	case m.diffViewKeys.ScrollUp.Match(msg):
 		m.diffView.ScrollUp()
-	case key.Matches(msg, m.diffViewKeys.ScrollDown):
+	case m.diffViewKeys.ScrollDown.Match(msg):
 		m.diffView.ScrollDown()
-	case key.Matches(msg, m.diffViewKeys.HalfPageUp):
+	case m.diffViewKeys.HalfPageUp.Match(msg):
 		m.diffView.HalfPageUp()
-	case key.Matches(msg, m.diffViewKeys.HalfPageDown):
+	case m.diffViewKeys.HalfPageDown.Match(msg):
 		m.diffView.HalfPageDown()
-	case key.Matches(msg, m.diffViewKeys.Top):
+	case m.diffViewKeys.Top.Match(msg):
 		m.diffView.ScrollToTop()
-	case key.Matches(msg, m.diffViewKeys.Bottom):
+	case m.diffViewKeys.Bottom.Match(msg):
 		m.diffView.ScrollToBottom()
-	case key.Matches(msg, m.diffViewKeys.Open):
+	case m.diffViewKeys.Open.Match(msg):
 		if m.diffView.mr != nil {
 			return m, openBrowser(m.diffView.mr.WebURL)
 		}
@@ -689,19 +743,19 @@ func (m Model) handleKeyDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleKeyBoard handles keys while the kanban board owns focus.
 func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.Up):
+	case m.keys.Up.Match(msg):
 		m.board.MoveUp()
 		m.updateJiraKey()
-	case key.Matches(msg, m.keys.Down):
+	case m.keys.Down.Match(msg):
 		m.board.MoveDown()
 		m.updateJiraKey()
-	case key.Matches(msg, m.keys.Left):
+	case m.keys.Left.Match(msg):
 		m.board.MoveLeft()
 		m.updateJiraKey()
-	case key.Matches(msg, m.keys.Right):
+	case m.keys.Right.Match(msg):
 		m.board.MoveRight()
 		m.updateJiraKey()
-	case key.Matches(msg, m.keys.Refresh):
+	case m.keys.Refresh.Match(msg):
 		if m.showDetail {
 			m.closeDetail()
 		}
@@ -712,41 +766,37 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.state = stateLoading
 		return m, tea.Batch(m.sp.Init(), m.startFetch())
-	case key.Matches(msg, m.keys.Sort):
+	case m.keys.Sort.Match(msg):
 		m.sortField, m.sortDesc = advanceSort(m.sortField, m.sortDesc)
-		m.keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(m.sortField, m.sortDesc)))
-		m.footer.SetKeyMap(m.keys)
+		m.header.SetSort(sortLabel(m.sortField, m.sortDesc))
 		m.applyMRFilter()
 		m.saveState()
-	case key.Matches(msg, m.keys.Sprint):
+	case m.keys.Sprint.Match(msg):
 		m.sprintFilterActive = !m.sprintFilterActive
 		m.applyMRFilter()
-	case key.Matches(msg, m.keys.ToggleView):
+	case m.keys.ToggleView.Match(msg):
 		if m.viewMode == domain.ViewMine {
 			m.viewMode = domain.ViewAll
 			m.header.SetTitle("mrboard")
-			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view"))
 		} else {
 			m.viewMode = domain.ViewMine
 			m.header.SetTitle("mrboard — @" + m.currentUser)
-			m.keys.ToggleView = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "team view"))
 		}
-		m.footer.SetKeyMap(m.keys)
 		m.applyMRFilter()
 		m.saveState()
-	case key.Matches(msg, m.keys.Open):
+	case m.keys.Open.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			return m, openBrowser(mr.WebURL)
 		}
-	case key.Matches(msg, m.keys.Detail):
+	case m.keys.Detail.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			m.openDetail(mr)
 			return m, m.fetchDetailCmd(mr)
 		}
-	case key.Matches(msg, m.keys.Settings):
+	case m.keys.Settings.Match(msg):
 		m.openSettings()
 		return m, nil
-	case key.Matches(msg, m.keys.Reviewers):
+	case m.keys.Reviewers.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			m.reviewerEditor = newReviewerEditorWidget(
 				m.baseCtx, *mr, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster,
@@ -754,7 +804,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.overlay.openOverlay(overlayKindReviewerEditor)
 			return m, nil
 		}
-	case key.Matches(msg, m.keys.BatchEdit):
+	case m.keys.BatchEdit.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			siblings := m.SiblingMRs(domain.ExtractJiraID(mr.Title))
 			m.batchReviewerEditor = newBatchReviewerEditorWidget(
@@ -763,17 +813,17 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.overlay.openOverlay(overlayKindBatchReviewerEditor)
 			return m, nil
 		}
-	case key.Matches(msg, m.keys.Diff):
+	case m.keys.Diff.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			m.openDiffView(mr)
 			return m, m.fetchDiffCmd(mr)
 		}
-	case key.Matches(msg, m.keys.Notify):
+	case m.keys.Notify.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil && m.notifier != nil {
 			m.logger.Info("tui: notify key pressed", "mr_iid", mr.IID, "mr_title", mr.Title)
 			return m, m.notifyCmd(mr)
 		}
-	case key.Matches(msg, m.keys.Jira):
+	case m.keys.Jira.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
 			if url := domain.JiraIssueURL(m.jiraBaseURL, domain.ExtractJiraID(mr.Title)); url != "" {
 				return m, openBrowser(url)
@@ -786,7 +836,6 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) openDetail(mr *domain.MergeRequest) {
 	m.showDetail = true
 	m.board.SetActive(false)
-	m.footer.SetKeyMap(m.detailKeys)
 	m.detail.SetMR(mr)
 	m.resizeBoard()
 }
@@ -794,7 +843,6 @@ func (m *Model) openDetail(mr *domain.MergeRequest) {
 func (m *Model) closeDetail() {
 	m.showDetail = false
 	m.board.SetActive(true)
-	m.footer.SetKeyMap(m.keys)
 	m.resizeBoard()
 }
 
@@ -805,18 +853,12 @@ func (m *Model) openDiffView(mr *domain.MergeRequest) {
 	m.diffView.SetSize(m.width, bodyH)
 	m.header.SetTitle(fmt.Sprintf("diff !%d – %s", mr.IID, mr.Title))
 	m.header.SetStats("loading…")
-	m.footer.SetKeyMap(m.diffViewKeys)
 }
 
 func (m *Model) closeDiffView() {
 	m.overlay.closeOverlay()
 	m.header.SetTitle("mrboard")
 	m.header.SetStats("")
-	if m.showDetail {
-		m.footer.SetKeyMap(m.detailKeys)
-	} else {
-		m.footer.SetKeyMap(m.keys)
-	}
 }
 
 func (m Model) fetchDiffCmd(mr *domain.MergeRequest) tea.Cmd {
@@ -913,7 +955,7 @@ func (m *Model) maybeRenderCurrentFile() tea.Cmd {
 
 func (m Model) renderDiffScreen() string {
 	headerStr := m.header.render()
-	footerStr := m.footer.render()
+	footerStr := m.footer.render(m.contextStack())
 	bodyH := m.height - chromeHeight
 	m.diffView.SetSize(m.width, bodyH)
 	body := m.diffView.render()
@@ -952,8 +994,7 @@ func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd
 	m.sortField = sortFieldFromState(msg.SortField)
 	m.sortDesc = msg.SortDesc
 	if sortChanged {
-		m.keys.Sort = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", sortLabel(m.sortField, m.sortDesc)))
-		m.footer.SetKeyMap(m.keys)
+		m.header.SetSort(sortLabel(m.sortField, m.sortDesc))
 	}
 
 	themeChanged := m.themeName != msg.ThemeName || m.themeMode != msg.ThemeMode
@@ -1041,7 +1082,6 @@ func (m *Model) updateJiraKey() {
 	mr := m.board.FocusedMR()
 	enabled := m.jiraBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
 	m.keys.Jira.SetEnabled(enabled)
-	m.footer.SetKeyMap(m.keys)
 }
 
 // View renders the full screen. Only the root model sets AltScreen.
@@ -1053,6 +1093,14 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) renderContent() string {
+	screen := m.renderScreen()
+	if m.showHelp {
+		screen = m.renderWithOverlay(screen, m.helpModal.render(m.baseStack()))
+	}
+	return screen
+}
+
+func (m Model) renderScreen() string {
 	switch m.state {
 	case stateLoading:
 		msg := m.sp.spinner.View() + " Loading…"
@@ -1094,7 +1142,7 @@ func (m Model) renderContent() string {
 
 func (m Model) renderBoard() string {
 	headerStr := m.header.render()
-	footerStr := m.footer.render()
+	footerStr := m.footer.render(m.contextStack())
 	boardH := m.height - chromeHeight
 
 	boardStr := m.board.render()
@@ -1509,6 +1557,7 @@ func (m *Model) applyTheme() {
 	m.header.SetStyles(m.styles)
 	m.board.SetStyles(m.styles)
 	m.footer.SetStyles(m.styles)
+	m.helpModal.SetStyles(m.styles)
 	m.detail.SetStyles(m.styles)
 	m.diffView.SetStyles(m.styles)
 	m.settings.styles = m.styles

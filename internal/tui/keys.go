@@ -1,252 +1,290 @@
 package tui
 
-import "charm.land/bubbles/v2/key"
+// This file is the single source of truth for every keybinding in mrboard:
+// each action is defined exactly once as an Action and registered into a
+// Context. Widgets dispatch against these same values; the footer and the
+// '?' help modal render them. key.NewBinding must not appear anywhere else
+// (enforced by TestBindingsDefinedOnlyInKeys).
+//
+// Actions shared between contexts (e.g. "open MR" on board, detail and diff
+// view) are declared once below and assigned into each keymap.
 
-// KeyMap contains all keybindings for mrboard in board mode.
-type KeyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Left        key.Binding
-	Right       key.Binding
-	Refresh     key.Binding
-	Open        key.Binding
-	Detail      key.Binding
-	CloseDetail key.Binding
-	Sort        key.Binding
-	Sprint      key.Binding
-	ToggleView  key.Binding
-	Settings    key.Binding
-	Reviewers   key.Binding
-	BatchEdit   key.Binding
-	Diff        key.Binding
-	Notify      key.Binding
-	Jira        key.Binding
-	Quit        key.Binding
+// Shared actions — defined once, referenced by several contexts.
+var (
+	actOpenMR = Act("o", "open MR", PriorityCommon, CategoryAct)
+	actDiff   = Act("d", "diff", PriorityCommon, CategoryAct)
+)
+
+// BaseKeyMap is always active at the bottom of the context stack. Its keys
+// are shadowed by any context that binds them and suppressed entirely while
+// a text input captures keys (except ctrl+c, which always quits).
+type BaseKeyMap struct {
+	Help Action
+	Quit Action
 }
 
-// ShortHelp implements help.KeyMap.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		k.Up, k.Down, k.Left, k.Right,
-		k.Refresh, k.Open, k.Detail, k.Sort, k.Sprint,
-		k.ToggleView, k.Settings, k.Reviewers, k.BatchEdit, k.Diff, k.Notify, k.Jira, k.Quit,
-	}
+// DefaultBaseKeyMap is the default always-on binding set.
+var DefaultBaseKeyMap = BaseKeyMap{
+	Help: Act("?", "help", PriorityPinned, CategoryGeneral),
+	Quit: Act("q", "quit", PriorityPinned, CategoryGeneral, "q", "ctrl+c"),
 }
 
-// FullHelp implements help.KeyMap.
-func (k KeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+// BaseCtx is the always-on bottom of the context stack.
+var BaseCtx = NewContext("base", "mrboard", &DefaultBaseKeyMap)
 
-// DetailKeyMap contains keybindings shown in the footer when the detail panel owns focus.
-// Left/right are intentionally absent — they are reserved for future section navigation.
+// HelpKeyMap holds the keybindings active while the help modal is open.
+type HelpKeyMap struct {
+	Close Action
+}
+
+// DefaultHelpKeyMap is the default binding set for the help modal.
+var DefaultHelpKeyMap = HelpKeyMap{
+	Close: Act("? · esc", "close", PriorityPinned, CategoryGeneral, "?", "esc"),
+}
+
+// HelpCtx sits on top of the stack while the help modal is open; it owns all
+// key input so only its close binding is reachable.
+var HelpCtx = NewContext("help", "Help", &DefaultHelpKeyMap)
+
+// BoardKeyMap contains all keybindings for board mode.
+type BoardKeyMap struct {
+	Up         Action
+	Down       Action
+	Left       Action
+	Right      Action
+	Detail     Action
+	Refresh    Action
+	Open       Action
+	Reviewers  Action
+	Diff       Action
+	Sort       Action
+	ToggleView Action
+	Sprint     Action
+	BatchEdit  Action
+	Notify     Action
+	Jira       Action
+	Settings   Action
+}
+
+// DefaultBoardKeyMap is the default keybinding set for board mode.
+var DefaultBoardKeyMap = BoardKeyMap{
+	Up:         Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:       Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Left:       Act("←/h", "left", PriorityCore, CategoryNavigate, "left", "h"),
+	Right:      Act("→/l", "right", PriorityCore, CategoryNavigate, "right", "l"),
+	Detail:     Act("↵", "details", PriorityCore, CategoryNavigate, "enter"),
+	Refresh:    Act("r", "refresh", PriorityCommon, CategoryAct),
+	Open:       actOpenMR,
+	Reviewers:  Act("v", "reviewers", PriorityCommon, CategoryAct),
+	Diff:       actDiff,
+	Sort:       Act("s", "sort", PriorityCommon, CategoryView),
+	ToggleView: Act("tab", "toggle view", PriorityCommon, CategoryView),
+	Sprint:     Act("S", "sprint filter", PriorityModal, CategoryView),
+	BatchEdit:  Act("E", "batch edit", PriorityModal, CategoryAct),
+	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
+	Jira:       Act("J", "open jira", PriorityModal, CategoryAct),
+	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
+}
+
+// BoardCtx is the board-mode context.
+var BoardCtx = NewContext("board", "Board", &DefaultBoardKeyMap,
+	WithFooterGroup("↑↓←→", "move",
+		&DefaultBoardKeyMap.Up, &DefaultBoardKeyMap.Down,
+		&DefaultBoardKeyMap.Left, &DefaultBoardKeyMap.Right),
+)
+
+// DetailKeyMap contains keybindings while the detail panel owns focus.
+// Left/right are intentionally absent — reserved for future section navigation.
 type DetailKeyMap struct {
-	ScrollUp   key.Binding
-	ScrollDown key.Binding
-	Close      key.Binding
-	Open       key.Binding
-	Quit       key.Binding
+	ScrollUp   Action
+	ScrollDown Action
+	Close      Action
+	Open       Action
+	Diff       Action
 }
 
-// ShortHelp implements help.KeyMap.
-func (d DetailKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{d.ScrollUp, d.ScrollDown, d.Close, d.Open, d.Quit}
-}
-
-// FullHelp implements help.KeyMap.
-func (d DetailKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{d.ShortHelp()} }
-
-// DefaultKeyMap is the default keybinding set for board mode.
-var DefaultKeyMap = KeyMap{
-	Up:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Left:        key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
-	Right:       key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
-	Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-	Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
-	Detail:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "details")),
-	CloseDetail: key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
-	Sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort:repo·id↑")),
-	Sprint:      key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sprint filter")),
-	ToggleView:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "my view")),
-	Settings:    key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
-	Reviewers:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "reviewers")),
-	BatchEdit:   key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "batch edit")),
-	Diff:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
-	Notify:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "notify")),
-	Jira:        key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "jira")),
-	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-}
-
-// ReviewerEditorKeyMap holds keybindings for the reviewer editor overlay.
-type ReviewerEditorKeyMap struct {
-	Up             key.Binding
-	Down           key.Binding
-	ToggleApprover key.Binding
-	Remove         key.Binding
-	Search         key.Binding
-	SetTeam        key.Binding
-	Confirm        key.Binding
-	Close          key.Binding
-}
-
-// ShortHelp implements help.KeyMap.
-func (k ReviewerEditorKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.ToggleApprover, k.Remove, k.Search, k.SetTeam, k.Confirm, k.Close}
-}
-
-// FullHelp implements help.KeyMap.
-func (k ReviewerEditorKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
-// DefaultReviewerEditorKeyMap is the default keybinding set for the reviewer editor overlay.
-var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
-	Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	ToggleApprover: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "approver")),
-	Remove:         key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "remove")),
-	Search:         key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
-	SetTeam:        key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "set team")),
-	Confirm:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "save")),
-	Close:          key.NewBinding(key.WithKeys("v", "esc"), key.WithHelp("v/esc", "cancel")),
-}
-
-// DefaultDetailKeyMap is the key map shown in the footer when the detail panel is open.
+// DefaultDetailKeyMap is the default keybinding set for the detail panel.
 var DefaultDetailKeyMap = DetailKeyMap{
-	ScrollUp:   key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "scroll up")),
-	ScrollDown: key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "scroll down")),
-	Close:      key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("esc/↵", "close")),
-	Open:       key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
-	Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+	ScrollUp:   Act("↑/k", "scroll up", PriorityCore, CategoryNavigate, "up", "k"),
+	ScrollDown: Act("↓/j", "scroll down", PriorityCore, CategoryNavigate, "down", "j"),
+	Close:      Act("esc/↵", "close", PriorityCore, CategoryGeneral, "esc", "enter"),
+	Open:       actOpenMR,
+	Diff:       actDiff,
 }
+
+// DetailCtx is the detail-panel context.
+var DetailCtx = NewContext("detail", "Details", &DefaultDetailKeyMap,
+	WithFooterGroup("↑↓", "scroll", &DefaultDetailKeyMap.ScrollUp, &DefaultDetailKeyMap.ScrollDown),
+)
 
 // DiffViewKeyMap holds keybindings for the diff view.
 type DiffViewKeyMap struct {
-	PrevFile     key.Binding
-	NextFile     key.Binding
-	ScrollUp     key.Binding
-	ScrollDown   key.Binding
-	HalfPageUp   key.Binding
-	HalfPageDown key.Binding
-	Top          key.Binding
-	Bottom       key.Binding
-	Open         key.Binding
-	Close        key.Binding
-	Quit         key.Binding
-}
-
-// ShortHelp implements help.KeyMap.
-func (k DiffViewKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		k.PrevFile, k.NextFile, k.ScrollUp, k.ScrollDown,
-		k.HalfPageUp, k.HalfPageDown, k.Top, k.Bottom,
-		k.Open, k.Close, k.Quit,
-	}
-}
-
-// FullHelp implements help.KeyMap.
-func (k DiffViewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
-// SettingsKeyMap holds keybindings for the settings panel.
-type SettingsKeyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Left    key.Binding
-	Right   key.Binding
-	PrevTab key.Binding
-	NextTab key.Binding
-	Toggle  key.Binding
-	Confirm key.Binding
-	Close   key.Binding
-}
-
-// ShortHelp implements help.KeyMap.
-func (k SettingsKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PrevTab, k.NextTab, k.Toggle, k.Confirm, k.Close}
-}
-
-// FullHelp implements help.KeyMap.
-func (k SettingsKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
-// DefaultSettingsKeyMap is the default keybinding set for the settings panel.
-var DefaultSettingsKeyMap = SettingsKeyMap{
-	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Left:    key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev section")),
-	Right:   key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next section")),
-	PrevTab: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev tab")),
-	NextTab: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
-	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
-	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
-	Close:   key.NewBinding(key.WithKeys(",", "esc"), key.WithHelp(",/esc", "close")),
-}
-
-// BatchReviewerEditorKeyMap holds keybindings for the batch reviewer editor overlay.
-type BatchReviewerEditorKeyMap struct {
-	Up             key.Binding
-	Down           key.Binding
-	Tab            key.Binding
-	ToggleApprover key.Binding
-	Remove         key.Binding
-	Confirm        key.Binding
-	Close          key.Binding
-}
-
-// ShortHelp implements help.KeyMap.
-func (k BatchReviewerEditorKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Tab, k.ToggleApprover, k.Remove, k.Confirm, k.Close}
-}
-
-// FullHelp implements help.KeyMap.
-func (k BatchReviewerEditorKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
-}
-
-// DefaultBatchReviewerEditorKeyMap is the default keybinding set for the batch reviewer editor.
-var DefaultBatchReviewerEditorKeyMap = BatchReviewerEditorKeyMap{
-	Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Tab:            key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch panels")),
-	ToggleApprover: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "approver")),
-	Remove:         key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "remove")),
-	Confirm:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "preview")),
-	Close:          key.NewBinding(key.WithKeys("E", "esc"), key.WithHelp("E/esc", "cancel")),
-}
-
-// BatchPreviewKeyMap holds keybindings for the batch preview screen.
-type BatchPreviewKeyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Toggle  key.Binding
-	Confirm key.Binding
-	Back    key.Binding
-}
-
-// ShortHelp implements help.KeyMap.
-func (k BatchPreviewKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.Confirm, k.Back}
-}
-
-// FullHelp implements help.KeyMap.
-func (k BatchPreviewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
-// DefaultBatchPreviewKeyMap is the default keybinding set for the batch preview screen.
-var DefaultBatchPreviewKeyMap = BatchPreviewKeyMap{
-	Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-	Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-	Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "include")),
-	Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("↵", "apply")),
-	Back:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	PrevFile     Action
+	NextFile     Action
+	ScrollUp     Action
+	ScrollDown   Action
+	HalfPageUp   Action
+	HalfPageDown Action
+	Top          Action
+	Bottom       Action
+	Open         Action
+	Close        Action
 }
 
 // DefaultDiffViewKeyMap is the default keybinding set for the diff view.
 var DefaultDiffViewKeyMap = DiffViewKeyMap{
-	PrevFile:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prev file")),
-	NextFile:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next file")),
-	ScrollUp:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "scroll up")),
-	ScrollDown:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "scroll down")),
-	HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("^u", "½ page up")),
-	HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("^d", "½ page down")),
-	Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
-	Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
-	Open:         key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
-	Close:        key.NewBinding(key.WithKeys("d", "esc"), key.WithHelp("d/esc", "close")),
-	Quit:         key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+	PrevFile:     Act("p", "prev file", PriorityCore, CategoryNavigate),
+	NextFile:     Act("n", "next file", PriorityCore, CategoryNavigate),
+	ScrollUp:     Act("↑/k", "scroll up", PriorityCore, CategoryNavigate, "up", "k"),
+	ScrollDown:   Act("↓/j", "scroll down", PriorityCore, CategoryNavigate, "down", "j"),
+	HalfPageUp:   Act("^u", "½ page up", PriorityModal, CategoryNavigate, "ctrl+u"),
+	HalfPageDown: Act("^d", "½ page down", PriorityModal, CategoryNavigate, "ctrl+d"),
+	Top:          Act("g", "top", PriorityModal, CategoryNavigate),
+	Bottom:       Act("G", "bottom", PriorityModal, CategoryNavigate),
+	Open:         actOpenMR,
+	Close:        Act("d/esc", "close", PriorityCore, CategoryGeneral, "d", "esc"),
 }
+
+// DiffViewCtx is the full-screen diff view context.
+var DiffViewCtx = NewContext("diff", "Diff", &DefaultDiffViewKeyMap,
+	WithFooterGroup("p/n", "file", &DefaultDiffViewKeyMap.PrevFile, &DefaultDiffViewKeyMap.NextFile),
+	WithFooterGroup("↑↓", "scroll", &DefaultDiffViewKeyMap.ScrollUp, &DefaultDiffViewKeyMap.ScrollDown),
+)
+
+// SettingsKeyMap holds keybindings for the settings panel.
+type SettingsKeyMap struct {
+	Up      Action
+	Down    Action
+	Left    Action
+	Right   Action
+	PrevTab Action
+	NextTab Action
+	Toggle  Action
+	Confirm Action
+	Close   Action
+}
+
+// DefaultSettingsKeyMap is the default keybinding set for the settings panel.
+var DefaultSettingsKeyMap = SettingsKeyMap{
+	Up:      Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:    Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Left:    Act("←/h", "prev section", PriorityCore, CategoryNavigate, "left", "h"),
+	Right:   Act("→/l", "next section", PriorityCore, CategoryNavigate, "right", "l"),
+	PrevTab: Act("shift+tab", "prev tab", PriorityModal, CategoryView),
+	NextTab: Act("tab", "next tab", PriorityCore, CategoryView),
+	Toggle:  Act("space", "toggle", PriorityCore, CategoryAct),
+	Confirm: Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
+	Close:   Act(",/esc", "close", PriorityCore, CategoryGeneral, ",", "esc"),
+}
+
+// SettingsCtx is the settings-panel context.
+var SettingsCtx = NewContext("settings", "Settings", &DefaultSettingsKeyMap,
+	WithFooterGroup("↑↓", "move", &DefaultSettingsKeyMap.Up, &DefaultSettingsKeyMap.Down),
+	WithFooterGroup("←→", "section", &DefaultSettingsKeyMap.Left, &DefaultSettingsKeyMap.Right),
+)
+
+// ReviewerEditorKeyMap holds keybindings for the reviewer editor overlay
+// (list mode; the search sub-mode uses ReviewerSearchKeyMap).
+type ReviewerEditorKeyMap struct {
+	Up             Action
+	Down           Action
+	ToggleApprover Action
+	Remove         Action
+	Search         Action
+	SetTeam        Action
+	Confirm        Action
+	Close          Action
+}
+
+// DefaultReviewerEditorKeyMap is the default keybinding set for the reviewer editor.
+var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
+	Up:             Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:           Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	ToggleApprover: Act("space", "approver", PriorityCore, CategoryAct),
+	Remove:         Act("d", "remove", PriorityCommon, CategoryAct, "d", "delete"),
+	Search:         Act("/", "search", PriorityCommon, CategoryAct),
+	SetTeam:        Act("T", "set team", PriorityCommon, CategoryAct),
+	Confirm:        Act("↵", "save", PriorityCore, CategoryGeneral, "enter"),
+	Close:          Act("v/esc", "cancel", PriorityCore, CategoryGeneral, "v", "esc"),
+}
+
+// ReviewerEditorCtx is the reviewer editor (list mode) context.
+var ReviewerEditorCtx = NewContext("reviewer-editor", "Reviewers", &DefaultReviewerEditorKeyMap,
+	WithFooterGroup("↑↓", "move", &DefaultReviewerEditorKeyMap.Up, &DefaultReviewerEditorKeyMap.Down),
+)
+
+// ReviewerSearchKeyMap holds keybindings for the reviewer editor's search
+// sub-mode. Navigation is arrow-only: j/k/v/q must insert characters into the
+// query, not move the cursor or close anything.
+type ReviewerSearchKeyMap struct {
+	Up      Action
+	Down    Action
+	Select  Action
+	Confirm Action
+	Cancel  Action
+}
+
+// DefaultReviewerSearchKeyMap is the default keybinding set for reviewer search.
+var DefaultReviewerSearchKeyMap = ReviewerSearchKeyMap{
+	Up:      Act("↑", "up", PriorityCore, CategoryNavigate, "up"),
+	Down:    Act("↓", "down", PriorityCore, CategoryNavigate, "down"),
+	Select:  Act("space", "select", PriorityCore, CategoryAct),
+	Confirm: Act("↵", "add", PriorityCore, CategoryGeneral, "enter"),
+	Cancel:  Act("esc", "cancel", PriorityCore, CategoryGeneral),
+}
+
+// ReviewerSearchCtx is the reviewer-search context; it captures text.
+var ReviewerSearchCtx = NewContext("reviewer-search", "Reviewer search", &DefaultReviewerSearchKeyMap,
+	WithCapturesText(),
+	WithFooterGroup("↑↓", "move", &DefaultReviewerSearchKeyMap.Up, &DefaultReviewerSearchKeyMap.Down),
+)
+
+// BatchReviewerEditorKeyMap holds keybindings for the batch reviewer editor overlay.
+type BatchReviewerEditorKeyMap struct {
+	Up             Action
+	Down           Action
+	Tab            Action
+	ToggleApprover Action
+	Remove         Action
+	Confirm        Action
+	Close          Action
+}
+
+// DefaultBatchReviewerEditorKeyMap is the default keybinding set for the batch reviewer editor.
+var DefaultBatchReviewerEditorKeyMap = BatchReviewerEditorKeyMap{
+	Up:             Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:           Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Tab:            Act("tab", "switch panels", PriorityCore, CategoryNavigate),
+	ToggleApprover: Act("space", "approver", PriorityCore, CategoryAct),
+	Remove:         Act("d", "remove", PriorityCommon, CategoryAct, "d", "delete"),
+	Confirm:        Act("↵", "preview", PriorityCore, CategoryGeneral, "enter"),
+	Close:          Act("E/esc", "cancel", PriorityCore, CategoryGeneral, "E", "esc"),
+}
+
+// BatchEditorCtx is the batch reviewer editor context.
+var BatchEditorCtx = NewContext("batch-editor", "Batch edit", &DefaultBatchReviewerEditorKeyMap,
+	WithFooterGroup("↑↓", "move", &DefaultBatchReviewerEditorKeyMap.Up, &DefaultBatchReviewerEditorKeyMap.Down),
+)
+
+// BatchPreviewKeyMap holds keybindings for the batch preview screen.
+type BatchPreviewKeyMap struct {
+	Up      Action
+	Down    Action
+	Toggle  Action
+	Confirm Action
+	Back    Action
+}
+
+// DefaultBatchPreviewKeyMap is the default keybinding set for the batch preview screen.
+var DefaultBatchPreviewKeyMap = BatchPreviewKeyMap{
+	Up:      Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:    Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Toggle:  Act("space", "include", PriorityCore, CategoryAct),
+	Confirm: Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
+	Back:    Act("esc", "back", PriorityCore, CategoryGeneral),
+}
+
+// BatchPreviewCtx is the batch preview context.
+var BatchPreviewCtx = NewContext("batch-preview", "Batch preview", &DefaultBatchPreviewKeyMap,
+	WithFooterGroup("↑↓", "move", &DefaultBatchPreviewKeyMap.Up, &DefaultBatchPreviewKeyMap.Down),
+)

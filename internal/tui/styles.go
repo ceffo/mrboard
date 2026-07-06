@@ -33,7 +33,13 @@ type Styles struct {
 	ErrorMsg                    lip.Style
 	FilterActive                lip.Style
 	Footer                      lip.Style
+	FooterKey                   lip.Style
+	FooterSep                   lip.Style
 	FooterVersion               lip.Style
+	HelpTitle                   lip.Style
+	HelpSection                 lip.Style
+	HelpKey                     lip.Style
+	HelpLabel                   lip.Style
 	Header                      lip.Style
 	HeaderStats                 lip.Style
 	HeaderTitle                 lip.Style
@@ -86,8 +92,16 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Foreground(c(FgMedium)),
 		Footer: lip.NewStyle().
 			Foreground(c(FgLow)),
+		FooterKey: lip.NewStyle().
+			Foreground(c(FgMedium)).Bold(true),
+		FooterSep: lip.NewStyle().
+			Foreground(c(FgLow)),
 		FooterVersion: lip.NewStyle().
 			Foreground(c(FgLow)),
+		HelpTitle:    lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		HelpSection:  lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
+		HelpKey:      lip.NewStyle().Foreground(c(Accent)),
+		HelpLabel:    lip.NewStyle().Foreground(c(FgHigh)),
 		ColumnHeader: lip.NewStyle().Bold(true).Padding(0, 1),
 		ColumnBorder: lip.NewStyle().
 			Border(lip.RoundedBorder()).BorderForeground(c(Border)),

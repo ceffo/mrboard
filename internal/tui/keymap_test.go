@@ -1,0 +1,139 @@
+package tui
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// TestNoKeyConflicts asserts the registry invariant: within one context every
+// key maps to exactly one action. (NewContext already panics on violation at
+// init; this test makes `just check` fail even when the TUI never launches.)
+// Cross-context duplicates are legal shadowing — logged so they stay visible.
+func TestNoKeyConflicts(t *testing.T) {
+	if len(AllContexts()) == 0 {
+		t.Fatal("no contexts registered")
+	}
+	type owner struct{ ctx, field string }
+	seen := map[string]owner{}
+	for _, ctx := range AllContexts() {
+		keys := map[string]string{}
+		for _, a := range ctx.actions {
+			for _, k := range a.Keys() {
+				if prev, dup := keys[k]; dup {
+					t.Errorf("context %q: key %q bound to both %q and %q",
+						ctx.Name(), k, prev, a.Help().Desc)
+				}
+				keys[k] = a.Help().Desc
+				if prev, ok := seen[k]; ok && prev.ctx != ctx.Name() {
+					t.Logf("shadowing: key %q in %q (was %q in %q)", k, ctx.Name(), prev.field, prev.ctx)
+				}
+				seen[k] = owner{ctx: ctx.Name(), field: a.Help().Desc}
+			}
+		}
+	}
+}
+
+// TestBindingsDefinedOnlyInKeys enforces the single-source-of-truth rule:
+// Action construction (Act / key.NewBinding) may only appear in keys.go
+// (definitions) and keymap.go (the Act constructor itself).
+func TestBindingsDefinedOnlyInKeys(t *testing.T) {
+	newBinding := regexp.MustCompile(`key\.NewBinding\(`)
+	actCall := regexp.MustCompile(`\bAct\(`)
+
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "keys.go" || f == "keymap.go" {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if newBinding.MatchString(line) {
+				t.Errorf("%s:%d: key.NewBinding outside keys.go — define the Action in keys.go instead", f, i+1)
+			}
+			if actCall.MatchString(line) {
+				t.Errorf("%s:%d: Act() outside keys.go — define the Action in keys.go instead", f, i+1)
+			}
+		}
+	}
+}
+
+// TestFooterItemsRespectPriorityAndGroups covers the footer candidate logic:
+// grouped nav collapses to one item, modal-only actions are excluded, and
+// items come out sorted by priority.
+func TestFooterItemsRespectPriorityAndGroups(t *testing.T) {
+	items := BoardCtx.footerItems()
+	if len(items) == 0 {
+		t.Fatal("board context has no footer items")
+	}
+	if items[0].key != "↑↓←→" || items[0].label != "move" {
+		t.Errorf("first board footer item = %q %q, want grouped nav ↑↓←→ move", items[0].key, items[0].label)
+	}
+	for _, it := range items {
+		if it.label == "up" || it.label == "down" || it.label == "left" || it.label == "right" {
+			t.Errorf("group member %q leaked into footer items", it.label)
+		}
+		if it.label == "settings" || it.label == "notify" {
+			t.Errorf("modal-only action %q leaked into footer items", it.label)
+		}
+	}
+	for i := 1; i < len(items); i++ {
+		if items[i].priority < items[i-1].priority {
+			t.Errorf("footer items not sorted by priority: %v before %v", items[i-1], items[i])
+		}
+	}
+}
+
+// TestFooterPinnedNeverDropped verifies that on a narrow terminal the pinned
+// items ("? help", "q quit") survive while lower-priority items are dropped,
+// and that the version stays within the line.
+func TestFooterPinnedNeverDropped(t *testing.T) {
+	f := newFooterWidget(NewStyles(LoadThemeByName(""), true), "v0.0.0")
+	f.SetWidth(40)
+	line := f.render([]*Context{BaseCtx, BoardCtx})
+	for _, pinned := range []string{"help", "quit", "v0.0.0"} {
+		if !strings.Contains(line, pinned) {
+			t.Errorf("narrow footer dropped pinned element %q: %q", pinned, line)
+		}
+	}
+	if strings.Contains(line, "refresh") {
+		t.Errorf("narrow footer kept low-priority item refresh: %q", line)
+	}
+}
+
+// TestHelpSectionsShadowing verifies stack semantics: a key claimed by a
+// higher context hides the lower context's action, and a text-capturing top
+// context hides lower contexts entirely.
+func TestHelpSectionsShadowing(t *testing.T) {
+	// Diff view binds "d" (close); base binds "q"/"?" — both visible, but the
+	// board is not part of this stack.
+	sections := helpSections([]*Context{BaseCtx, DiffViewCtx})
+	var labels []string
+	for _, s := range sections {
+		for _, e := range s.entries {
+			labels = append(labels, e.label)
+		}
+	}
+	joined := strings.Join(labels, ",")
+	if !strings.Contains(joined, "close") || !strings.Contains(joined, "quit") {
+		t.Errorf("diff+base sections missing expected entries: %v", labels)
+	}
+
+	// Text capture on top: base's help/quit must disappear.
+	sections = helpSections([]*Context{BaseCtx, ReviewerSearchCtx})
+	for _, s := range sections {
+		for _, e := range s.entries {
+			if e.label == "help" || e.label == "quit" {
+				t.Errorf("base action %q visible under text-capturing context", e.label)
+			}
+		}
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 
@@ -393,25 +392,25 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 		return w, nil
 	}
 	switch {
-	case key.Matches(kMsg, w.keys.Close):
+	case w.keys.Close.Match(kMsg):
 		return w, func() tea.Msg { return SettingsClosedMsg{} }
-	case key.Matches(kMsg, w.keys.NextTab):
+	case w.keys.NextTab.Match(kMsg):
 		w.tab = (w.tab + 1) % numSettingsTabs
-	case key.Matches(kMsg, w.keys.PrevTab):
+	case w.keys.PrevTab.Match(kMsg):
 		w.tab = (w.tab + numSettingsTabs - 1) % numSettingsTabs
-	case key.Matches(kMsg, w.keys.Up):
+	case w.keys.Up.Match(kMsg):
 		w.moveCursor(-1)
 		return w, w.emitApplied()
-	case key.Matches(kMsg, w.keys.Down):
+	case w.keys.Down.Match(kMsg):
 		w.moveCursor(1)
 		return w, w.emitApplied()
-	case key.Matches(kMsg, w.keys.Left):
+	case w.keys.Left.Match(kMsg):
 		w.moveSection(-1)
 		return w, w.emitApplied()
-	case key.Matches(kMsg, w.keys.Right):
+	case w.keys.Right.Match(kMsg):
 		w.moveSection(1)
 		return w, w.emitApplied()
-	case key.Matches(kMsg, w.keys.Toggle), key.Matches(kMsg, w.keys.Confirm):
+	case w.keys.Toggle.Match(kMsg), w.keys.Confirm.Match(kMsg):
 		w.activate()
 		return w, w.emitApplied()
 	}

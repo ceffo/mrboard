@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 
@@ -151,6 +150,15 @@ func (w *reviewerEditorWidget) SetMembers(members []domain.ProjectMember, err er
 
 func (w *reviewerEditorWidget) Init() tea.Cmd { return nil }
 
+// Context returns the keybinding context matching the widget's current mode;
+// the search sub-mode captures text so global printable keys reach the query.
+func (w *reviewerEditorWidget) Context() *Context {
+	if w.mode == reviewerEditorModeSearch {
+		return ReviewerSearchCtx
+	}
+	return ReviewerEditorCtx
+}
+
 func (w *reviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:ireturn
 	kMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -169,27 +177,27 @@ func (w *reviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //noli
 
 func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(kMsg, w.keys.Close):
+	case w.keys.Close.Match(kMsg):
 		return w, func() tea.Msg { return ReviewerEditorClosedMsg{} }
 
-	case key.Matches(kMsg, w.keys.Up):
+	case w.keys.Up.Match(kMsg):
 		if w.cursor > 0 {
 			w.cursor--
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.Down):
+	case w.keys.Down.Match(kMsg):
 		if w.cursor < len(w.staged)-1 {
 			w.cursor++
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.ToggleApprover):
+	case w.keys.ToggleApprover.Match(kMsg):
 		if w.cursor < len(w.staged) {
 			w.staged[w.cursor].IsApprover = !w.staged[w.cursor].IsApprover
 		}
 
-	case key.Matches(kMsg, w.keys.Remove):
+	case w.keys.Remove.Match(kMsg):
 		if w.cursor < len(w.staged) {
 			w.staged = append(w.staged[:w.cursor], w.staged[w.cursor+1:]...)
 			if w.cursor > 0 && w.cursor >= len(w.staged) {
@@ -198,7 +206,7 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.Search):
+	case w.keys.Search.Match(kMsg):
 		w.mode = reviewerEditorModeSearch
 		w.searchQuery = ""
 		w.searchSel = make(map[int64]bool)
@@ -208,10 +216,10 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 			return w, w.fetchMembersCmd()
 		}
 
-	case key.Matches(kMsg, w.keys.SetTeam):
+	case w.keys.SetTeam.Match(kMsg):
 		w.addTeam()
 
-	case key.Matches(kMsg, w.keys.Confirm):
+	case w.keys.Confirm.Match(kMsg):
 		w.saving = true
 		return w, w.saveCmd()
 	}
@@ -220,14 +228,17 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 }
 
 func (w *reviewerEditorWidget) updateSearch(kMsg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Search mode uses its own arrow-only keymap: letters like j/k/v/q must
+	// be typed into the query, not trigger list-mode actions.
+	searchKeys := DefaultReviewerSearchKeyMap
 	switch {
-	case key.Matches(kMsg, w.keys.Close):
-		// Esc/r: cancel search, return to list.
+	case searchKeys.Cancel.Match(kMsg):
+		// Esc: cancel search, return to list.
 		w.mode = reviewerEditorModeList
 		w.searchQuery = ""
 		w.searchSel = make(map[int64]bool)
 
-	case key.Matches(kMsg, w.keys.Confirm):
+	case searchKeys.Confirm.Match(kMsg):
 		// Enter: add selected members; no-op if nothing selected (keeps search open).
 		if len(w.searchSel) == 0 {
 			break
@@ -250,25 +261,20 @@ func (w *reviewerEditorWidget) updateSearch(kMsg tea.KeyPressMsg) (tea.Model, te
 		w.searchQuery = ""
 		w.searchSel = make(map[int64]bool)
 
-	case key.Matches(kMsg, w.keys.ToggleApprover): // space in search = toggle selection
-		for i, m := range w.searchResults {
-			// We need to track cursor in search results too.
-			_ = i
-			_ = m
-		}
+	case searchKeys.Select.Match(kMsg):
 		// Space toggles the focused search result.
 		if w.cursor < len(w.searchResults) {
 			m := w.searchResults[w.cursor]
 			w.searchSel[m.UserID] = !w.searchSel[m.UserID]
 		}
 
-	case key.Matches(kMsg, w.keys.Up):
+	case searchKeys.Up.Match(kMsg):
 		if w.cursor > 0 {
 			w.cursor--
 			w.adjustScroll()
 		}
 
-	case key.Matches(kMsg, w.keys.Down):
+	case searchKeys.Down.Match(kMsg):
 		if w.cursor < len(w.searchResults)-1 {
 			w.cursor++
 			w.adjustScroll()

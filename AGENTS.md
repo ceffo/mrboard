@@ -129,7 +129,7 @@ won't find the config file.
 
 1. `internal/domain` — stdlib only. No exceptions.
 2. `internal/config` and `internal/gitlab` — no charmbracelet imports.
-3. All keybindings defined in `internal/tui/keys.go` using `bubbles/key`. No hardcoded strings elsewhere.
+3. All keybindings defined in `internal/tui/keys.go` as `Act(...)` actions registered in contexts (see `docs/keybindings.md`). No hardcoded key strings or `key.NewBinding` elsewhere — enforced by tests.
 4. All lipgloss styles defined in `internal/tui/styles.go`. No inline `lipgloss.NewStyle()` calls in widgets.
 5. Every TUI widget is a self-contained struct with its own `Init`, `Update`, `View`. No monolithic root Update.
 6. Config loaded from `./mrboard.toml` or `$MRBOARD_CONFIG`. PAT also overridable via `$GITLAB_TOKEN`.

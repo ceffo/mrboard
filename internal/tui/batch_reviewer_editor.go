@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
@@ -92,17 +91,17 @@ func (w *batchReviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /
 		return w, nil
 	}
 	switch {
-	case key.Matches(kMsg, w.keys.Close):
+	case w.keys.Close.Match(kMsg):
 		return w, func() tea.Msg { return BatchReviewerEditorClosedMsg{} }
 
-	case key.Matches(kMsg, w.keys.Tab):
+	case w.keys.Tab.Match(kMsg):
 		if w.panel == batchEditorPanelReviewers {
 			w.panel = batchEditorPanelSiblings
 		} else {
 			w.panel = batchEditorPanelReviewers
 		}
 
-	case key.Matches(kMsg, w.keys.Up):
+	case w.keys.Up.Match(kMsg):
 		if w.panel == batchEditorPanelReviewers {
 			if w.cursor > 0 {
 				w.cursor--
@@ -115,7 +114,7 @@ func (w *batchReviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /
 			}
 		}
 
-	case key.Matches(kMsg, w.keys.Down):
+	case w.keys.Down.Match(kMsg):
 		if w.panel == batchEditorPanelReviewers {
 			if w.cursor < len(w.staged)-1 {
 				w.cursor++
@@ -128,12 +127,12 @@ func (w *batchReviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /
 			}
 		}
 
-	case key.Matches(kMsg, w.keys.ToggleApprover):
+	case w.keys.ToggleApprover.Match(kMsg):
 		if w.panel == batchEditorPanelReviewers && w.cursor < len(w.staged) {
 			w.staged[w.cursor].IsApprover = !w.staged[w.cursor].IsApprover
 		}
 
-	case key.Matches(kMsg, w.keys.Remove):
+	case w.keys.Remove.Match(kMsg):
 		if w.panel == batchEditorPanelReviewers && w.cursor < len(w.staged) {
 			w.staged = append(w.staged[:w.cursor], w.staged[w.cursor+1:]...)
 			if w.cursor > 0 && w.cursor >= len(w.staged) {
@@ -142,7 +141,7 @@ func (w *batchReviewerEditorWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /
 			w.adjustScrollReviewers()
 		}
 
-	case key.Matches(kMsg, w.keys.Confirm):
+	case w.keys.Confirm.Match(kMsg):
 		staged := make([]stagedReviewer, len(w.staged))
 		copy(staged, w.staged)
 		siblings := make([]domain.MergeRequest, len(w.siblings))

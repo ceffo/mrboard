@@ -64,8 +64,8 @@ Use widgets from the bubbles library before building your own. Reference:
 | Widget | Package | Use in mrboard |
 |---|---|---|
 | `spinner.Model` | `bubbles/spinner` | ✅ Loading overlay in `spinner.go` |
-| `key.Binding` | `bubbles/key` | ✅ All keybindings in `keys.go` |
-| `help.Model` | `bubbles/help` | ✅ Footer keybinding bar in `footer.go` |
+| `key.Binding` | `bubbles/key` | ✅ Wrapped by `Action` in `keymap.go`; all definitions in `keys.go` |
+| `help.Model` | `bubbles/help` | ❌ Replaced by the priority footer + `?` help modal (see [keybindings.md](keybindings.md)) |
 | `viewport.Model` | `bubbles/viewport` | ✅ Column scroll if card count exceeds height |
 | `list.Model` | `bubbles/list` | ❌ Too opinionated — build own card list |
 | `table.Model` | `bubbles/table` | ❌ Not a kanban layout |
@@ -73,7 +73,8 @@ Use widgets from the bubbles library before building your own. Reference:
 | `progress.Model` | `bubbles/progress` | ❌ Not needed |
 | `paginator.Model` | `bubbles/paginator` | ❌ Not needed |
 
-**Do not reimplement spinner, key matching, or help rendering.** These are provided by bubbles.
+**Do not reimplement spinner or key matching.** These are provided by bubbles. Help rendering
+is mrboard's own system — see [keybindings.md](keybindings.md).
 
 ### Spinner usage pattern
 
@@ -99,30 +100,21 @@ func (m loadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m loadingModel) View() tea.View    { return tea.NewView(m.spinner.View()) }
 ```
 
-### Help/footer usage pattern
+### Help/footer pattern
 
-```go
-import "charm.land/bubbles/v2/help"
-import "charm.land/bubbles/v2/key"
-
-type footerModel struct {
-    help help.Model
-    keys KeyMap
-}
-
-func (m footerModel) View() tea.View {
-    return tea.NewView(m.help.View(m.keys))
-}
-```
-
-`KeyMap` must implement `help.KeyMap` (i.e. `ShortHelp() []key.Binding` and
-`FullHelp() [][]key.Binding`) — do this in `keys.go`.
+The footer and the `?` help modal are driven by the keybinding context stack — the full
+design lives in [keybindings.md](keybindings.md). In short: every action is defined once in
+`keys.go` as an `Action` (binding + priority + category) inside a `Context`; the root model
+derives the active context stack from its state (`baseStack()`), and `footer.go` /
+`help_modal.go` render from that stack. Never render bindings any other way.
 
 ## File responsibilities
 
 | File | Owns |
 |---|---|
-| `keys.go` | All keybindings — all `KeyMap` types, nowhere else |
+| `keymap.go` | Keybinding machinery — `Action`, `Context`, `NewContext` (conflict panic), footer/help section builders |
+| `keys.go` | All keybinding definitions — the only file where `Act()` may be called |
+| `help_modal.go` | `?` help modal — centered contextual card built from the context stack |
 | `styles.go` | All lipgloss styles — one `Styles` struct, nowhere else |
 | `model.go` | Root `tea.Model` — program state, child composition, message routing |
 | `board.go` | Board widget — column layout, cross-column focus |
@@ -133,7 +125,7 @@ func (m footerModel) View() tea.View {
 | `approver_editor.go` | Approver editor overlay (`a`) — read/write "Approvers" rule |
 | `filter_popup.go` | Filter popup overlay (`f`) |
 | `theme_picker.go` | Theme picker overlay (`t`) |
-| `footer.go` | Footer bar — renders active keybindings via `help.Model` |
+| `footer.go` | Footer bar — priority-filled keybinding hints + version pinned right |
 | `header.go` | Header bar — title + MR stats |
 | `spinner.go` | Loading overlay |
 | `state.go` | Shared TUI state types |
@@ -162,27 +154,38 @@ down to children. Widgets never call `tea.WindowSize()` themselves.
 
 ## Keybindings — keys.go
 
-Use `charm.land/bubbles/v2/key` (verify path — see import table above).
+Full design: [keybindings.md](keybindings.md). The rules that matter day-to-day:
 
-There is one `KeyMap` type per mode. All are defined in `keys.go` — no other file may use raw
-string key checks (`msg.String() == "r"`). Always use `key.Matches`.
-
-Board mode (`KeyMap`), detail panel (`DetailKeyMap`), diff view (`DiffViewKeyMap`), filter popup
-(`FilterPopupKeyMap`), theme picker (`ThemePickerKeyMap`), and approver editor
-(`ApproverEditorKeyMap`) each have their own type and `Default*KeyMap` var.
+- Every action is defined **exactly once** in `keys.go` via `Act(helpKey, label, priority,
+  category, keys...)`, inside a per-context keymap struct registered with `NewContext`.
+  `TestBindingsDefinedOnlyInKeys` fails the build if `Act`/`key.NewBinding` appears elsewhere.
+- No raw string key checks (`msg.String() == "r"`). Dispatch with `action.Match(msg)`.
+- Labels are static verbs ("sort", not "sort:repo·id↑") — state indicators belong in the header.
+- A duplicate key **within** a context panics at init and fails `TestNoKeyConflicts`.
+  Reusing a key across contexts is legal shadowing (top of stack wins).
+- New overlay = new context: add a keymap struct + `NewContext` in `keys.go`, return it from
+  `baseStack()` in `model.go`. Footer and `?` modal update automatically.
+- Contexts owning a focused text input are marked `WithCapturesText()` so printable keys
+  (including `?` and `q`) reach the input.
 
 Example (board):
 
 ```go
-type KeyMap struct {
-    Up, Down, Left, Right key.Binding
-    Refresh, Open         key.Binding
-    Detail, CloseDetail   key.Binding
-    Sort, ToggleView       key.Binding
-    Filter, Theme         key.Binding
-    Approvers, Diff       key.Binding
-    Quit                  key.Binding
+type BoardKeyMap struct {
+    Up, Down, Left, Right Action
+    Detail, Refresh, Open Action
+    // …
 }
+
+var DefaultBoardKeyMap = BoardKeyMap{
+    Up:      Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+    Refresh: Act("r", "refresh", PriorityCommon, CategoryAct),
+    // …
+}
+
+var BoardCtx = NewContext("board", "Board", &DefaultBoardKeyMap,
+    WithFooterGroup("↑↓←→", "move", &DefaultBoardKeyMap.Up /* … */),
+)
 ```
 
 ## Styles — styles.go
