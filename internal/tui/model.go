@@ -27,24 +27,24 @@ type sortField int
 
 const (
 	sortByRepoIID sortField = iota
-	sortByAuthor
+	sortByAssignee
 	sortByAge
 	numSortFields
 )
 
 // Sort field string keys used in persisted state.
 const (
-	sortKeyRepoIID = "repo_iid"
-	sortKeyAuthor  = "author"
-	sortKeyAge     = "age"
+	sortKeyRepoIID  = "repo_iid"
+	sortKeyAssignee = "assignee"
+	sortKeyAge      = "age"
 )
 
 func (f sortField) next() sortField { return (f + 1) % numSortFields }
 
 func (f sortField) display() string {
 	switch f {
-	case sortByAuthor:
-		return sortKeyAuthor
+	case sortByAssignee:
+		return sortKeyAssignee
 	case sortByAge:
 		return sortKeyAge
 	default:
@@ -54,8 +54,8 @@ func (f sortField) display() string {
 
 func (f sortField) stateKey() string {
 	switch f {
-	case sortByAuthor:
-		return sortKeyAuthor
+	case sortByAssignee:
+		return sortKeyAssignee
 	case sortByAge:
 		return sortKeyAge
 	default:
@@ -65,8 +65,8 @@ func (f sortField) stateKey() string {
 
 func sortFieldFromState(s string) sortField {
 	switch s {
-	case sortKeyAuthor:
-		return sortByAuthor
+	case sortKeyAssignee:
+		return sortByAssignee
 	case sortKeyAge:
 		return sortByAge
 	default:
@@ -1591,7 +1591,7 @@ func (m *Model) applyMRFilter() {
 		SortField:    m.sortField.stateKey(),
 		SortDesc:     m.sortDesc,
 		Phases:       m.filter.Phases,
-		Authors:      m.filter.Authors,
+		Assignees:    m.filter.Assignees,
 		Reviewers:    m.filter.Reviewers,
 		SprintFilter: m.sprintFilterActive,
 		SprintKeys:   m.sprintIssueKeys,
@@ -1629,7 +1629,7 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 }
 
 func (m *Model) isFilterActive() bool {
-	return len(m.filter.Phases) > 0 || len(m.filter.Authors) > 0 || len(m.filter.Reviewers) > 0 ||
+	return len(m.filter.Phases) > 0 || len(m.filter.Assignees) > 0 || len(m.filter.Reviewers) > 0 ||
 		m.sprintFilterActive
 }
 

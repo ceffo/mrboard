@@ -11,19 +11,22 @@ import (
 // helpers
 
 const (
-	userAlice  = "alice"
-	userBob    = "bob"
-	userCarol  = "carol"
-	sortAuthor = "author"
-	sortAge    = "age"
-	sortRepoID = "repo_iid"
+	userAlice    = "alice"
+	userBob      = "bob"
+	userCarol    = "carol"
+	sortAssignee = "assignee"
+	sortAge      = "age"
+	sortRepoID   = "repo_iid"
 )
 
-func mr(id int, author, repo string, iid int, created time.Time, reviewers ...domain.ReviewerInfo) domain.MergeRequest {
+func mr(
+	id int, assignee, repo string, iid int, created time.Time, reviewers ...domain.ReviewerInfo,
+) domain.MergeRequest {
 	return domain.MergeRequest{
 		ID:          id,
 		IID:         iid,
-		Author:      author,
+		Author:      assignee, // kept equal to Assignee for test simplicity
+		Assignee:    assignee,
 		ProjectPath: repo,
 		CreatedAt:   created,
 		Reviewers:   reviewers,
@@ -54,13 +57,13 @@ func TestFilterAndSort_MyViewOff_ReturnsAll(t *testing.T) {
 	}
 }
 
-func TestFilterAndSort_MyViewOn_FiltersByAuthor(t *testing.T) {
+func TestFilterAndSort_MyViewOn_FiltersByAssignee(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 1, t0),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
-	if len(got) != 1 || got[0].Author != userAlice {
+	if len(got) != 1 || got[0].Assignee != userAlice {
 		t.Fatalf("expected alice's MR only, got %v", got)
 	}
 }
@@ -139,34 +142,34 @@ func TestFilterAndSort_SortRepoIID_Descending(t *testing.T) {
 	}
 }
 
-// FilterAndSort — sort by author
+// FilterAndSort — sort by assignee
 
-func TestFilterAndSort_SortAuthor_Ascending(t *testing.T) {
+func TestFilterAndSort_SortAssignee_Ascending(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, "carol", "repo/a", 1, t0),
 		mr(2, "alice", "repo/b", 2, t0),
 		mr(3, "bob", "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor})
-	wantAuthors := []string{"alice", "bob", "carol"}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAssignee})
+	wantAssignees := []string{"alice", "bob", "carol"}
 	for i, mr := range got {
-		if mr.Author != wantAuthors[i] {
-			t.Fatalf("pos %d: want %s, got %s", i, wantAuthors[i], mr.Author)
+		if mr.Assignee != wantAssignees[i] {
+			t.Fatalf("pos %d: want %s, got %s", i, wantAssignees[i], mr.Assignee)
 		}
 	}
 }
 
-func TestFilterAndSort_SortAuthor_Descending(t *testing.T) {
+func TestFilterAndSort_SortAssignee_Descending(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, "carol", "repo/b", 2, t0),
 		mr(3, "bob", "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor, SortDesc: true})
-	wantAuthors := []string{"carol", "bob", "alice"}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAssignee, SortDesc: true})
+	wantAssignees := []string{"carol", "bob", "alice"}
 	for i, mr := range got {
-		if mr.Author != wantAuthors[i] {
-			t.Fatalf("pos %d: want %s, got %s", i, wantAuthors[i], mr.Author)
+		if mr.Assignee != wantAssignees[i] {
+			t.Fatalf("pos %d: want %s, got %s", i, wantAssignees[i], mr.Assignee)
 		}
 	}
 }
@@ -203,38 +206,38 @@ func TestFilterAndSort_SortAge_Descending(t *testing.T) {
 	}
 }
 
-// FilterAndSort — multi-select Authors
+// FilterAndSort — multi-select Assignees
 
-func TestFilterAndSort_Authors_SingleMatch(t *testing.T) {
+func TestFilterAndSort_Assignees_SingleMatch(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
 		mr(3, userCarol, "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: []string{userAlice}})
-	if len(got) != 1 || got[0].Author != userAlice {
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userAlice}})
+	if len(got) != 1 || got[0].Assignee != userAlice {
 		t.Fatalf("expected only alice, got %v", got)
 	}
 }
 
-func TestFilterAndSort_Authors_MultiMatch(t *testing.T) {
+func TestFilterAndSort_Assignees_MultiMatch(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
 		mr(3, userCarol, "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: []string{userAlice, userBob}})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userAlice, userBob}})
 	if len(got) != 2 {
 		t.Fatalf("expected 2, got %d", len(got))
 	}
 }
 
-func TestFilterAndSort_Authors_EmptyShowsAll(t *testing.T) {
+func TestFilterAndSort_Assignees_EmptyShowsAll(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Authors: nil})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: nil})
 	if len(got) != 2 {
 		t.Fatalf("expected 2, got %d", len(got))
 	}
@@ -324,7 +327,7 @@ func TestFilterAndSort_DoesNotMutateInput(t *testing.T) {
 	}
 	original := make([]domain.MergeRequest, len(mrs))
 	copy(original, mrs)
-	mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAuthor})
+	mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAssignee})
 	for i := range mrs {
 		if mrs[i].ID != original[i].ID {
 			t.Fatal("input slice was mutated")

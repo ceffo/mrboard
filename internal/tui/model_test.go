@@ -120,19 +120,19 @@ func TestModel_SortKey_CyclesField(t *testing.T) {
 			m2m.SortFieldKey(), m2m.SortDesc())
 	}
 
-	// Second 's' → author asc.
+	// Second 's' → assignee asc.
 	m3, _ := m2m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m3m := m3.(Model)
-	if m3m.SortFieldKey() != sortKeyAuthor || m3m.SortDesc() {
-		t.Fatalf("after 2nd s: want author asc, got field=%s desc=%v",
+	if m3m.SortFieldKey() != sortKeyAssignee || m3m.SortDesc() {
+		t.Fatalf("after 2nd s: want assignee asc, got field=%s desc=%v",
 			m3m.SortFieldKey(), m3m.SortDesc())
 	}
 
-	// Third 's' → author desc.
+	// Third 's' → assignee desc.
 	m4, _ := m3m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m4m := m4.(Model)
-	if m4m.SortFieldKey() != sortKeyAuthor || !m4m.SortDesc() {
-		t.Fatalf("after 3rd s: want author desc, got field=%s desc=%v",
+	if m4m.SortFieldKey() != sortKeyAssignee || !m4m.SortDesc() {
+		t.Fatalf("after 3rd s: want assignee desc, got field=%s desc=%v",
 			m4m.SortFieldKey(), m4m.SortDesc())
 	}
 

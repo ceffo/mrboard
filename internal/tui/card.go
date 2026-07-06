@@ -68,9 +68,9 @@ func (c cardWidget) render() string {
 
 	now := time.Now()
 
-	// Line 1: author (+ waiting/ready indicator) left · open duration right.
+	// Line 1: assignee (+ waiting/ready indicator) left · open duration right.
 	// Duration spaces are replaced with NBSP so lipgloss won't word-wrap within them.
-	authorLabel := c.mr.DisplayAuthor()
+	authorLabel := c.mr.DisplayAssignee()
 	switch {
 	case c.mr.Phase == domain.PhaseNeedsAuthorAction && !c.mr.WaitingSince.IsZero():
 		waitDur := now.Sub(c.mr.WaitingSince)

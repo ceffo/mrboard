@@ -4,8 +4,8 @@ package domain
 type FilterCriteria struct {
 	// Phases is nil/empty = show all phases; otherwise only listed phases are shown.
 	Phases map[MRPhase]bool `yaml:"phases,omitempty"`
-	// Authors is nil/empty = show all authors.
-	Authors []string `yaml:"authors,omitempty"`
+	// Assignees is nil/empty = show all assignees.
+	Assignees []string `yaml:"assignees,omitempty"`
 	// Reviewers is nil/empty = show all reviewers.
 	Reviewers []string `yaml:"reviewers,omitempty"`
 }

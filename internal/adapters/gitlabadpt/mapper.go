@@ -265,6 +265,13 @@ func MapMR(
 		domainMR.Author = mr.Author.Username
 		domainMR.AuthorName = mr.Author.Name
 	}
+	if mr.Assignee != nil {
+		domainMR.Assignee = mr.Assignee.Username
+		domainMR.AssigneeName = mr.Assignee.Name
+	} else if len(mr.Assignees) > 0 {
+		domainMR.Assignee = mr.Assignees[0].Username
+		domainMR.AssigneeName = mr.Assignees[0].Name
+	}
 
 	domainMR.DetailedMergeStatus = mr.DetailedMergeStatus
 	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
@@ -367,6 +374,10 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		CreatedAt:      createdAt,
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
+	}
+	if len(mr.Assignees.Nodes) > 0 {
+		domainMR.Assignee = mr.Assignees.Nodes[0].Username
+		domainMR.AssigneeName = mr.Assignees.Nodes[0].Name
 	}
 
 	domainMR.DetailedMergeStatus = strings.ToLower(mr.DetailedMergeStatus)

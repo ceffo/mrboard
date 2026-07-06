@@ -38,7 +38,7 @@ type filterFocus int
 
 const (
 	filterFocusStatus filterFocus = iota
-	filterFocusAuthor
+	filterFocusAssignee
 	filterFocusReviewer
 	filterNumSections
 )
@@ -201,7 +201,7 @@ var settingsTabLabels = [numSettingsTabs]string{"General", "Filters", "Sorting",
 // sorting tab cursor positions
 const (
 	sortCursorRepoIID    = 0
-	sortCursorAuthor     = 1
+	sortCursorAssignee   = 1
 	sortCursorAge        = 2
 	sortCursorAscending  = 3
 	sortCursorDescending = 4
@@ -225,7 +225,7 @@ type settingsWidget struct {
 
 	// Filters tab
 	filterStatus   filterStatusWidget
-	filterAuthor   filterSelectWidget
+	filterAssignee filterSelectWidget
 	filterReviewer filterSelectWidget
 	filterFocused  filterFocus
 
@@ -270,12 +270,12 @@ func newSettingsWidget(
 		}
 	}
 	authorItems := buildSelectItems(authors, userMap)
-	authorChecked := make(map[string]bool, len(filter.Authors))
-	for _, a := range filter.Authors {
-		authorChecked[a] = true
+	assigneeChecked := make(map[string]bool, len(filter.Assignees))
+	for _, a := range filter.Assignees {
+		assigneeChecked[a] = true
 	}
-	if len(authorChecked) == 0 {
-		authorChecked = nil
+	if len(assigneeChecked) == 0 {
+		assigneeChecked = nil
 	}
 	reviewerItems := buildSelectItems(reviewers, userMap)
 	reviewerChecked := make(map[string]bool, len(filter.Reviewers))
@@ -289,8 +289,8 @@ func newSettingsWidget(
 	// --- Sorting tab init ---
 	var sc int
 	switch currentSortField {
-	case sortByAuthor:
-		sc = sortCursorAuthor
+	case sortByAssignee:
+		sc = sortCursorAssignee
 	case sortByAge:
 		sc = sortCursorAge
 	default:
@@ -323,7 +323,7 @@ func newSettingsWidget(
 		tab:                tabGeneral,
 		includeReviewerMRs: includeReviewerMRs,
 		filterStatus:       filterStatusWidget{phases: phaseState},
-		filterAuthor:       filterSelectWidget{items: authorItems, checked: authorChecked},
+		filterAssignee:     filterSelectWidget{items: authorItems, checked: assigneeChecked},
 		filterReviewer:     filterSelectWidget{items: reviewerItems, checked: reviewerChecked},
 		filterFocused:      filterFocusStatus,
 		sortCursor:         sc,
@@ -352,13 +352,18 @@ func buildSelectItems(usernames []string, userMap map[string]string) []filterSel
 	return items
 }
 
-// BuildAuthorsReviewers extracts sorted unique author and reviewer username slices from the MR list.
-func BuildAuthorsReviewers(mrs []domain.MergeRequest) (authors, reviewers []string) {
-	authorSet := make(map[string]bool)
+// BuildAuthorsReviewers extracts sorted unique assignee and reviewer username slices from the MR list.
+// Assignee falls back to author when unset so unassigned MRs remain filterable.
+func BuildAuthorsReviewers(mrs []domain.MergeRequest) (assignees, reviewers []string) {
+	assigneeSet := make(map[string]bool)
 	reviewerSet := make(map[string]bool)
 	for _, mr := range mrs {
-		if mr.Author != "" {
-			authorSet[mr.Author] = true
+		u := mr.Assignee
+		if u == "" {
+			u = mr.Author
+		}
+		if u != "" {
+			assigneeSet[u] = true
 		}
 		for _, r := range mr.Reviewers {
 			if r.Username != "" {
@@ -366,17 +371,17 @@ func BuildAuthorsReviewers(mrs []domain.MergeRequest) (authors, reviewers []stri
 			}
 		}
 	}
-	authors = make([]string, 0, len(authorSet))
-	for u := range authorSet {
-		authors = append(authors, u)
+	assignees = make([]string, 0, len(assigneeSet))
+	for u := range assigneeSet {
+		assignees = append(assignees, u)
 	}
-	sort.Strings(authors)
+	sort.Strings(assignees)
 	reviewers = make([]string, 0, len(reviewerSet))
 	for u := range reviewerSet {
 		reviewers = append(reviewers, u)
 	}
 	sort.Strings(reviewers)
-	return authors, reviewers
+	return assignees, reviewers
 }
 
 // Init implements tea.Model.
@@ -471,10 +476,10 @@ func (w *settingsWidget) moveCursorFilters(delta int) {
 		if next >= 0 && next < len(w.filterStatus.phases) {
 			w.filterStatus.cursor = next
 		}
-	case filterFocusAuthor:
-		next := w.filterAuthor.cursor + delta
-		if next >= 0 && next < len(w.filterAuthor.items) {
-			w.filterAuthor.moveCursor(delta)
+	case filterFocusAssignee:
+		next := w.filterAssignee.cursor + delta
+		if next >= 0 && next < len(w.filterAssignee.items) {
+			w.filterAssignee.moveCursor(delta)
 		}
 	case filterFocusReviewer:
 		next := w.filterReviewer.cursor + delta
@@ -517,8 +522,8 @@ func (w *settingsWidget) activate() {
 		switch w.filterFocused {
 		case filterFocusStatus:
 			w.filterStatus.toggle()
-		case filterFocusAuthor:
-			w.filterAuthor.toggle()
+		case filterFocusAssignee:
+			w.filterAssignee.toggle()
 		case filterFocusReviewer:
 			w.filterReviewer.toggle()
 		}
@@ -526,8 +531,8 @@ func (w *settingsWidget) activate() {
 		switch w.sortCursor {
 		case sortCursorRepoIID:
 			w.sortField = sortByRepoIID
-		case sortCursorAuthor:
-			w.sortField = sortByAuthor
+		case sortCursorAssignee:
+			w.sortField = sortByAssignee
 		case sortCursorAge:
 			w.sortField = sortByAge
 		case sortCursorAscending:
@@ -563,7 +568,7 @@ func (w settingsWidget) buildApplied() SettingsAppliedMsg {
 	return SettingsAppliedMsg{
 		Filter: domain.FilterCriteria{
 			Phases:    phaseMap,
-			Authors:   w.filterAuthor.selectedSlice(),
+			Assignees: w.filterAssignee.selectedSlice(),
 			Reviewers: w.filterReviewer.selectedSlice(),
 		},
 		IncludeReviewerMRs: w.includeReviewerMRs,
@@ -627,8 +632,8 @@ func (w settingsWidget) renderFilters() string {
 	sb.WriteString(renderSectionHeader("Status", w.filterFocused == filterFocusStatus, w.styles) + "\n")
 	sb.WriteString(w.filterStatus.render(w.filterFocused == filterFocusStatus, w.styles))
 	sb.WriteString("\n")
-	sb.WriteString(renderSectionHeader("Author", w.filterFocused == filterFocusAuthor, w.styles) + "\n")
-	sb.WriteString(w.filterAuthor.render(w.filterFocused == filterFocusAuthor, w.styles))
+	sb.WriteString(renderSectionHeader("Assignee", w.filterFocused == filterFocusAssignee, w.styles) + "\n")
+	sb.WriteString(w.filterAssignee.render(w.filterFocused == filterFocusAssignee, w.styles))
 	sb.WriteString("\n")
 	sb.WriteString(renderSectionHeader("Reviewer", w.filterFocused == filterFocusReviewer, w.styles) + "\n")
 	sb.WriteString(w.filterReviewer.render(w.filterFocused == filterFocusReviewer, w.styles))
@@ -643,7 +648,7 @@ func (w settingsWidget) renderSorting() string {
 		field sortField
 	}{
 		{"repo·id", sortByRepoIID},
-		{"author", sortByAuthor},
+		{"assignee", sortByAssignee},
 		{"age", sortByAge},
 	}
 	for i, item := range sortFieldItems {

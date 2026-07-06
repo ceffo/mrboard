@@ -129,15 +129,17 @@ type MRDiff struct {
 
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
-	ID          int
-	IID         int
-	ProjectID   int
-	Title       string
-	Author      string // GitLab username — canonical ID
-	AuthorName  string // display name; falls back to Author if empty
-	WebURL      string
-	ProjectPath string // namespace/project without domain, e.g. "group/repo"
-	Description string
+	ID           int
+	IID          int
+	ProjectID    int
+	Title        string
+	Author       string // GitLab username — canonical ID
+	AuthorName   string // display name; falls back to Author if empty
+	Assignee     string // GitLab username of the current assignee
+	AssigneeName string // display name; falls back to Assignee if empty
+	WebURL       string
+	ProjectPath  string // namespace/project without domain, e.g. "group/repo"
+	Description  string
 
 	Phase               MRPhase
 	DetailedMergeStatus string // raw value from GitLab's detailed_merge_status field
@@ -162,6 +164,18 @@ func (mr MergeRequest) DisplayAuthor() string {
 		return mr.AuthorName
 	}
 	return mr.Author
+}
+
+// DisplayAssignee returns the human-readable assignee name, falling back to the
+// assignee username, and then to DisplayAuthor when no assignee is set.
+func (mr MergeRequest) DisplayAssignee() string {
+	if mr.AssigneeName != "" {
+		return mr.AssigneeName
+	}
+	if mr.Assignee != "" {
+		return mr.Assignee
+	}
+	return mr.DisplayAuthor()
 }
 
 // ClassifyPhase determines the MRPhase from the MR's fields.

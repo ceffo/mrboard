@@ -16,9 +16,9 @@ type FilterOptions struct {
 	// Phases restricts visible MRs to those whose Phase is true in the map.
 	// nil or empty map means all phases are shown.
 	Phases map[domain.MRPhase]bool
-	// Authors restricts visible MRs to those whose author is in the set.
-	// nil or empty slice means all authors are shown.
-	Authors []string
+	// Assignees restricts visible MRs to those whose assignee is in the set.
+	// nil or empty slice means all assignees are shown.
+	Assignees []string
 	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
 	// nil or empty slice means all reviewers are shown.
 	Reviewers []string
@@ -51,18 +51,22 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 		}
 		mrs = filtered
 	}
-	if len(opts.Authors) > 0 {
-		authorSet := make(map[string]bool, len(opts.Authors))
-		for _, a := range opts.Authors {
-			authorSet[a] = true
+	if len(opts.Assignees) > 0 {
+		assigneeSet := make(map[string]bool, len(opts.Assignees))
+		for _, a := range opts.Assignees {
+			assigneeSet[a] = true
 		}
-		// Current user's MRs always pass the author filter regardless of selection.
+		// Current user's MRs always pass the assignee filter regardless of selection.
 		if opts.CurrentUser != "" {
-			authorSet[opts.CurrentUser] = true
+			assigneeSet[opts.CurrentUser] = true
 		}
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
-			if authorSet[mr.Author] {
+			effective := mr.Assignee
+			if effective == "" {
+				effective = mr.Author
+			}
+			if assigneeSet[effective] {
 				filtered = append(filtered, mr)
 			}
 		}
@@ -98,7 +102,11 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 
 // mrIsRelevantToUser reports whether an MR should appear in "my view".
 func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
-	if mr.Author == username {
+	effective := mr.Assignee
+	if effective == "" {
+		effective = mr.Author
+	}
+	if effective == username {
 		return true
 	}
 	for _, r := range mr.Reviewers {
@@ -110,12 +118,15 @@ func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
 	return false
 }
 
-// BuildUserMap creates a username → full-name lookup table from all author and reviewer info in the MR list.
+// BuildUserMap creates a username → full-name lookup table from all author, assignee, and reviewer info in the MR list.
 func BuildUserMap(mrs []domain.MergeRequest) map[string]string {
 	m := make(map[string]string)
 	for _, mr := range mrs {
 		if mr.Author != "" && mr.AuthorName != "" {
 			m[mr.Author] = mr.AuthorName
+		}
+		if mr.Assignee != "" && mr.AssigneeName != "" {
+			m[mr.Assignee] = mr.AssigneeName
 		}
 		for _, r := range mr.Reviewers {
 			if r.Username != "" && r.Name != "" {
@@ -141,8 +152,16 @@ func sortedMRs(mrs []domain.MergeRequest, field string, desc bool) []domain.Merg
 		a, b := out[i], out[j]
 		var less, equal bool
 		switch field {
-		case "author":
-			less, equal = a.Author < b.Author, a.Author == b.Author
+		case "assignee":
+			aa := a.Assignee
+			if aa == "" {
+				aa = a.Author
+			}
+			ba := b.Assignee
+			if ba == "" {
+				ba = b.Author
+			}
+			less, equal = aa < ba, aa == ba
 		case "age":
 			less, equal = b.CreatedAt.Before(a.CreatedAt), a.CreatedAt.Equal(b.CreatedAt)
 		default: // "repo_iid"

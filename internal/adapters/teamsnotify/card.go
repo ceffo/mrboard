@@ -73,8 +73,13 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		projectName = mr.ProjectPath[i+1:]
 	}
 
-	authorName := mr.Author
-	if name, ok := cfg.UserMappings[mr.Author]; ok {
+	// Use assignee as the primary person; fall back to author when unassigned.
+	assigneeKey := mr.Assignee
+	if assigneeKey == "" {
+		assigneeKey = mr.Author
+	}
+	authorName := mr.DisplayAssignee()
+	if name, ok := cfg.UserMappings[assigneeKey]; ok {
 		authorName = name
 	}
 	body := []any{

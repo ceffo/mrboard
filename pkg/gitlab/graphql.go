@@ -27,6 +27,7 @@ query($username: String!) {
         webUrl
         detailedMergeStatus
         author { username name }
+        assignees { nodes { username name } }
         reviewers { nodes { username name } }
         project { id fullPath archived }
         approvedBy { nodes { username } }
@@ -96,7 +97,10 @@ type GQLMergeRequest struct {
 	WebURL              string  `json:"webUrl"`
 	DetailedMergeStatus string  `json:"detailedMergeStatus"`
 	Author              GQLUser `json:"author"`
-	Reviewers           struct {
+	Assignees           struct {
+		Nodes []GQLUser `json:"nodes"`
+	} `json:"assignees"`
+	Reviewers struct {
 		Nodes []GQLUser `json:"nodes"`
 	} `json:"reviewers"`
 	Project struct {
@@ -169,6 +173,7 @@ query($username: String!) {
         webUrl
         detailedMergeStatus
         author { username name }
+        assignees { nodes { username name } }
         reviewers { nodes { username name } }
         project { id fullPath archived }
         approvedBy { nodes { username } }
