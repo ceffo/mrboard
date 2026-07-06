@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.1] - 2026-07-06
+
+### Fixed
+- Homebrew cask completion generation: removed a redundant argument that caused `mrboard`'s bash/zsh/fish completions to contain cobra's help text instead of a working completion script.
+
 ## [0.7.0] - 2026-06-30
 
 ### Added
