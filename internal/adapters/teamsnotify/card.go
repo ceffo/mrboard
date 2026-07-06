@@ -17,9 +17,17 @@ const (
 
 // — Adaptive Card types ------------------------------------------------------
 
-// payload is the envelope the Power Automate flow extracts via triggerBody()?['card'].
+// payload is the envelope the Power Automate flow receives.
+//
+// Two-step flow:
+//  1. "Post a message in a chat or channel" (Flow bot) with body = summary
+//     → fires the OS push-notification and @mention pings (summary contains
+//     <at>email</at> tags that Teams resolves against the tenant directory)
+//  2. "Update an adaptive card in a chat or channel" with card = string(card)
+//     → silently replaces the text with the rich adaptive card
 type payload struct {
-	Card adaptiveCard `json:"card"`
+	Card    adaptiveCard `json:"card"`
+	Summary string       `json:"summary,omitempty"`
 }
 
 type adaptiveCard struct {
@@ -152,6 +160,7 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		actions = append(actions, openURLAction{Type: typeActionOpen, Title: "Open JIRA", URL: jiraURL})
 	}
 
+	summary := fallbackSummary(mr, projectName, approverNames)
 	return adaptiveCard{
 		Type:         typeAdaptive,
 		Schema:       schemaAdaptive,
@@ -159,8 +168,49 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 		Body:         body,
 		Actions:      actions,
 		MsTeams:      msTeams,
-		FallbackText: fallbackSummary(mr, projectName, approverNames),
+		FallbackText: summary,
 	}
+}
+
+// buildPayload wraps the card in the full webhook payload.
+func buildPayload(mr domain.MergeRequest, cfg Config) payload {
+	card := buildCard(mr, cfg)
+	projectName := mr.ProjectPath
+	if i := strings.LastIndex(mr.ProjectPath, "/"); i >= 0 {
+		projectName = mr.ProjectPath[i+1:]
+	}
+	return payload{
+		Card:    card,
+		Summary: mentionSummary(mr, projectName, cfg),
+	}
+}
+
+// mentionSummary builds the one-line text posted as step 1 of the PA flow.
+// Approvers with a configured UserID are wrapped in <at>email</at> so Teams
+// resolves them against the tenant directory and fires @mention notifications.
+// Approvers without a UserID fall back to plain display names (readable but
+// won't ping).
+func mentionSummary(mr domain.MergeRequest, projectName string, cfg Config) string {
+	base := fmt.Sprintf("%s · !%d %s", mr.Title, mr.IID, projectName)
+	var parts []string
+	for _, r := range mr.Reviewers {
+		if !r.IsApprover {
+			continue
+		}
+		if email, ok := cfg.UserIDs[r.Username]; ok {
+			parts = append(parts, fmt.Sprintf("<at>%s</at>", email))
+		} else {
+			name := r.Username
+			if mapped, ok := cfg.UserMappings[r.Username]; ok {
+				name = mapped
+			}
+			parts = append(parts, name)
+		}
+	}
+	if len(parts) > 0 {
+		return base + " — 👌 " + strings.Join(parts, " ")
+	}
+	return base
 }
 
 // fallbackSummary builds the one-line push-notification preview shown by the

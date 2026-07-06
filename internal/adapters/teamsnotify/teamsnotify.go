@@ -41,7 +41,7 @@ func (t *TeamsNotifier) Notify(ctx context.Context, mr domain.MergeRequest) erro
 		"approvers", countApprovers(mr),
 	)
 
-	p, err := json.Marshal(payload{Card: buildCard(mr, t.cfg)})
+	p, err := json.Marshal(buildPayload(mr, t.cfg))
 	if err != nil {
 		return fmt.Errorf("teamsnotify: marshal: %w", err)
 	}
