@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.6] - 2026-07-06
+
+### Added
+- MR assignee is now the primary tracking identity across the board, filters, sort order, and Teams notifications. The author is still displayed in the detail pane but is no longer used as the card owner.
+
+### Fixed
+- Teams notifications now show a readable summary in the OS push-notification toast and fire proper @mention pings. The Power Automate flow was redesigned as a two-step sequence: a plain-text message (carrying `<at>email</at>` mention tags) fires the notification, then an adaptive card update silently replaces it with the rich card. Approvers must have their Teams email configured under `user_ids` in `mrboard.yaml` to receive @mention pings.
+
 ## [0.7.5] - 2026-07-06
 
 ### Added
