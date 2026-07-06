@@ -29,6 +29,32 @@ func buildRootCmd() *cobra.Command {
 	var modeOverride string
 	var c *core.Core
 
+	// bootCore loads config and wires up the application. Only commands that
+	// actually need a live GitLab/JIRA client call this from their own PreRunE —
+	// it must not run as a PersistentPreRunE, since that would also apply it to
+	// commands like `version` and cobra's built-in `completion` that must work
+	// without any config present (e.g. Homebrew's completion-generation step
+	// runs the binary in a sandbox with no config file at all).
+	bootCore := func(cmd *cobra.Command) error {
+		cfg, err := config.Load(cfgPath)
+		if err != nil {
+			return err
+		}
+		if logLevel != "" {
+			cfg.Log.Level = logLevel
+		}
+		built, err := core.New(cmd.Context(), cfg)
+		if err != nil {
+			return err
+		}
+		c = built
+		ctx := ilog.WithLogger(cmd.Context(), c.Logger)
+		ctx = context.WithValue(ctx, coreKey{}, c)
+		cmd.SetContext(ctx)
+		c.Logger.Info("mrboard startup", "version", Version, "log_level", cfg.Log.Level, "current_user", cfg.CurrentUser)
+		return nil
+	}
+
 	root := &cobra.Command{
 		Use:   "mrboard",
 		Short: "GitLab MR review board for daily standups",
@@ -42,24 +68,8 @@ Config search path (first match wins):
 Environment:
   GITLAB_TOKEN     Override gitlab.token from config`,
 		SilenceUsage: true,
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := config.Load(cfgPath)
-			if err != nil {
-				return err
-			}
-			if logLevel != "" {
-				cfg.Log.Level = logLevel
-			}
-			built, err := core.New(cmd.Context(), cfg)
-			if err != nil {
-				return err
-			}
-			c = built
-			ctx := ilog.WithLogger(cmd.Context(), c.Logger)
-			ctx = context.WithValue(ctx, coreKey{}, c)
-			cmd.SetContext(ctx)
-			c.Logger.Info("mrboard startup", "version", Version, "log_level", cfg.Log.Level, "current_user", cfg.CurrentUser)
-			return nil
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			return bootCore(cmd)
 		},
 		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
 			if c != nil {
@@ -82,7 +92,11 @@ Environment:
 	root.Flags().StringVar(&themeOverride, "theme", "", "session theme (default, dracula, nord, tokyo-night, monokai)")
 	root.Flags().StringVar(&modeOverride, "mode", "", "colour mode for this session (auto, dark, light)")
 
-	root.AddCommand(buildFetchCmd())
+	fetchCmd := buildFetchCmd()
+	fetchCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		return bootCore(cmd)
+	}
+	root.AddCommand(fetchCmd)
 	root.AddCommand(buildVersionCmd())
 
 	return root
