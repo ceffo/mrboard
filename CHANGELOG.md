@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.2] - 2026-07-06
+
+### Fixed
+- CLI errors are no longer silenced: startup failures (e.g. an invalid config path) and unknown subcommands now print a clear error message instead of exiting silently with no output.
+
 ## [0.7.1] - 2026-07-06
 
 ### Fixed
