@@ -31,6 +31,15 @@ type ReviewersSavedMsg struct {
 // ReviewerEditorClosedMsg is sent when the editor is dismissed without saving.
 type ReviewerEditorClosedMsg struct{}
 
+// BatchReviewerEditorPreviewMsg is sent when the user confirms the staged reviewer
+// list while sibling MRs are present, requesting the per-MR preview screen before
+// writing to more than the focused MR.
+type BatchReviewerEditorPreviewMsg struct {
+	Staged    []stagedReviewer
+	Siblings  []domain.MergeRequest // all MRs sharing the JIRA key, including FocusedMR
+	FocusedMR domain.MergeRequest
+}
+
 const (
 	reviewerEditorMaxVisible = 8
 )
@@ -43,6 +52,16 @@ const (
 	reviewerEditorModeSearch                    // "/" search to add members
 )
 
+// reviewerEditorPanel identifies which panel owns keyboard focus: the staged
+// reviewer list being edited, or the read-only list of sibling MRs sharing the
+// same JIRA key.
+type reviewerEditorPanel int
+
+const (
+	reviewerEditorPanelReviewers reviewerEditorPanel = iota
+	reviewerEditorPanelSiblings
+)
+
 // stagedReviewer is an entry in the reviewer editor's local staging buffer.
 type stagedReviewer struct {
 	Username   string
@@ -53,6 +72,8 @@ type stagedReviewer struct {
 }
 
 // reviewerEditorWidget is the modal overlay for editing the reviewer list on an MR.
+// When the MR shares a JIRA key with other open MRs, it also shows a sibling panel
+// so the same reviewer/approver edit can be applied to them — see siblings.
 type reviewerEditorWidget struct {
 	styles  Styles
 	keys    ReviewerEditorKeyMap
@@ -81,14 +102,26 @@ type reviewerEditorWidget struct {
 	searchResults []domain.ProjectMember // filtered by searchQuery
 	searchSel     map[int64]bool         // userID → selected in search
 
+	// Sibling MRs sharing the same JIRA key as mr (includes mr itself), and the
+	// read-only panel used to browse them. Empty when mr has no JIRA key or no
+	// other open MR shares it.
+	siblings     []domain.MergeRequest
+	panel        reviewerEditorPanel
+	sibCursor    int
+	sibScrollOff int
+
 	saving bool // true while the save command is in flight
 }
 
 // newReviewerEditorWidget creates a staged-buffer editor for the given MR.
 // roster is the resolved team from startup (may be nil for group-only configs).
+// siblings is every MR sharing the same JIRA key as mr, including mr itself
+// (e.g. Model.SiblingMRs(domain.ExtractJiraID(mr.Title))); nil or a single-element
+// slice means mr has no siblings to offer a batch apply to.
 func newReviewerEditorWidget(
 	baseCtx context.Context,
 	mr domain.MergeRequest,
+	siblings []domain.MergeRequest,
 	styles Styles,
 	keys ReviewerEditorKeyMap,
 	src mrsvc.MergeRequestSource,
@@ -122,6 +155,7 @@ func newReviewerEditorWidget(
 		origApprovers: origApprovers,
 		userIDByName:  make(map[string]int64),
 		searchSel:     make(map[int64]bool),
+		siblings:      siblings,
 	}
 }
 
@@ -180,25 +214,46 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 	case w.keys.Close.Match(kMsg):
 		return w, func() tea.Msg { return ReviewerEditorClosedMsg{} }
 
+	case w.keys.Tab.Match(kMsg):
+		if w.panel == reviewerEditorPanelReviewers {
+			w.panel = reviewerEditorPanelSiblings
+		} else {
+			w.panel = reviewerEditorPanelReviewers
+		}
+
 	case w.keys.Up.Match(kMsg):
+		if w.panel == reviewerEditorPanelSiblings {
+			if w.sibCursor > 0 {
+				w.sibCursor--
+				w.adjustScrollSiblings()
+			}
+			break
+		}
 		if w.cursor > 0 {
 			w.cursor--
 			w.adjustScroll()
 		}
 
 	case w.keys.Down.Match(kMsg):
+		if w.panel == reviewerEditorPanelSiblings {
+			if w.sibCursor < len(w.siblings)-1 {
+				w.sibCursor++
+				w.adjustScrollSiblings()
+			}
+			break
+		}
 		if w.cursor < len(w.staged)-1 {
 			w.cursor++
 			w.adjustScroll()
 		}
 
 	case w.keys.ToggleApprover.Match(kMsg):
-		if w.cursor < len(w.staged) {
+		if w.panel == reviewerEditorPanelReviewers && w.cursor < len(w.staged) {
 			w.staged[w.cursor].IsApprover = !w.staged[w.cursor].IsApprover
 		}
 
 	case w.keys.Remove.Match(kMsg):
-		if w.cursor < len(w.staged) {
+		if w.panel == reviewerEditorPanelReviewers && w.cursor < len(w.staged) {
 			w.staged = append(w.staged[:w.cursor], w.staged[w.cursor+1:]...)
 			if w.cursor > 0 && w.cursor >= len(w.staged) {
 				w.cursor = len(w.staged) - 1
@@ -207,6 +262,9 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 		}
 
 	case w.keys.Search.Match(kMsg):
+		if w.panel != reviewerEditorPanelReviewers {
+			break
+		}
 		w.mode = reviewerEditorModeSearch
 		w.searchQuery = ""
 		w.searchSel = make(map[int64]bool)
@@ -217,14 +275,33 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 		}
 
 	case w.keys.SetTeam.Match(kMsg):
-		w.addTeam()
+		if w.panel == reviewerEditorPanelReviewers {
+			w.addTeam()
+		}
 
 	case w.keys.Confirm.Match(kMsg):
-		w.saving = true
-		return w, w.saveCmd()
+		return w.confirm()
 	}
 
 	return w, nil
+}
+
+// confirm commits the staged edit. With no sibling MRs it writes directly to
+// mr; otherwise it hands off to the batch preview screen so the user can review
+// and exclude individual siblings before anything else is written.
+func (w *reviewerEditorWidget) confirm() (tea.Model, tea.Cmd) { //nolint:ireturn
+	if len(w.siblings) <= 1 {
+		w.saving = true
+		return w, w.saveCmd()
+	}
+	staged := make([]stagedReviewer, len(w.staged))
+	copy(staged, w.staged)
+	siblings := make([]domain.MergeRequest, len(w.siblings))
+	copy(siblings, w.siblings)
+	focusedMR := w.mr
+	return w, func() tea.Msg {
+		return BatchReviewerEditorPreviewMsg{Staged: staged, Siblings: siblings, FocusedMR: focusedMR}
+	}
 }
 
 func (w *reviewerEditorWidget) updateSearch(kMsg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -305,6 +382,14 @@ func (w *reviewerEditorWidget) adjustScroll() {
 	}
 }
 
+func (w *reviewerEditorWidget) adjustScrollSiblings() {
+	if w.sibCursor < w.sibScrollOff {
+		w.sibScrollOff = w.sibCursor
+	} else if w.sibCursor >= w.sibScrollOff+reviewerEditorMaxVisible {
+		w.sibScrollOff = w.sibCursor - reviewerEditorMaxVisible + 1
+	}
+}
+
 // addTeam appends team roster members not already staged, excluding the author.
 // Added members are reviewers only (not approvers). Idempotent.
 func (w *reviewerEditorWidget) addTeam() {
@@ -374,15 +459,10 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 	projectID := int64(w.mr.ProjectID)
 	mrIID := int64(w.mr.IID)
 
-	// Snapshot staged state at call time.
-	type snap struct {
-		username   string
-		isApprover bool
-		userID     int64
-	}
-	snapped := make([]snap, len(w.staged))
+	// Snapshot staged state at call time so the closure captures stable data.
+	staged := make([]mrsvc.ReviewerEdit, len(w.staged))
 	for i, s := range w.staged {
-		snapped[i] = snap{username: s.Username, isApprover: s.IsApprover, userID: s.UserID}
+		staged[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
 	}
 	knownIDs := make(map[string]int64, len(w.userIDByName))
 	for k, v := range w.userIDByName {
@@ -396,102 +476,26 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 	ctx, cancel := context.WithTimeout(w.baseCtx, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
-
-		// Resolve any staged reviewers whose user IDs are still unknown.
-		needFetch := false
-		for _, s := range snapped {
-			if s.userID == 0 {
-				if _, ok := knownIDs[s.username]; !ok {
-					needFetch = true
-					break
-				}
-			}
-		}
-		if needFetch {
-			members, err := src.GetProjectMembers(ctx, projectID)
-			if err != nil {
-				return ReviewersSavedMsg{Err: fmt.Errorf("resolve reviewer IDs: %w", err)}
-			}
-			for _, m := range members {
-				knownIDs[m.Username] = m.UserID
-			}
-		}
-
-		// Build reviewer_ids (replace semantics — always sent).
-		seen := make(map[int64]bool)
-		var reviewerIDs []int64
-		for _, s := range snapped {
-			id := s.userID
-			if id == 0 {
-				id = knownIDs[s.username]
-			}
-			if id == 0 || seen[id] {
-				continue
-			}
-			reviewerIDs = append(reviewerIDs, id)
-			seen[id] = true
-		}
-
-		if err := src.SetReviewers(ctx, projectID, mrIID, reviewerIDs); err != nil {
-			return ReviewersSavedMsg{Err: err}
-		}
-
-		// Write Approvers rule only if the approver flag set changed.
-		nowApprovers := make(map[string]bool)
-		var approverIDs []int64
-		for _, s := range snapped {
-			if s.isApprover {
-				nowApprovers[s.username] = true
-				id := s.userID
-				if id == 0 {
-					id = knownIDs[s.username]
-				}
-				if id != 0 {
-					approverIDs = append(approverIDs, id)
-				}
-			}
-		}
-		approversChanged := len(nowApprovers) != len(origApprovers)
-		if !approversChanged {
-			for u := range nowApprovers {
-				if !origApprovers[u] {
-					approversChanged = true
-					break
-				}
-			}
-		}
-		if approversChanged {
-			if err := src.SaveApprovers(ctx, projectID, mrIID, approverIDs); err != nil {
-				return ReviewersSavedMsg{Err: err}
-			}
-		}
-
-		mr, err := src.FetchMR(ctx, projectID, mrIID)
-		if err == nil {
-			applyStagedApproverFlags(&mr, nowApprovers)
-		}
+		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, staged, knownIDs, origApprovers)
 		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
 	}
 }
 
-// applyStagedApproverFlags overlays the just-written approver set onto the MR's
-// reviewers. GitLab's approval-rule read is eventually consistent, so a FetchMR
-// fired immediately after SaveApprovers can return stale EligibleApprovers and
-// drop the IsApprover flag. Trusting the staged intent instead keeps both the
-// notification card and the board display correct until the next full refresh.
-func applyStagedApproverFlags(mr *domain.MergeRequest, approvers map[string]bool) {
-	for i := range mr.Reviewers {
-		mr.Reviewers[i].IsApprover = approvers[mr.Reviewers[i].Username]
-	}
-}
+// Hint lines for the reviewer-list and sibling panels. Kept as consts so the
+// header's gap padding (anchored to the widest one) and each panel's own
+// bottom hint always agree.
+const (
+	reviewerListHint = "  ↑/↓ move  space:approver  d:remove  /:search  T:team  tab:siblings  ↵:save  v/esc:cancel"
+	reviewerSibHint  = "  ↑/↓ move  tab:reviewers  ↵:save  v/esc:cancel"
+)
 
 func (w *reviewerEditorWidget) render() string {
 	var sb strings.Builder
 
 	// Line 1: "!IID repoName" (left) — "Edit Reviewers & Approvers" (right)
-	// Width is anchored to the hint line which is the widest content.
-	const hintLine = "  ↑/↓ move  space:approver  d:remove  /:search  T:team  ↵:save  v/esc:cancel"
-	contentW := lip.Width(hintLine)
+	// Width is anchored to the widest hint line so the header lines up
+	// regardless of which panel is showing.
+	contentW := max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint))
 	repoName := w.mr.ProjectPath
 	if i := strings.LastIndex(repoName, "/"); i >= 0 {
 		repoName = repoName[i+1:]
@@ -505,11 +509,18 @@ func (w *reviewerEditorWidget) render() string {
 	line1 := w.styles.PopupHint.Render(leftStr) + strings.Repeat(" ", gap) + w.styles.PopupTitle.Render(rightStr)
 	// Line 2: MR title
 	line2 := w.styles.PopupItem.Render(w.mr.Title)
-	sb.WriteString(line1 + "\n" + line2 + "\n\n")
+	sb.WriteString(line1 + "\n" + line2 + "\n")
+	if key := domain.ExtractJiraID(w.mr.Title); key != "" && len(w.siblings) > 1 {
+		sb.WriteString(w.styles.PopupHint.Render(fmt.Sprintf("🎫 %s · %d linked MRs", key, len(w.siblings))) + "\n")
+	}
+	sb.WriteString("\n")
 
-	if w.mode == reviewerEditorModeSearch {
+	switch {
+	case w.mode == reviewerEditorModeSearch:
 		w.renderSearch(&sb)
-	} else {
+	case w.panel == reviewerEditorPanelSiblings:
+		w.renderSiblings(&sb)
+	default:
 		w.renderList(&sb)
 	}
 
@@ -550,9 +561,54 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 	if w.saving {
 		sb.WriteString("\n" + w.styles.PopupHint.Render("  Saving…"))
 	} else {
-		sb.WriteString("\n" + w.styles.PopupHint.Render(
-			"  ↑/↓ move  space:approver  d:remove  /:search  T:team  ↵:save  v/esc:cancel"))
+		sb.WriteString("\n" + w.styles.PopupHint.Render(reviewerListHint))
 	}
+}
+
+// renderSiblings shows the read-only list of MRs sharing mr's JIRA key. Each
+// row is flagged with a conflict badge when its current approver set differs
+// from mr's — a warning, not a block: the write still applies to it on
+// confirm (via the batch preview screen) unless the user excludes it there.
+func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
+	plural := "s"
+	if len(w.siblings) == 1 {
+		plural = ""
+	}
+	header := fmt.Sprintf("Also apply to (%d MR%s)", len(w.siblings), plural)
+	sb.WriteString(w.styles.PopupSectionFocused.Render("▶ "+header) + "\n")
+
+	if len(w.siblings) == 0 {
+		sb.WriteString(w.styles.PopupHint.Render("  (no sibling MRs)") + "\n")
+	} else {
+		end := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
+		for i := w.sibScrollOff; i < end; i++ {
+			sib := w.siblings[i]
+			repo := sib.ProjectPath
+			if idx := strings.LastIndex(repo, "/"); idx >= 0 {
+				repo = repo[idx+1:]
+			}
+			isSelf := sib.ProjectID == w.mr.ProjectID && sib.IID == w.mr.IID
+			suffix := ""
+			if isSelf {
+				suffix = " (this)"
+			} else if domain.ApproversConflict(w.mr, sib) {
+				suffix = " " + w.styles.DurationWarning.Render("⚠ approvers differ")
+			}
+			label := fmt.Sprintf("!%d %s — %s%s", sib.IID, repo, sib.Title, suffix)
+			if i == w.sibCursor {
+				sb.WriteString("  " + w.styles.PopupItemFocused.Render(label) + "\n")
+			} else {
+				sb.WriteString("  " + w.styles.PopupItem.Render(label) + "\n")
+			}
+		}
+		if len(w.siblings) > reviewerEditorMaxVisible {
+			shown := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
+			sb.WriteString(w.styles.PopupHint.Render(
+				fmt.Sprintf("  %d–%d / %d", w.sibScrollOff+1, shown, len(w.siblings))) + "\n")
+		}
+	}
+
+	sb.WriteString("\n" + w.styles.PopupHint.Render(reviewerSibHint))
 }
 
 func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) {

@@ -6,12 +6,11 @@ package tui
 type overlayKind int
 
 const (
-	overlayKindNone                overlayKind = iota
-	overlayKindDiffView                        // full-screen diff view
-	overlayKindSettings                        // settings popup
-	overlayKindReviewerEditor                  // reviewer editor popup
-	overlayKindBatchReviewerEditor             // batch reviewer editor popup
-	overlayKindBatchPreview                    // batch preview screen (confirm selection before apply)
+	overlayKindNone           overlayKind = iota
+	overlayKindDiffView                   // full-screen diff view
+	overlayKindSettings                   // settings popup
+	overlayKindReviewerEditor             // reviewer editor popup (single MR + sibling MRs)
+	overlayKindBatchPreview               // batch preview screen (confirm selection before apply)
 )
 
 // overlayRouter is a single-active-overlay state machine. Only one exclusive

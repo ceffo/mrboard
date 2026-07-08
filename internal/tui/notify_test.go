@@ -63,21 +63,3 @@ func TestHandleReviewersSaved_ApproversUnchanged_DoesNotNotify(t *testing.T) {
 	_, cmd := m.handleReviewersSaved(ReviewersSavedMsg{MR: savedMR(), ApproversChanged: false})
 	runCmd(t, cmd)
 }
-
-func TestApplyStagedApproverFlags_OverlaysIntent(t *testing.T) {
-	// FetchMR came back with stale rule data — nobody flagged as approver.
-	mr := domain.MergeRequest{
-		Reviewers: []domain.ReviewerInfo{
-			{Username: "doc"},
-			{Username: "biff"},
-		},
-	}
-	applyStagedApproverFlags(&mr, map[string]bool{"doc": true})
-
-	if !mr.Reviewers[0].IsApprover {
-		t.Errorf("doc should be flagged as approver from staged intent")
-	}
-	if mr.Reviewers[1].IsApprover {
-		t.Errorf("biff was not staged as approver and must stay false")
-	}
-}

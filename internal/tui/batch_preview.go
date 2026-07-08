@@ -28,6 +28,8 @@ type previewMRRow struct {
 	mr        domain.MergeRequest
 	included  bool // user-toggled: will this MR be part of the write?
 	hasChange bool // staged reviewers differ from current MR reviewers
+	isSelf    bool // this is the MR the reviewer editor was opened on
+	conflict  bool // this MR's current approvers differ from focusedMR's (warning only)
 }
 
 // batchPreviewWidget is the preview overlay shown after the batch reviewer editor.
@@ -43,19 +45,24 @@ type batchPreviewWidget struct {
 }
 
 // newBatchPreviewWidget builds the preview widget from the staged reviewer list
-// and the sibling MR slice. Change detection runs at construction time.
+// and the sibling MR slice (which includes focusedMR itself). Change detection
+// and conflict detection both run at construction time.
 func newBatchPreviewWidget(
 	staged []stagedReviewer,
 	siblings []domain.MergeRequest,
+	focusedMR domain.MergeRequest,
 	styles Styles,
 	keys BatchPreviewKeyMap,
 ) *batchPreviewWidget {
 	rows := make([]previewMRRow, len(siblings))
 	for i, sib := range siblings {
+		isSelf := sib.ProjectID == focusedMR.ProjectID && sib.IID == focusedMR.IID
 		rows[i] = previewMRRow{
 			mr:        sib,
 			included:  true,
 			hasChange: stagedDiffersFromMR(staged, sib),
+			isSelf:    isSelf,
+			conflict:  !isSelf && domain.ApproversConflict(focusedMR, sib),
 		}
 	}
 	return &batchPreviewWidget{
@@ -163,7 +170,13 @@ func (w *batchPreviewWidget) render() string {
 			if idx := strings.LastIndex(repo, "/"); idx >= 0 {
 				repo = repo[idx+1:]
 			}
-			label := fmt.Sprintf("!%d %s — %s", row.mr.IID, repo, row.mr.Title)
+			suffix := ""
+			if row.isSelf {
+				suffix = " (this)"
+			} else if row.conflict {
+				suffix = " " + w.styles.DurationWarning.Render("⚠ approvers differ")
+			}
+			label := fmt.Sprintf("!%d %s — %s%s", row.mr.IID, repo, row.mr.Title, suffix)
 
 			var markerStyled string
 			if row.included {

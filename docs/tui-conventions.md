@@ -122,7 +122,8 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `card.go` | Card widget — renders one `domain.MergeRequest` |
 | `detail.go` | Detail panel widget — MR description + discussion threads |
 | `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
-| `approver_editor.go` | Approver editor overlay (`a`) — read/write "Approvers" rule |
+| `approver_editor.go` | Reviewer/approver editor overlay (`v`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs |
+| `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — include/exclude toggle + change/conflict indicators |
 | `filter_popup.go` | Filter popup overlay (`f`) |
 | `theme_picker.go` | Theme picker overlay (`t`) |
 | `footer.go` | Footer bar — priority-filled keybinding hints + version pinned right |

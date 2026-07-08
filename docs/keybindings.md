@@ -70,13 +70,12 @@ recurring bug class):
 // contextStack returns bottom→top: base is always present; the top context
 // wins on key shadowing and owns the footer/help content.
 func (m Model) contextStack() []*Context {
-    stack := []*Context{Base}                  // ? help, q quit — always on
+    stack := []*Context{Base}             // ? help, q quit — always on
     switch m.overlay.active() {
-    case overlayKindDiffView:            return append(stack, DiffView)
-    case overlayKindSettings:            return append(stack, SettingsCtx)
-    case overlayKindReviewerEditor:      return append(stack, m.reviewerEditor.Context())
-    case overlayKindBatchReviewerEditor: return append(stack, BatchEditor)
-    case overlayKindBatchPreview:        return append(stack, BatchPreview)
+    case overlayKindDiffView:       return append(stack, DiffView)
+    case overlayKindSettings:       return append(stack, SettingsCtx)
+    case overlayKindReviewerEditor: return append(stack, m.reviewerEditor.Context()) // covers siblings too
+    case overlayKindBatchPreview:   return append(stack, BatchPreview)
     }
     if m.showDetail {
         return append(stack, Detail)
@@ -137,8 +136,8 @@ the terminal, centered.
         │  ↑/k   up         r  refresh    │
         │  ↓/j   down       o  open MR    │
         │  ←/h   left       v  reviewers  │
-        │  →/l   right      E  batch edit │
-        │  ↵     details    d  diff       │
+        │  →/l   right      d  diff       │
+        │  ↵     details                  │
         │                   n  notify     │
         │  View             J  jira       │
         │  tab   toggle                   │

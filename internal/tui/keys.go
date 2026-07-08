@@ -60,7 +60,6 @@ type BoardKeyMap struct {
 	Sort       Action
 	ToggleView Action
 	Sprint     Action
-	BatchEdit  Action
 	Notify     Action
 	Jira       Action
 	Settings   Action
@@ -80,7 +79,6 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Sort:       Act("s", "sort", PriorityCommon, CategoryView),
 	ToggleView: Act("tab", "toggle view", PriorityCommon, CategoryView),
 	Sprint:     Act("S", "sprint filter", PriorityModal, CategoryView),
-	BatchEdit:  Act("E", "batch edit", PriorityModal, CategoryAct),
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
 	Jira:       Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
@@ -184,10 +182,13 @@ var SettingsCtx = NewContext("settings", "Settings", &DefaultSettingsKeyMap,
 )
 
 // ReviewerEditorKeyMap holds keybindings for the reviewer editor overlay
-// (list mode; the search sub-mode uses ReviewerSearchKeyMap).
+// (list mode; the search sub-mode uses ReviewerSearchKeyMap). Tab switches to
+// the sibling-MR panel — present whenever the focused MR shares a JIRA key
+// with other open MRs, empty otherwise.
 type ReviewerEditorKeyMap struct {
 	Up             Action
 	Down           Action
+	Tab            Action
 	ToggleApprover Action
 	Remove         Action
 	Search         Action
@@ -200,6 +201,7 @@ type ReviewerEditorKeyMap struct {
 var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
 	Up:             Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
 	Down:           Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Tab:            Act("tab", "siblings", PriorityCommon, CategoryNavigate),
 	ToggleApprover: Act("space", "approver", PriorityCore, CategoryAct),
 	Remove:         Act("d", "remove", PriorityCommon, CategoryAct, "d", "delete"),
 	Search:         Act("/", "search", PriorityCommon, CategoryAct),
@@ -237,33 +239,6 @@ var DefaultReviewerSearchKeyMap = ReviewerSearchKeyMap{
 var ReviewerSearchCtx = NewContext("reviewer-search", "Reviewer search", &DefaultReviewerSearchKeyMap,
 	WithCapturesText(),
 	WithFooterGroup("↑↓", "move", &DefaultReviewerSearchKeyMap.Up, &DefaultReviewerSearchKeyMap.Down),
-)
-
-// BatchReviewerEditorKeyMap holds keybindings for the batch reviewer editor overlay.
-type BatchReviewerEditorKeyMap struct {
-	Up             Action
-	Down           Action
-	Tab            Action
-	ToggleApprover Action
-	Remove         Action
-	Confirm        Action
-	Close          Action
-}
-
-// DefaultBatchReviewerEditorKeyMap is the default keybinding set for the batch reviewer editor.
-var DefaultBatchReviewerEditorKeyMap = BatchReviewerEditorKeyMap{
-	Up:             Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
-	Down:           Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
-	Tab:            Act("tab", "switch panels", PriorityCore, CategoryNavigate),
-	ToggleApprover: Act("space", "approver", PriorityCore, CategoryAct),
-	Remove:         Act("d", "remove", PriorityCommon, CategoryAct, "d", "delete"),
-	Confirm:        Act("↵", "preview", PriorityCore, CategoryGeneral, "enter"),
-	Close:          Act("E/esc", "cancel", PriorityCore, CategoryGeneral, "E", "esc"),
-}
-
-// BatchEditorCtx is the batch reviewer editor context.
-var BatchEditorCtx = NewContext("batch-editor", "Batch edit", &DefaultBatchReviewerEditorKeyMap,
-	WithFooterGroup("↑↓", "move", &DefaultBatchReviewerEditorKeyMap.Up, &DefaultBatchReviewerEditorKeyMap.Down),
 )
 
 // BatchPreviewKeyMap holds keybindings for the batch preview screen.
