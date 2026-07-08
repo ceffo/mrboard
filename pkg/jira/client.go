@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -158,11 +159,24 @@ func (c *Client) GetRemoteLink(ctx context.Context, issueKey, globalID string) (
 		return "", fmt.Errorf("jira: get remote link %q on %q: HTTP %d", globalID, issueKey, resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("jira: read remote links for %q: %w", issueKey, err)
+	}
+
+	// Jira returns a JSON array when a globalId has no match (or is omitted),
+	// but a single JSON object when exactly one remote link matches globalId.
 	var links []struct {
 		Object RemoteLinkObject `json:"object"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
-		return "", fmt.Errorf("jira: decode remote links for %q: %w", issueKey, err)
+	if err := json.Unmarshal(body, &links); err != nil {
+		var single struct {
+			Object RemoteLinkObject `json:"object"`
+		}
+		if err := json.Unmarshal(body, &single); err != nil {
+			return "", fmt.Errorf("jira: decode remote links for %q: %w", issueKey, err)
+		}
+		return single.Object.Title, nil
 	}
 	if len(links) == 0 {
 		return "", nil
