@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.7] - 2026-07-08
+
+### Fixed
+- JIRA remote issue links (backlinks from JIRA tickets to their MRs) now load correctly instead of failing silently. JIRA Cloud returns a single object rather than a list when exactly one remote link matches, which the client wasn't handling.
+
 ## [0.7.6] - 2026-07-06
 
 ### Added
