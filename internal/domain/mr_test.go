@@ -103,6 +103,50 @@ func TestClassifyPhase_DraftTakesPrecedence(t *testing.T) {
 	}
 }
 
+func TestDeriveWaitingSince_NeedsAuthorAction_LatestComment(t *testing.T) {
+	earlier := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	later := earlier.Add(time.Hour)
+	reviewers := []ReviewerInfo{
+		{State: ReviewerCommented, WaitingSince: earlier},
+		{State: ReviewerCommented, WaitingSince: later},
+		{State: ReviewerReReviewRequested, WaitingSince: later.Add(time.Hour)},
+	}
+	since := DeriveWaitingSince(PhaseNeedsAuthorAction, reviewers, earlier.Add(-time.Hour))
+	if !since.Equal(later) {
+		t.Fatalf("expected latest commented WaitingSince %v, got %v", later, since)
+	}
+}
+
+func TestDeriveWaitingSince_NeedsReview_FallsBackToCreatedAt(t *testing.T) {
+	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	since := DeriveWaitingSince(PhaseNeedsReview, nil, createdAt)
+	if !since.Equal(createdAt) {
+		t.Fatalf("expected createdAt %v with no re-review requests, got %v", createdAt, since)
+	}
+}
+
+func TestDeriveWaitingSince_NeedsReview_LatestReReviewRequest(t *testing.T) {
+	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	latest := createdAt.Add(2 * time.Hour)
+	reviewers := []ReviewerInfo{
+		{State: ReviewerReReviewRequested, WaitingSince: createdAt.Add(time.Hour)},
+		{State: ReviewerReReviewRequested, WaitingSince: latest},
+	}
+	since := DeriveWaitingSince(PhaseNeedsReview, reviewers, createdAt)
+	if !since.Equal(latest) {
+		t.Fatalf("expected latest re-review WaitingSince %v, got %v", latest, since)
+	}
+}
+
+func TestDeriveWaitingSince_OtherPhases_ReturnsZero(t *testing.T) {
+	if since := DeriveWaitingSince(PhaseDraft, nil, time.Now()); !since.IsZero() {
+		t.Fatalf("expected zero WaitingSince for PhaseDraft, got %v", since)
+	}
+	if since := DeriveWaitingSince(PhaseReadyToMerge, nil, time.Now()); !since.IsZero() {
+		t.Fatalf("expected zero WaitingSince for PhaseReadyToMerge, got %v", since)
+	}
+}
+
 func TestFormatDuration_LessThanMinute(t *testing.T) {
 	if got := FormatDuration(30 * time.Second); got != "< 1m" {
 		t.Fatalf("expected '< 1m', got %q", got)

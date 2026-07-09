@@ -207,6 +207,33 @@ func ClassifyPhase(draft bool, _ bool, reviewers []ReviewerInfo) MRPhase {
 	return PhaseNeedsReview
 }
 
+// DeriveWaitingSince computes MergeRequest.WaitingSince for a given phase, per
+// docs/domain-model.md: NeedsAuthorAction tracks the latest reviewer comment;
+// NeedsReview tracks the latest re-review request, falling back to the MR's
+// creation time if none has occurred. Other phases have no WaitingSince.
+func DeriveWaitingSince(phase MRPhase, reviewers []ReviewerInfo, createdAt time.Time) time.Time {
+	switch phase {
+	case PhaseNeedsAuthorAction:
+		var since time.Time
+		for _, r := range reviewers {
+			if r.State == ReviewerCommented && r.WaitingSince.After(since) {
+				since = r.WaitingSince
+			}
+		}
+		return since
+	case PhaseNeedsReview:
+		since := createdAt
+		for _, r := range reviewers {
+			if r.State == ReviewerReReviewRequested && r.WaitingSince.After(since) {
+				since = r.WaitingSince
+			}
+		}
+		return since
+	default:
+		return time.Time{}
+	}
+}
+
 // FormatDuration formats a duration as a human-readable string.
 // Units: < 1m, Xm, Xh Ym, Xd Yh, Xmo Yd, Xy Xmo.
 func FormatDuration(d time.Duration) string {

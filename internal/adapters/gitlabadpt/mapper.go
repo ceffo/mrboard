@@ -275,22 +275,8 @@ func MapMR(
 
 	domainMR.DetailedMergeStatus = mr.DetailedMergeStatus
 	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
-
-	switch domainMR.Phase {
-	case domain.PhaseNeedsAuthorAction:
-		for _, r := range reviewers {
-			if r.State == domain.ReviewerCommented && r.WaitingSince.After(domainMR.WaitingSince) {
-				domainMR.WaitingSince = r.WaitingSince
-			}
-		}
-	case domain.PhaseNeedsReview:
-		domainMR.WaitingSince = mrCreatedAt
-		for _, r := range reviewers {
-			if r.State == domain.ReviewerReReviewRequested && r.WaitingSince.After(domainMR.WaitingSince) {
-				domainMR.WaitingSince = r.WaitingSince
-			}
-		}
-	case domain.PhaseReadyToMerge:
+	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, reviewers, mrCreatedAt)
+	if domainMR.Phase == domain.PhaseReadyToMerge {
 		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
 	}
 
@@ -383,22 +369,8 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 	domainMR.DetailedMergeStatus = strings.ToLower(mr.DetailedMergeStatus)
 	isMergeable := domainMR.DetailedMergeStatus == detailedMergeStatusMergeable
 	domainMR.Phase = domain.ClassifyPhase(mr.Draft, isMergeable, reviewers)
-
-	switch domainMR.Phase {
-	case domain.PhaseNeedsAuthorAction:
-		for _, r := range reviewers {
-			if r.State == domain.ReviewerCommented && r.WaitingSince.After(domainMR.WaitingSince) {
-				domainMR.WaitingSince = r.WaitingSince
-			}
-		}
-	case domain.PhaseNeedsReview:
-		domainMR.WaitingSince = createdAt
-		for _, r := range reviewers {
-			if r.State == domain.ReviewerReReviewRequested && r.WaitingSince.After(domainMR.WaitingSince) {
-				domainMR.WaitingSince = r.WaitingSince
-			}
-		}
-	case domain.PhaseReadyToMerge:
+	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, reviewers, createdAt)
+	if domainMR.Phase == domain.PhaseReadyToMerge {
 		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
 	}
 
