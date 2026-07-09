@@ -28,12 +28,12 @@ packages:
       structname: "Mock{{.InterfaceName}}"
     interfaces:
       MergeRequestSource:
-  github.com/ceffo/mrboard/internal/domain/service/jirasvc:
+  github.com/ceffo/mrboard/internal/domain/service/ticketsvc:
     config:
       dir: "{{.InterfaceDir}}/mocks"
       pkgname: "mocks"
       filename: "mock_{{.InterfaceName}}.go"
       structname: "Mock{{.InterfaceName}}"
     interfaces:
-      JiraEnricher:
-      JiraLinker:
+      TicketEnricher:
+      TicketLinker:

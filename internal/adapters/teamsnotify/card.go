@@ -156,8 +156,8 @@ func buildCard(mr domain.MergeRequest, cfg Config) adaptiveCard {
 	actions := []openURLAction{
 		{Type: typeActionOpen, Title: "Open MR", URL: mr.WebURL},
 	}
-	if jiraURL := domain.JiraIssueURL(cfg.JiraBaseURL, domain.ExtractJiraID(mr.Title)); jiraURL != "" {
-		actions = append(actions, openURLAction{Type: typeActionOpen, Title: "Open JIRA", URL: jiraURL})
+	if ticketURL := domain.JiraIssueURL(cfg.TicketBaseURL, domain.ExtractJiraID(mr.Title)); ticketURL != "" {
+		actions = append(actions, openURLAction{Type: typeActionOpen, Title: "Open JIRA", URL: ticketURL})
 	}
 
 	summary := fallbackSummary(mr, projectName, approverNames)

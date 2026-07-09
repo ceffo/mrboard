@@ -54,13 +54,13 @@ func (c cardWidget) measureHeight(w int) int {
 
 	nTitle := len(wrapLines(c.mr.Title, innerWidth, cardTitleLines))
 	nPills := len(c.wrapPills(now, innerWidth))
-	nJira := 0
+	nTicket := 0
 	if domain.ExtractJiraID(c.mr.Title) != "" {
-		nJira = 1
+		nTicket = 1
 	}
 
-	// line1(1) + line2(1) + jira(nJira) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
-	return 6 + nTitle + nPills + nJira
+	// line1(1) + line2(1) + ticket(nTicket) + blank(1) + title(nTitle) + blank(1) + pills(nPills) + border top+bottom(2)
+	return 6 + nTitle + nPills + nTicket
 }
 
 func (c cardWidget) render() string {

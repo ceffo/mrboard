@@ -16,8 +16,8 @@ import (
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/domain/service/jirasvc"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	"github.com/ceffo/mrboard/pkg/theme"
 )
@@ -97,7 +97,7 @@ const (
 	detailWidthRatio   = 40  // percent of total width for the detail panel
 	detailWidthDivisor = 100 // divisor for percentage calculation
 	fetchTimeout       = 60 * time.Second
-	jiraFetchTimeout   = 30 * time.Second
+	ticketFetchTimeout = 30 * time.Second
 	toastWidth         = 50
 	toastMinWidth      = 30
 	toastQueueDepth    = 16
@@ -152,8 +152,8 @@ type NotifyResultMsg struct {
 	Err error
 }
 
-// JiraIssueTypeMsg carries the result of a background JIRA issue type fetch.
-type JiraIssueTypeMsg struct {
+// TicketIssueTypeMsg carries the result of a background issue-type fetch.
+type TicketIssueTypeMsg struct {
 	IssueKey  string
 	IssueType string // "" on error or not found
 	Err       error
@@ -165,11 +165,21 @@ type SprintIssueKeysMsg struct {
 	Err  error
 }
 
-// JiraLinkResultMsg carries the result of a background UpsertRemoteLink call.
-type JiraLinkResultMsg struct {
+// TicketLinkResultMsg carries the result of a background UpsertRemoteLink call.
+type TicketLinkResultMsg struct {
 	IssueKey string
 	GlobalID string
 	Err      error
+}
+
+// TicketDescriptionLinkResultMsg carries the result of a background MR
+// description back-link write — as opposed to TicketLinkResultMsg's remote
+// link on the ticket tracker's own side.
+type TicketDescriptionLinkResultMsg struct {
+	ProjectID int
+	MRIID     int
+	IssueKey  string
+	Err       error
 }
 
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
@@ -235,14 +245,15 @@ type Model struct {
 	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
 	notifier           domain.Notifier
 	alerts             toast.Model
-	jiraBaseURL        string
-	jiraEnricher       jirasvc.JiraEnricher             // nil when JIRA is not configured
-	jiraLinker         jirasvc.JiraLinker               // nil when JIRA is not configured
-	iconResolver       IssueTypeIconResolver            // maps JIRA issue type names to emoji
+	ticketBaseURL      string
+	ticketEnricher     ticketsvc.TicketEnricher         // nil when the issue tracker is not configured
+	ticketLinker       ticketsvc.TicketLinker           // nil when the issue tracker is not configured
+	iconResolver       IssueTypeIconResolver            // maps issue type names to emoji
 	teamRoster         []domain.User                    // resolved once at startup from type:user sources
 	sprintIssueKeys    map[string]bool                  // active sprint keys; nil when no active sprint
 	sprintFilterActive bool                             // true when S-key sprint filter is toggled on
-	jiraIndex          map[string][]domain.MergeRequest // MRs by extracted JIRA key; rebuilt on every allMRs change
+	ticketIndex        map[string][]domain.MergeRequest // MRs by extracted issue key; rebuilt on every allMRs change
+	ticketDescLinked   map[ticketDescLinkKey]bool       // description back-link dedup, this session only
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -253,8 +264,8 @@ func New(
 	src mrsvc.MergeRequestSource,
 	store domain.StateStore,
 	notifier domain.Notifier,
-	jiraEnricher jirasvc.JiraEnricher,
-	jiraLinker jirasvc.JiraLinker,
+	ticketEnricher ticketsvc.TicketEnricher,
+	ticketLinker ticketsvc.TicketLinker,
 	version string,
 	opts Options,
 ) Model {
@@ -301,7 +312,7 @@ func New(
 	keys.ToggleView.SetEnabled(cfg.CurrentUser != "")
 	keys.Notify.SetEnabled(notifier != nil)
 	keys.Sprint.SetEnabled(cfg.Jira.BoardID != 0)
-	keys.Jira.SetEnabled(false) // enabled dynamically when focused MR has a JIRA ID
+	keys.OpenTicket.SetEnabled(false) // enabled dynamically when focused MR has a ticket ID
 
 	sf := sortFieldFromState(st.SortField)
 
@@ -343,9 +354,10 @@ func New(
 		baseCtx:            ctx,
 		logger:             logger,
 		notifier:           notifier,
-		jiraBaseURL:        cfg.Jira.InstanceURL,
-		jiraEnricher:       jiraEnricher,
-		jiraLinker:         jiraLinker,
+		ticketBaseURL:      cfg.Jira.InstanceURL,
+		ticketEnricher:     ticketEnricher,
+		ticketLinker:       ticketLinker,
+		ticketDescLinked:   make(map[ticketDescLinkKey]bool),
 		iconResolver:       ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
@@ -364,8 +376,8 @@ func New(
 // and resolves team usernames from type:user sources.
 func (m Model) Init() tea.Cmd {
 	var sprintCmd tea.Cmd
-	if m.jiraEnricher != nil && m.cfg.Jira.BoardID != 0 {
-		sprintCmd = makeSprintFetchCmd(m.baseCtx, m.jiraEnricher, m.cfg.Jira.BoardID)
+	if m.ticketEnricher != nil && m.cfg.Jira.BoardID != 0 {
+		sprintCmd = makeSprintFetchCmd(m.baseCtx, m.ticketEnricher, m.cfg.Jira.BoardID)
 	}
 	return tea.Batch(
 		m.sp.Init(),
@@ -486,8 +498,8 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.board.TryRestoreFocus(int(m.prevFocusMR.Phase), m.prevFocusMR.IID)
 			m.prevFocusMR = nil
 		}
-		m.updateJiraKey()
-		return m, tea.Batch(m.makeJiraEnrichCmds(), m.makeJiraLinkCmds())
+		m.updateTicketKey()
+		return m, tea.Batch(m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds())
 
 	case FetchErrMsg:
 		m.isRefreshing = false
@@ -540,14 +552,8 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
 
-	case JiraIssueTypeMsg:
-		return m.handleJiraIssueType(msg)
-
-	case SprintIssueKeysMsg:
-		return m.handleSprintIssueKeys(msg)
-
-	case JiraLinkResultMsg:
-		return m.handleJiraLinkResult(msg)
+	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
+		return m.handleTicketResultMsg(msg)
 
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
@@ -691,16 +697,16 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case m.keys.Up.Match(msg):
 		m.board.MoveUp()
-		m.updateJiraKey()
+		m.updateTicketKey()
 	case m.keys.Down.Match(msg):
 		m.board.MoveDown()
-		m.updateJiraKey()
+		m.updateTicketKey()
 	case m.keys.Left.Match(msg):
 		m.board.MoveLeft()
-		m.updateJiraKey()
+		m.updateTicketKey()
 	case m.keys.Right.Match(msg):
 		m.board.MoveRight()
-		m.updateJiraKey()
+		m.updateTicketKey()
 	case m.keys.Refresh.Match(msg):
 		if m.showDetail {
 			m.closeDetail()
@@ -760,9 +766,9 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.logger.Info("tui: notify key pressed", "mr_iid", mr.IID, "mr_title", mr.Title)
 			return m, m.notifyCmd(mr)
 		}
-	case m.keys.Jira.Match(msg):
+	case m.keys.OpenTicket.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
-			if url := domain.JiraIssueURL(m.jiraBaseURL, domain.ExtractJiraID(mr.Title)); url != "" {
+			if url := domain.JiraIssueURL(m.ticketBaseURL, domain.ExtractJiraID(mr.Title)); url != "" {
 				return m, openBrowser(url)
 			}
 		}
@@ -923,13 +929,13 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	return m, m.toast(toast.InfoAlert, "Teams notified ✓")
 }
 
-// updateJiraKey enables or disables the Jira key based on whether the focused
-// MR has a detectable JIRA ID and jiraBaseURL is configured. Call after any
+// updateTicketKey enables or disables the ticket key based on whether the
+// focused MR has a detectable ticket ID and ticketBaseURL is configured. Call after any
 // navigation that may change the focused card.
-func (m *Model) updateJiraKey() {
+func (m *Model) updateTicketKey() {
 	mr := m.board.FocusedMR()
-	enabled := m.jiraBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
-	m.keys.Jira.SetEnabled(enabled)
+	enabled := m.ticketBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
+	m.keys.OpenTicket.SetEnabled(enabled)
 }
 
 // View renders the full screen. Only the root model sets AltScreen.
@@ -1067,7 +1073,7 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 		}
 	}
 	m.applyMRFilter()
-	m.updateJiraKey()
+	m.updateTicketKey()
 
 	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Reviewers saved")}
 	// Only ping Teams when the approver set actually changed — a plain reviewer
@@ -1093,10 +1099,28 @@ func (m Model) handleTeamResolved(msg TeamResolvedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleJiraIssueType stores a freshly fetched JIRA issue type on the matching MR(s).
-func (m Model) handleJiraIssueType(msg JiraIssueTypeMsg) (tea.Model, tea.Cmd) {
+// handleTicketResultMsg groups the four ticket-tracker background-result
+// message types under one coreUpdate case, keeping that switch's cyclomatic
+// complexity down.
+func (m Model) handleTicketResultMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case TicketIssueTypeMsg:
+		return m.handleTicketIssueType(msg)
+	case SprintIssueKeysMsg:
+		return m.handleSprintIssueKeys(msg)
+	case TicketDescriptionLinkResultMsg:
+		return m.handleTicketDescriptionLinkResult(msg)
+	case TicketLinkResultMsg:
+		return m.handleTicketLinkResult(msg)
+	default:
+		return m, nil
+	}
+}
+
+// handleTicketIssueType stores a freshly fetched issue type on the matching MR(s).
+func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		m.logger.Warn("tui: jira fetch failed", "key", msg.IssueKey, "err", msg.Err)
+		m.logger.Warn("tui: ticket fetch failed", "key", msg.IssueKey, "err", msg.Err)
 		return m, nil
 	}
 	for i := range m.allMRs {
@@ -1194,10 +1218,10 @@ func makeBatchWriteCmd(
 	}
 }
 
-// makeJiraEnrichCmds returns one fetch command per unique JIRA issue key found
-// in allMRs. Returns nil when jiraEnricher is nil or no keys are found.
-func (m *Model) makeJiraEnrichCmds() tea.Cmd {
-	if m.jiraEnricher == nil {
+// makeTicketEnrichCmds returns one fetch command per unique issue key found
+// in allMRs. Returns nil when ticketEnricher is nil or no keys are found.
+func (m *Model) makeTicketEnrichCmds() tea.Cmd {
+	if m.ticketEnricher == nil {
 		return nil
 	}
 	seen := make(map[string]struct{})
@@ -1206,7 +1230,7 @@ func (m *Model) makeJiraEnrichCmds() tea.Cmd {
 		if issueKey := domain.ExtractJiraID(mr.Title); issueKey != "" {
 			if _, ok := seen[issueKey]; !ok {
 				seen[issueKey] = struct{}{}
-				cmds = append(cmds, makeJiraFetchCmd(m.baseCtx, m.jiraEnricher, issueKey))
+				cmds = append(cmds, makeTicketFetchCmd(m.baseCtx, m.ticketEnricher, issueKey))
 			}
 		}
 	}
@@ -1216,32 +1240,32 @@ func (m *Model) makeJiraEnrichCmds() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// makeJiraFetchCmd returns a Cmd that calls GetIssueType for issueKey and
-// wraps the result in a JiraIssueTypeMsg.
-func makeJiraFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, issueKey string) tea.Cmd {
+// makeTicketFetchCmd returns a Cmd that calls GetIssueType for issueKey and
+// wraps the result in a TicketIssueTypeMsg.
+func makeTicketFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, issueKey string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
 		issueType, err := enricher.GetIssueType(ctx, issueKey)
-		return JiraIssueTypeMsg{IssueKey: issueKey, IssueType: issueType, Err: err}
+		return TicketIssueTypeMsg{IssueKey: issueKey, IssueType: issueType, Err: err}
 	}
 }
 
 // makeSprintFetchCmd returns a Cmd that loads all issue keys for the active sprint
 // of the given JIRA board and wraps the result in a SprintIssueKeysMsg.
-func makeSprintFetchCmd(base context.Context, enricher jirasvc.JiraEnricher, boardID int) tea.Cmd {
+func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, boardID int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
 		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
 		return SprintIssueKeysMsg{Keys: keys, Err: err}
 	}
 }
 
-// makeJiraLinkCmds returns one UpsertRemoteLink command per MR that has a JIRA
-// key in its title. Returns nil when jiraLinker is nil or no MRs have JIRA keys.
-func (m *Model) makeJiraLinkCmds() tea.Cmd {
-	if m.jiraLinker == nil {
+// makeTicketLinkCmds returns one UpsertRemoteLink command per MR that has a
+// ticket key in its title. Returns nil when ticketLinker is nil or no MRs have ticket keys.
+func (m *Model) makeTicketLinkCmds() tea.Cmd {
+	if m.ticketLinker == nil {
 		return nil
 	}
 	var cmds []tea.Cmd
@@ -1250,7 +1274,7 @@ func (m *Model) makeJiraLinkCmds() tea.Cmd {
 		if issueKey == "" || mr.WebURL == "" {
 			continue
 		}
-		cmds = append(cmds, makeJiraLinkCmd(m.baseCtx, m.jiraLinker, mr, issueKey))
+		cmds = append(cmds, makeTicketLinkCmd(m.baseCtx, m.ticketLinker, mr, issueKey))
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -1258,11 +1282,13 @@ func (m *Model) makeJiraLinkCmds() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// makeJiraLinkCmd returns a Cmd that calls UpsertRemoteLink for a single MR.
+// makeTicketLinkCmd returns a Cmd that calls UpsertRemoteLink for a single MR.
 // The globalId format is load-bearing per ADR-0003: changing it orphans existing links.
 // The display title is "!{IID} {repoName}: {mrTitle}" — repo name is the last path
-// segment of ProjectPath so it stays short and human-readable in JIRA.
-func makeJiraLinkCmd(base context.Context, linker jirasvc.JiraLinker, mr domain.MergeRequest, issueKey string) tea.Cmd {
+// segment of ProjectPath so it stays short and human-readable in the tracker.
+func makeTicketLinkCmd(
+	base context.Context, linker ticketsvc.TicketLinker, mr domain.MergeRequest, issueKey string,
+) tea.Cmd {
 	globalID := fmt.Sprintf("mrboard:%d:%d", mr.ProjectID, mr.IID)
 	repoName := mr.ProjectPath
 	if i := strings.LastIndex(repoName, "/"); i >= 0 {
@@ -1270,20 +1296,89 @@ func makeJiraLinkCmd(base context.Context, linker jirasvc.JiraLinker, mr domain.
 	}
 	displayTitle := fmt.Sprintf("!%d %s: %s", mr.IID, repoName, mr.Title)
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(base, jiraFetchTimeout)
+		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
 		err := linker.UpsertRemoteLink(ctx, issueKey, globalID, displayTitle, mr.WebURL)
-		return JiraLinkResultMsg{IssueKey: issueKey, GlobalID: globalID, Err: err}
+		return TicketLinkResultMsg{IssueKey: issueKey, GlobalID: globalID, Err: err}
 	}
 }
 
-// handleJiraLinkResult surfaces write failures as toast alerts; successes are silent.
-func (m Model) handleJiraLinkResult(msg JiraLinkResultMsg) (tea.Model, tea.Cmd) {
+// handleTicketLinkResult surfaces write failures as toast alerts; successes are silent.
+func (m Model) handleTicketLinkResult(msg TicketLinkResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err == nil {
 		return m, nil
 	}
-	m.logger.Warn("tui: jira remote link failed", "issueKey", msg.IssueKey, "globalId", msg.GlobalID, "err", msg.Err)
+	m.logger.Warn("tui: ticket remote link failed", "issueKey", msg.IssueKey, "globalId", msg.GlobalID, "err", msg.Err)
 	return m, m.toast(toast.ErrorAlert, "JIRA link failed: "+msg.IssueKey)
+}
+
+// ticketDescLinkKey identifies an MR for description-back-link dedup.
+type ticketDescLinkKey struct {
+	projectID int
+	mrIID     int
+}
+
+// makeTicketDescriptionLinkCmds returns one description-back-link command per
+// MR that has a ticket key in its title and hasn't already been linked this
+// session. Returns nil when ticketBaseURL is unconfigured or no MRs qualify.
+// gitlabadpt only ever executes the plain mrsvc.UpdateDescription write it's
+// told to make (per ADR-0003); the decision of what to write, whether it's
+// already present, and per-session dedup all live here in the TUI.
+func (m *Model) makeTicketDescriptionLinkCmds() tea.Cmd {
+	if m.ticketBaseURL == "" {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, mr := range m.allMRs {
+		issueKey := domain.ExtractJiraID(mr.Title)
+		if issueKey == "" {
+			continue
+		}
+		key := ticketDescLinkKey{projectID: mr.ProjectID, mrIID: mr.IID}
+		if m.ticketDescLinked[key] {
+			continue
+		}
+		m.ticketDescLinked[key] = true // claimed now; removed on error to allow retry next refresh
+		cmds = append(cmds, makeTicketDescriptionLinkCmd(m.baseCtx, m.src, m.ticketBaseURL, mr.ProjectID, mr.IID, issueKey))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// makeTicketDescriptionLinkCmd returns a Cmd that reads the MR description,
+// appends a ticket back-link if domain.HasJiraLink reports it's absent, and
+// writes it back via the generic mrsvc.MergeRequestSource.UpdateDescription.
+func makeTicketDescriptionLinkCmd(
+	base context.Context, src mrsvc.MergeRequestSource, ticketBaseURL string, projectID, mrIID int, issueKey string,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
+		defer cancel()
+		desc, _, err := src.GetDetail(ctx, int64(projectID), int64(mrIID))
+		if err != nil {
+			return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey, Err: err}
+		}
+		if domain.HasJiraLink(desc) {
+			return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey}
+		}
+		newDesc := domain.AppendJiraLink(desc, ticketBaseURL, issueKey)
+		err = src.UpdateDescription(ctx, int64(projectID), int64(mrIID), newDesc)
+		return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey, Err: err}
+	}
+}
+
+// handleTicketDescriptionLinkResult surfaces write failures as toast alerts;
+// successes are silent. On error the dedup claim is released so the next
+// refresh retries.
+func (m Model) handleTicketDescriptionLinkResult(msg TicketDescriptionLinkResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err == nil {
+		return m, nil
+	}
+	delete(m.ticketDescLinked, ticketDescLinkKey{projectID: msg.ProjectID, mrIID: msg.MRIID})
+	m.logger.Warn("tui: ticket description link failed", "issueKey", msg.IssueKey, "err", msg.Err)
+	return m, m.toast(toast.ErrorAlert, "JIRA back-link failed: "+msg.IssueKey)
 }
 
 // handleDiffFetchResult delegates the fetched MRDiff to diffView and updates
@@ -1326,7 +1421,7 @@ func (m *Model) applyTheme() {
 }
 
 func (m *Model) applyMRFilter() {
-	m.buildJiraIndex()
+	m.buildTicketIndex()
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
 	src := m.allMRs
 	if !m.includeReviewerMRs {
@@ -1360,25 +1455,25 @@ func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
 	return mrs
 }
 
-// buildJiraIndex rebuilds jiraIndex from allMRs. MRs without a detectable JIRA
+// buildTicketIndex rebuilds ticketIndex from allMRs. MRs without a detectable ticket
 // key are omitted; empty key "" is never stored.
-func (m *Model) buildJiraIndex() {
+func (m *Model) buildTicketIndex() {
 	idx := make(map[string][]domain.MergeRequest, len(m.allMRs))
 	for _, mr := range m.allMRs {
 		if key := domain.ExtractJiraID(mr.Title); key != "" {
 			idx[key] = append(idx[key], mr)
 		}
 	}
-	m.jiraIndex = idx
+	m.ticketIndex = idx
 }
 
-// SiblingMRs returns all MRs in allMRs that share the given JIRA issue key.
+// SiblingMRs returns all MRs in allMRs that share the given ticket issue key.
 // Returns nil when issueKey is empty or no MRs match.
 func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 	if issueKey == "" {
 		return nil
 	}
-	return m.jiraIndex[issueKey]
+	return m.ticketIndex[issueKey]
 }
 
 func (m *Model) isFilterActive() bool {

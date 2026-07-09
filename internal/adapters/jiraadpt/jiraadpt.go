@@ -1,5 +1,5 @@
-// Package jiraadpt implements jirasvc.JiraEnricher using pkg/jira.Client
-// with a JSON disk cache (default TTL 24h).
+// Package jiraadpt implements ticketsvc.TicketEnricher and ticketsvc.TicketLinker
+// using pkg/jira.Client, with a JSON disk cache (default TTL 24h).
 package jiraadpt
 
 import (
@@ -49,7 +49,7 @@ type cacheEntry struct {
 	ExpiresAt time.Time       `json:"e"`
 }
 
-// JiraAdapter implements jirasvc.JiraEnricher and jirasvc.JiraLinker backed
+// JiraAdapter implements ticketsvc.TicketEnricher and ticketsvc.TicketLinker backed
 // by a live JIRA client and a write-through JSON disk cache.
 type JiraAdapter struct {
 	client     jiraClient
@@ -71,7 +71,7 @@ func New(client jiraClient, cfg Config, logger *slog.Logger) *JiraAdapter {
 	return &JiraAdapter{client: client, cfg: cfg, logger: logger}
 }
 
-// GetIssueType implements jirasvc.JiraEnricher.
+// GetIssueType implements ticketsvc.TicketEnricher.
 // Returns ("", nil) when the issue is not found.
 func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string, error) {
 	filename := a.cacheFile("issue_" + sanitizeKey(issueKey) + ".json")
@@ -94,7 +94,7 @@ func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string
 	return issue.Type, nil
 }
 
-// GetActiveSprintIssueKeys implements jirasvc.JiraEnricher.
+// GetActiveSprintIssueKeys implements ticketsvc.TicketEnricher.
 // Returns (nil, nil) when no active sprint exists for boardID.
 func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
 	filename := a.cacheFile(fmt.Sprintf("sprint_board_%d.json", boardID))
@@ -124,7 +124,7 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int)
 
 const remoteLinksCacheSubdir = "remotelinks"
 
-// UpsertRemoteLink implements jirasvc.JiraLinker.
+// UpsertRemoteLink implements ticketsvc.TicketLinker.
 // It is idempotent across three layers:
 //  1. Session sync.Map: skips the call entirely if this globalID+title was
 //     already written in this process lifetime.

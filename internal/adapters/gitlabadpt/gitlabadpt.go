@@ -25,7 +25,6 @@ type Config struct {
 	Sources           []mrsvc.Source
 	ExcludedAuthors   []string
 	ReviewerUsernames []string
-	JiraInstanceURL   string // optional; enables JIRA link write-back when set
 }
 
 // gitLabClient is the set of pkg/gitlab.Client capabilities used by the adapter.
@@ -39,9 +38,8 @@ type gitLabClient interface {
 
 // GitLabAdapter implements mrsvc.MergeRequestSource using a live GitLab client.
 type GitLabAdapter struct {
-	client   gitLabClient
-	cfg      Config
-	injected sync.Map // tracks mrKey → struct{}{} for JIRA link dedup across refreshes
+	client gitLabClient
+	cfg    Config
 }
 
 // New constructs a GitLabAdapter.
@@ -80,9 +78,6 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 			}
 		}
 	}
-
-	// Fire background JIRA link injection — no-op when JiraInstanceURL is not set.
-	a.injectJiraLinksBackground(ctx, finalMRs)
 
 	logger.Info("gitlab: fetch done",
 		"mrs", len(finalMRs), "errors", len(errs),

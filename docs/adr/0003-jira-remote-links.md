@@ -5,7 +5,8 @@
 ## Context
 
 mrboard shows JIRA keys on cards and injects a back-link into the MR description
-([internal/adapters/gitlabadpt/inject_jira.go](../../internal/adapters/gitlabadpt/inject_jira.go)).
+(now driven from `internal/tui/model.go`'s `makeTicketDescriptionLinkCmds`, per AGENTS.md rule 7 —
+originally lived in `internal/adapters/gitlabadpt/inject_jira.go`, since removed).
 The reverse direction — a reference from the JIRA issue back to the GitLab MR — is absent.
 JIRA tickets have no visibility into which MRs implement them.
 
@@ -29,10 +30,11 @@ contains a JIRA key, call `POST /rest/api/3/issue/{key}/remotelink` with:
    Only write when the title actually differs. A 404 means no link exists yet — proceed with `POST`.
 
 The trigger lives in the TUI after `FetchResultMsg`, not inside `gitlabadpt.FetchAll` — keeping
-the GitLab adapter free of JIRA write dependencies. A new `jirasvc.JiraLinker` driven port
-separates JIRA reads (`JiraEnricher`) from writes (`JiraLinker`); `jiraadpt.Adapter` implements
-both. Write failures surface as TUI notifications; the session map entry is removed on error to
-allow retry on the next refresh.
+the GitLab adapter free of JIRA write dependencies. A new `ticketsvc.TicketLinker` driven port
+(vendor-neutral per AGENTS.md rule 7; originally named `jirasvc.JiraLinker`) separates ticket-tracker
+reads (`TicketEnricher`) from writes (`TicketLinker`); `jiraadpt.JiraAdapter` implements both. Write
+failures surface as TUI notifications; the session map entry is removed on error to allow retry on
+the next refresh.
 
 ## Consequences
 

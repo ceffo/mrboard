@@ -13,10 +13,10 @@ import (
 
 // Config holds the credentials and user mappings for Teams notification delivery.
 type Config struct {
-	WebhookURL   string
-	UserMappings map[string]string // gitlab username → Teams display name
-	UserIDs      map[string]string // gitlab username → Teams UPN/email for @mention pings
-	JiraBaseURL  string            // e.g. "https://northstar.atlassian.net"; empty disables JIRA action
+	WebhookURL    string
+	UserMappings  map[string]string // gitlab username → Teams display name
+	UserIDs       map[string]string // gitlab username → Teams UPN/email for @mention pings
+	TicketBaseURL string            // e.g. "https://northstar.atlassian.net"; empty disables the ticket action
 }
 
 // TeamsNotifier delivers MR notifications to a Microsoft Teams channel.

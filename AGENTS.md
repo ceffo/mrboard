@@ -133,6 +133,26 @@ won't find the config file.
 4. All lipgloss styles defined in `internal/tui/styles.go`. No inline `lipgloss.NewStyle()` calls in widgets.
 5. Every TUI widget is a self-contained struct with its own `Init`, `Update`, `View`. No monolithic root Update.
 6. Config loaded from `./mrboard.toml` or `$MRBOARD_CONFIG`. PAT also overridable via `$GITLAB_TOKEN`.
+7. **No vendor bleeding.** A concrete vendor name (`Jira`, `GitLab`, `Teams`, ...) may appear as a Go identifier
+   (type, interface, field, function, message name) in exactly three places:
+   - that vendor's own adapter package (e.g. `internal/adapters/jiraadpt`, `internal/adapters/gitlabadpt`) —
+     the adapter's whole job is translating vendor specifics into generic ports;
+   - `internal/domain` — shared pure business rules that legitimately encode a vendor's data *shape* are fine here
+     (e.g. `domain.ExtractJiraID` parses a ticket-key pattern out of an MR title; `domain.HasJiraLink` recognizes the
+     back-link marker). This is the one exception to rule 1's "stdlib only" being about imports, not naming;
+   - `internal/core` (and CLI wiring in `internal/cmd/`) — the composition root necessarily names concrete adapters
+     to construct them.
+
+   Everywhere else — service ports (`internal/domain/service/*svc`), `internal/tui`, other adapters — must name
+   the *capability*, not the vendor: `ticketsvc.TicketLinker`, not `jirasvc.JiraLinker`; `mrsvc.UpdateDescription`,
+   not `mrsvc.InjectJiraLink`. Cross-vendor data crosses a port as primitive values (a title string, a URL string),
+   never as an imported vendor type or a vendor-named parameter.
+   Exception: config schema (`internal/config`'s `Jira` struct, the `jira:` YAML key, `$JIRA_TOKEN`) stays
+   vendor-named — it's the user-facing contract for the one tool actually integrated, not internal wiring.
+   User-visible strings (toast text, log messages, keybinding *labels* like `"open jira"`) may also name the
+   vendor — that's display text for a human, not architecture.
+   **Before adding a method to a port or a field to the TUI, ask: does this name make sense if we swapped the
+   vendor out tomorrow?** If not, it belongs in the adapter, not the port.
 
 
 ## Engram memory: YOU MUST COMPLY WITH THIS

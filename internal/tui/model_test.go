@@ -207,49 +207,49 @@ func TestModel_EscKey_ClosesDetailPanel(t *testing.T) {
 	}
 }
 
-// --- JIRA index ---
+// --- ticket index ---
 
 const (
-	jiraKeyAlpha = "OD-100"
-	jiraKeyBeta  = "OD-200"
+	ticketKeyAlpha = "OD-100"
+	ticketKeyBeta  = "OD-200"
 )
 
-func mrWithJiraKey(id, iid int, jiraKey string) domain.MergeRequest {
-	title := "no jira key"
-	if jiraKey != "" {
-		title = "feat(" + jiraKey + "): change"
+func mrWithTicketKey(id, iid int, ticketKey string) domain.MergeRequest {
+	title := "no ticket key"
+	if ticketKey != "" {
+		title = "feat(" + ticketKey + "): change"
 	}
 	return domain.MergeRequest{ID: id, IID: iid, Title: title}
 }
 
-func TestModel_JiraIndex_BuildsOnFetch(t *testing.T) {
+func TestModel_TicketIndex_BuildsOnFetch(t *testing.T) {
 	mrs := []domain.MergeRequest{
-		mrWithJiraKey(1, 10, jiraKeyAlpha),
-		mrWithJiraKey(2, 20, jiraKeyAlpha), // sibling
-		mrWithJiraKey(3, 30, jiraKeyBeta),
-		{ID: 4, IID: 40, Title: "no jira key"},
+		mrWithTicketKey(1, 10, ticketKeyAlpha),
+		mrWithTicketKey(2, 20, ticketKeyAlpha), // sibling
+		mrWithTicketKey(3, 30, ticketKeyBeta),
+		{ID: 4, IID: 40, Title: "no ticket key"},
 	}
 	m := makeModel(t, mrs, "")
 
-	got := m.SiblingMRs(jiraKeyAlpha)
+	got := m.SiblingMRs(ticketKeyAlpha)
 	if len(got) != 2 {
-		t.Fatalf("expected 2 siblings for %s, got %d", jiraKeyAlpha, len(got))
+		t.Fatalf("expected 2 siblings for %s, got %d", ticketKeyAlpha, len(got))
 	}
-	if len(m.SiblingMRs(jiraKeyBeta)) != 1 {
-		t.Fatalf("expected 1 MR for %s, got %d", jiraKeyBeta, len(m.SiblingMRs(jiraKeyBeta)))
+	if len(m.SiblingMRs(ticketKeyBeta)) != 1 {
+		t.Fatalf("expected 1 MR for %s, got %d", ticketKeyBeta, len(m.SiblingMRs(ticketKeyBeta)))
 	}
 }
 
-func TestModel_JiraIndex_EmptyKeyReturnsNil(t *testing.T) {
+func TestModel_TicketIndex_EmptyKeyReturnsNil(t *testing.T) {
 	m := makeModel(t, someMRs(), "")
 	if m.SiblingMRs("") != nil {
-		t.Fatal("expected nil for empty JIRA key")
+		t.Fatal("expected nil for empty ticket key")
 	}
 }
 
-func TestModel_JiraIndex_NoJiraKeysProducesEmptyIndex(t *testing.T) {
-	m := makeModel(t, someMRs(), "") // someMRs have no JIRA keys in titles
-	if m.SiblingMRs(jiraKeyAlpha) != nil {
-		t.Fatalf("expected nil when no MR has JIRA key %s", jiraKeyAlpha)
+func TestModel_TicketIndex_NoTicketKeysProducesEmptyIndex(t *testing.T) {
+	m := makeModel(t, someMRs(), "") // someMRs have no ticket keys in titles
+	if m.SiblingMRs(ticketKeyAlpha) != nil {
+		t.Fatalf("expected nil when no MR has ticket key %s", ticketKeyAlpha)
 	}
 }

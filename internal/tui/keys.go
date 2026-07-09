@@ -61,7 +61,7 @@ type BoardKeyMap struct {
 	ToggleView Action
 	Sprint     Action
 	Notify     Action
-	Jira       Action
+	OpenTicket Action
 	Settings   Action
 }
 
@@ -80,7 +80,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	ToggleView: Act("tab", "toggle view", PriorityCommon, CategoryView),
 	Sprint:     Act("S", "sprint filter", PriorityModal, CategoryView),
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
-	Jira:       Act("J", "open jira", PriorityModal, CategoryAct),
+	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
 }
 

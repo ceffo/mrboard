@@ -14,8 +14,8 @@ import (
 	"github.com/ceffo/mrboard/internal/adapters/teamsnotify"
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/domain/service/jirasvc"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
@@ -23,14 +23,14 @@ import (
 
 // Core holds every dependency a binary needs, fully wired.
 type Core struct {
-	MRSource     mrsvc.MergeRequestSource
-	StateStore   domain.StateStore
-	Notifier     domain.Notifier
-	JiraEnricher jirasvc.JiraEnricher // nil when JIRA is not configured
-	JiraLinker   jirasvc.JiraLinker   // nil when JIRA is not configured; same adapter instance as JiraEnricher
-	Config       *config.AppConfig
-	Logger       *slog.Logger
-	logCloser    io.Closer
+	MRSource       mrsvc.MergeRequestSource
+	StateStore     domain.StateStore
+	Notifier       domain.Notifier
+	TicketEnricher ticketsvc.TicketEnricher // nil when the issue tracker is not configured
+	TicketLinker   ticketsvc.TicketLinker   // nil when not configured; same adapter instance as TicketEnricher
+	Config         *config.AppConfig
+	Logger         *slog.Logger
+	logCloser      io.Closer
 }
 
 // New builds all services from the provided config.
@@ -67,7 +67,6 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		Sources:           sources,
 		ExcludedAuthors:   adptCfg.ExcludedAuthors,
 		ReviewerUsernames: deriveReviewerUsernames(sources, adptCfg.CurrentUser),
-		JiraInstanceURL:   cfg.Jira.InstanceURL,
 	})
 
 	// 4. State store
@@ -80,18 +79,19 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 	var notifier domain.Notifier
 	if teamsCfg := cfg.Notifications.Teams; teamsCfg.WebhookURL != "" {
 		notifier = teamsnotify.New(teamsnotify.Config{
-			WebhookURL:   teamsCfg.WebhookURL,
-			UserMappings: teamsCfg.UserMappings,
-			UserIDs:      teamsCfg.UserIDs,
-			JiraBaseURL:  cfg.Jira.InstanceURL,
+			WebhookURL:    teamsCfg.WebhookURL,
+			UserMappings:  teamsCfg.UserMappings,
+			UserIDs:       teamsCfg.UserIDs,
+			TicketBaseURL: cfg.Jira.InstanceURL,
 		}, logger)
 	}
 
-	// 5. JIRA adapter (optional — only wired when all three credentials are present).
-	// The same *jiraadpt.JiraAdapter instance satisfies both JiraEnricher and
-	// JiraLinker so the session sync.Map for remote-link dedup is shared.
-	var jiraEnricher jirasvc.JiraEnricher
-	var jiraLinker jirasvc.JiraLinker
+	// 5. Issue-tracker adapter (optional — only wired when all three credentials
+	// are present). The same *jiraadpt.JiraAdapter instance satisfies both
+	// TicketEnricher and TicketLinker so the session sync.Map for remote-link
+	// dedup is shared.
+	var ticketEnricher ticketsvc.TicketEnricher
+	var ticketLinker ticketsvc.TicketLinker
 	if j := cfg.Jira; j.InstanceURL != "" && j.Email != "" && j.APIToken != "" {
 		jiraClient := pkgjira.NewClient(pkgjira.Config{
 			InstanceURL: j.InstanceURL,
@@ -99,19 +99,19 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			APIToken:    j.APIToken,
 		})
 		adpt := jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL, LinkIconURL: j.RemoteLinkIconURL}, logger)
-		jiraEnricher = adpt
-		jiraLinker = adpt
+		ticketEnricher = adpt
+		ticketLinker = adpt
 	}
 
 	return &Core{
-		MRSource:     adapter,
-		StateStore:   store,
-		Notifier:     notifier,
-		JiraEnricher: jiraEnricher,
-		JiraLinker:   jiraLinker,
-		Config:       cfg,
-		Logger:       logger,
-		logCloser:    closer,
+		MRSource:       adapter,
+		StateStore:     store,
+		Notifier:       notifier,
+		TicketEnricher: ticketEnricher,
+		TicketLinker:   ticketLinker,
+		Config:         cfg,
+		Logger:         logger,
+		logCloser:      closer,
 	}, nil
 }
 

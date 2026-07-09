@@ -27,6 +27,14 @@ internal/tui                     (charmbracelet v2; depends on mrsvc interfaces,
 `internal/tui` depends on `mrsvc.MergeRequestSource` (the port), not on any adapter directly.
 This keeps every backend swappable and makes the TUI fully unit-testable with generated mocks.
 
+The same rule applies to every other vendor integration (JIRA, Teams, ...), not just GitLab: a
+concrete vendor name may appear as a Go identifier only inside that vendor's own adapter package,
+in `internal/domain` (shared business rules that legitimately encode a vendor's data shape, e.g.
+`domain.ExtractJiraID`), and in `internal/core` (the composition root, which must name concrete
+adapters to construct them). Service ports (`internal/domain/service/*svc`) and `internal/tui`
+name the capability, not the vendor — see AGENTS.md rule 7 for the full statement and exceptions
+(config schema, user-visible display text).
+
 ## Data flow
 
 ```

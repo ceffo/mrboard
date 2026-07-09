@@ -686,3 +686,72 @@ func (_c *MockMergeRequestSource_SetReviewers_Call) RunAndReturn(run func(ctx co
 	_c.Call.Return(run)
 	return _c
 }
+
+// UpdateDescription provides a mock function for the type MockMergeRequestSource
+func (_mock *MockMergeRequestSource) UpdateDescription(ctx context.Context, projectID int64, mrIID int64, description string) error {
+	ret := _mock.Called(ctx, projectID, mrIID, description)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateDescription")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64, string) error); ok {
+		r0 = returnFunc(ctx, projectID, mrIID, description)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockMergeRequestSource_UpdateDescription_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateDescription'
+type MockMergeRequestSource_UpdateDescription_Call struct {
+	*mock.Call
+}
+
+// UpdateDescription is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID int64
+//   - mrIID int64
+//   - description string
+func (_e *MockMergeRequestSource_Expecter) UpdateDescription(ctx any, projectID any, mrIID any, description any) *MockMergeRequestSource_UpdateDescription_Call {
+	return &MockMergeRequestSource_UpdateDescription_Call{Call: _e.mock.On("UpdateDescription", ctx, projectID, mrIID, description)}
+}
+
+func (_c *MockMergeRequestSource_UpdateDescription_Call) Run(run func(ctx context.Context, projectID int64, mrIID int64, description string)) *MockMergeRequestSource_UpdateDescription_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMergeRequestSource_UpdateDescription_Call) Return(err error) *MockMergeRequestSource_UpdateDescription_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockMergeRequestSource_UpdateDescription_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64, description string) error) *MockMergeRequestSource_UpdateDescription_Call {
+	_c.Call.Return(run)
+	return _c
+}

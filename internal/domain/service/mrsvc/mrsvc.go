@@ -49,6 +49,9 @@ type MergeRequestSource interface {
 	// Unknown usernames are omitted from the result; callers can diff against
 	// the input to detect invalid entries.
 	ResolveUsers(ctx context.Context, usernames []string) ([]domain.User, error)
+
+	// UpdateDescription replaces the MR's description text.
+	UpdateDescription(ctx context.Context, projectID, mrIID int64, description string) error
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.
