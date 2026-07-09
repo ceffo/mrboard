@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	lip "charm.land/lipgloss/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 const (
@@ -31,6 +33,26 @@ func init() {
 	difftBin, _ = exec.LookPath("difft") //nolint:errcheck // not found → empty string, which is the intended fallback
 }
 
+// DiffFetchResultMsg carries the MRDiff (refs + file list) for a single MR.
+type DiffFetchResultMsg struct {
+	ProjectID int
+	MRIID     int
+	Diff      domain.MRDiff
+	Err       error
+}
+
+// FileRenderResultMsg carries the pre-rendered lines for a single diff file.
+type FileRenderResultMsg struct {
+	ProjectID int
+	MRIID     int
+	FileIdx   int
+	Lines     []string
+	Err       error
+}
+
+// DiffViewClosedMsg is sent when the user dismisses the diff view.
+type DiffViewClosedMsg struct{}
+
 // diffViewWidget renders a full-screen diff view for a single MR.
 // Layout: file list (left, 28 cols) | separator | diff content (right, scrollable).
 //
@@ -46,6 +68,9 @@ type diffViewWidget struct {
 	fileIdx int
 	vp      scrollViewport
 	styles  Styles
+	keys    DiffViewKeyMap
+	src     mrsvc.MergeRequestSource
+	baseCtx context.Context
 	width   int
 	height  int
 	loading bool // true until SetDiff is called (waiting for initial MRDiff)
@@ -56,9 +81,14 @@ type diffViewWidget struct {
 	rendering map[int]bool // true while an async render cmd is in-flight
 }
 
-func newDiffViewWidget(styles Styles) diffViewWidget {
+func newDiffViewWidget(
+	baseCtx context.Context, styles Styles, keys DiffViewKeyMap, src mrsvc.MergeRequestSource,
+) diffViewWidget {
 	return diffViewWidget{
 		styles:    styles,
+		keys:      keys,
+		src:       src,
+		baseCtx:   baseCtx,
 		rendered:  make(map[int][]string),
 		rendering: make(map[int]bool),
 	}
@@ -164,9 +194,168 @@ func (d *diffViewWidget) ScrollToBottom() {
 	d.vp.scrollToBottom(len(d.currentLines()), d.diffBodyLines())
 }
 
-func (d diffViewWidget) Init() tea.Cmd                         { return nil }
-func (d diffViewWidget) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return d, nil }
-func (d diffViewWidget) View() tea.View                        { return tea.NewView(d.render()) }
+func (d diffViewWidget) Init() tea.Cmd  { return nil }
+func (d diffViewWidget) View() tea.View { return tea.NewView(d.render()) }
+
+// Update dispatches keys against diffViewKeys and applies async fetch results.
+// Closing is signaled via DiffViewClosedMsg since overlay/header state lives
+// on Model, not the widget.
+func (d diffViewWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:ireturn
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		return d.handleKey(msg)
+	case DiffFetchResultMsg:
+		return d.handleDiffFetchResult(msg)
+	case FileRenderResultMsg:
+		return d.handleFileRenderResult(msg)
+	}
+	return d, nil
+}
+
+func (d diffViewWidget) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) { //nolint:ireturn
+	switch {
+	case d.keys.Close.Match(msg):
+		return d, func() tea.Msg { return DiffViewClosedMsg{} }
+	case d.keys.PrevFile.Match(msg):
+		d.PrevFile()
+		return d, d.maybeRenderCurrentFileCmd()
+	case d.keys.NextFile.Match(msg):
+		d.NextFile()
+		return d, d.maybeRenderCurrentFileCmd()
+	case d.keys.ScrollUp.Match(msg):
+		d.ScrollUp()
+	case d.keys.ScrollDown.Match(msg):
+		d.ScrollDown()
+	case d.keys.HalfPageUp.Match(msg):
+		d.HalfPageUp()
+	case d.keys.HalfPageDown.Match(msg):
+		d.HalfPageDown()
+	case d.keys.Top.Match(msg):
+		d.ScrollToTop()
+	case d.keys.Bottom.Match(msg):
+		d.ScrollToBottom()
+	case d.keys.Open.Match(msg):
+		if d.mr != nil {
+			return d, openBrowser(d.mr.WebURL)
+		}
+	}
+	return d, nil
+}
+
+// handleDiffFetchResult applies a completed MRDiff fetch, guarding against a
+// stale result arriving after the user switched to a different MR.
+func (d diffViewWidget) handleDiffFetchResult(msg DiffFetchResultMsg) (tea.Model, tea.Cmd) { //nolint:ireturn
+	if d.mr == nil || d.mr.ProjectID != msg.ProjectID || d.mr.IID != msg.MRIID {
+		return d, nil
+	}
+	if msg.Err != nil {
+		d.loading = false
+		return d, nil
+	}
+	d.SetDiff(msg.Diff)
+	return d, d.maybeRenderCurrentFileCmd()
+}
+
+// handleFileRenderResult stores rendered lines in the diff view cache.
+func (d diffViewWidget) handleFileRenderResult(msg FileRenderResultMsg) (tea.Model, tea.Cmd) { //nolint:ireturn
+	if d.mr == nil || d.mr.ProjectID != msg.ProjectID || d.mr.IID != msg.MRIID {
+		return d, nil
+	}
+	d.SetRendered(msg.FileIdx, msg.Lines)
+	return d, nil
+}
+
+// fetchDiffCmd fetches the MRDiff (refs + file list) for mr.
+func (d diffViewWidget) fetchDiffCmd(mr *domain.MergeRequest) tea.Cmd {
+	src := d.src
+	base := d.baseCtx
+	projectID := int64(mr.ProjectID)
+	mrIID := int64(mr.IID)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+		diff, err := src.GetDiff(ctx, projectID, mrIID)
+		return DiffFetchResultMsg{
+			ProjectID: int(projectID),
+			MRIID:     int(mrIID),
+			Diff:      diff,
+			Err:       err,
+		}
+	}
+}
+
+// fetchFileRenderCmd fetches old+new file content and runs difft (or fallback) asynchronously.
+func (d diffViewWidget) fetchFileRenderCmd(fileIdx int) tea.Cmd {
+	src := d.src
+	base := d.baseCtx
+	mr := d.mr
+	if mr == nil || fileIdx >= len(d.files) {
+		return nil
+	}
+	projectID := int64(mr.ProjectID)
+	mrIID := int64(mr.IID)
+	f := d.files[fileIdx]
+	baseSHA := d.baseSHA
+	headSHA := d.headSHA
+	width := d.diffPaneWidth()
+	styles := d.styles
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+
+		var oldContent, newContent []byte
+		if !f.NewFile && baseSHA != "" {
+			//nolint:errcheck // failure → nil content → difft fallback path handles it
+			oldContent, _ = src.GetFileContent(ctx, projectID, f.OldPath, baseSHA)
+		}
+		if !f.DeletedFile && headSHA != "" {
+			//nolint:errcheck // failure → nil content → difft fallback path handles it
+			newContent, _ = src.GetFileContent(ctx, projectID, f.NewPath, headSHA)
+		}
+
+		var lines []string
+		if difftBin != "" {
+			var err error
+			lines, err = runDifft(oldContent, newContent, f.OldPath, f.NewPath, width)
+			if err != nil {
+				lines = nil
+			}
+		}
+		// Fallback: colorize the unified diff string from GitLab.
+		if lines == nil {
+			lines = diffViewWidget{styles: styles}.colorizedLines(f.Diff, width)
+		}
+		return FileRenderResultMsg{
+			ProjectID: int(projectID),
+			MRIID:     int(mrIID),
+			FileIdx:   fileIdx,
+			Lines:     lines,
+		}
+	}
+}
+
+// maybeRenderCurrentFileCmd dispatches a render cmd for the current file if it
+// hasn't been rendered yet. For the fallback path (no difft), rendering is synchronous.
+func (d *diffViewWidget) maybeRenderCurrentFileCmd() tea.Cmd {
+	if len(d.files) == 0 {
+		return nil
+	}
+	idx := d.fileIdx
+	if d.HasRendered(idx) || d.IsRendering(idx) {
+		return nil
+	}
+	if d.files[idx].TooLarge {
+		return nil
+	}
+	if difftBin == "" {
+		// Synchronous fallback — no async cmd needed.
+		d.RenderFallback(idx)
+		return nil
+	}
+	d.SetRendering(idx)
+	return d.fetchFileRenderCmd(idx)
+}
 
 func (d diffViewWidget) render() string {
 	if d.mr == nil || d.height <= 0 || d.width <= 0 {
