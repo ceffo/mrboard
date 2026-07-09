@@ -15,6 +15,17 @@ type ReviewerEdit struct {
 	UserID     int64
 }
 
+// reviewerStore is the narrow slice of MergeRequestSource that
+// ApplyReviewerChanges actually calls. Declared at this use-case's own site
+// per docs/clean_architecture.md §7.3 — callers pass their MergeRequestSource
+// (or any narrower interface satisfying these four methods) directly.
+type reviewerStore interface {
+	FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error)
+	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
+	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+	SetReviewers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+}
+
 // ApplyReviewerChanges writes a staged reviewer/approver edit to a single MR.
 //
 // It resolves any unresolved user IDs (UserID == 0 and not present in knownIDs) via
@@ -31,7 +42,7 @@ type ReviewerEdit struct {
 // with any IDs it resolves.
 func ApplyReviewerChanges(
 	ctx context.Context,
-	src MergeRequestSource,
+	src reviewerStore,
 	projectID, mrIID int64,
 	staged []ReviewerEdit,
 	knownIDs map[string]int64,

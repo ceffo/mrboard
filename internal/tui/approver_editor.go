@@ -71,6 +71,18 @@ type stagedReviewer struct {
 	UserID     int64 // 0 until resolved via members fetch or team roster
 }
 
+// reviewerWriter is the narrow slice of mrsvc.MergeRequestSource that
+// reviewerEditorWidget actually calls (GetProjectMembers directly, plus
+// FetchMR/SaveApprovers/SetReviewers via mrsvc.ApplyReviewerChanges).
+// Declared at this widget's own site per docs/clean_architecture.md §7.3 —
+// GitLabAdapter satisfies it implicitly, no change needed there.
+type reviewerWriter interface {
+	FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error)
+	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
+	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+	SetReviewers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
+}
+
 // reviewerEditorWidget is the modal overlay for editing the reviewer list on an MR.
 // When the MR shares a JIRA key with other open MRs, it also shows a sibling panel
 // so the same reviewer/approver edit can be applied to them — see siblings.
@@ -78,7 +90,7 @@ type reviewerEditorWidget struct {
 	styles  Styles
 	keys    ReviewerEditorKeyMap
 	mr      domain.MergeRequest
-	src     mrsvc.MergeRequestSource
+	src     reviewerWriter
 	baseCtx context.Context
 	roster  []domain.User // team roster from startup resolution (T action)
 
@@ -124,7 +136,7 @@ func newReviewerEditorWidget(
 	siblings []domain.MergeRequest,
 	styles Styles,
 	keys ReviewerEditorKeyMap,
-	src mrsvc.MergeRequestSource,
+	src reviewerWriter,
 	roster []domain.User,
 ) *reviewerEditorWidget {
 	// Build the initial staged list from the MR's current reviewers, excluding the author.
