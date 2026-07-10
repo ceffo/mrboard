@@ -3,6 +3,9 @@ package gitlabadpt
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
@@ -73,15 +76,9 @@ func TestMRDeduplicator_Deduplicate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := MRDeduplicator{ExcludedAuthors: tt.excluded}
 			got := d.Deduplicate(tt.input)
-			if len(got) != len(tt.want) {
-				t.Fatalf("len(got)=%d, len(want)=%d; got=%v want=%v", len(got), len(tt.want), got, tt.want)
-			}
+			require.Len(t, got, len(tt.want), "got=%v want=%v", got, tt.want)
 			for i := range got {
-				if got[i].ProjectID != tt.want[i].ProjectID || got[i].IID != tt.want[i].IID || got[i].Author != tt.want[i].Author {
-					t.Errorf("[%d] got {%d,%d,%q} want {%d,%d,%q}",
-						i, got[i].ProjectID, got[i].IID, got[i].Author,
-						tt.want[i].ProjectID, tt.want[i].IID, tt.want[i].Author)
-				}
+				assert.Equal(t, tt.want[i], got[i], "index %d", i)
 			}
 		})
 	}

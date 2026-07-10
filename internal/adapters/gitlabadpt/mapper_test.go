@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	gl "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/ceffo/mrboard/internal/domain"
@@ -84,12 +86,8 @@ func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	result := DeriveReviewerStates(m, nil, approvals())
 
-	if len(result) != 1 {
-		t.Fatalf("want 1 reviewer (not-started included), got %d", len(result))
-	}
-	if result[0].State != domain.ReviewerNotStarted {
-		t.Errorf("want ReviewerNotStarted, got %v", result[0].State)
-	}
+	require.Len(t, result, 1, "want 1 reviewer (not-started included)")
+	assert.Equal(t, domain.ReviewerNotStarted, result[0].State)
 }
 
 func TestDeriveReviewerStates_Commented(t *testing.T) {
@@ -101,9 +99,7 @@ func TestDeriveReviewerStates_Commented(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if result[0].State != domain.ReviewerCommented {
-		t.Errorf("want Commented, got %v", result[0].State)
-	}
+	assert.Equal(t, domain.ReviewerCommented, result[0].State)
 }
 
 func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
@@ -115,9 +111,7 @@ func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if result[0].State != domain.ReviewerReReviewRequested {
-		t.Errorf("want ReReviewRequested, got %v", result[0].State)
-	}
+	assert.Equal(t, domain.ReviewerReReviewRequested, result[0].State)
 }
 
 func TestDeriveReviewerStates_Approved(t *testing.T) {
@@ -128,9 +122,7 @@ func TestDeriveReviewerStates_Approved(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals("alice"))
 
-	if result[0].State != domain.ReviewerApproved {
-		t.Errorf("want Approved, got %v", result[0].State)
-	}
+	assert.Equal(t, domain.ReviewerApproved, result[0].State)
 }
 
 func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
@@ -150,16 +142,12 @@ func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
 				return r.State
 			}
 		}
-		t.Fatalf("reviewer %q not found", username)
+		require.Failf(t, "reviewer %q not found", username)
 		return domain.ReviewerNotStarted
 	}
 
-	if got := stateFor("alice"); got != domain.ReviewerCommented {
-		t.Errorf("alice: want Commented, got %v", got)
-	}
-	if got := stateFor("bob"); got != domain.ReviewerReReviewRequested {
-		t.Errorf("bob: want ReReviewRequested, got %v", got)
-	}
+	assert.Equal(t, domain.ReviewerCommented, stateFor("alice"), "alice")
+	assert.Equal(t, domain.ReviewerReReviewRequested, stateFor("bob"), "bob")
 }
 
 func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
@@ -170,12 +158,8 @@ func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if len(result) != 1 {
-		t.Fatalf("want 1 reviewer (alice not-started, included), got %d", len(result))
-	}
-	if result[0].State != domain.ReviewerNotStarted {
-		t.Errorf("want ReviewerNotStarted, got %v", result[0].State)
-	}
+	require.Len(t, result, 1, "want 1 reviewer (alice not-started, included)")
+	assert.Equal(t, domain.ReviewerNotStarted, result[0].State)
 }
 
 func TestDeriveReviewerStates_ResolvedThreadNotCommented(t *testing.T) {
@@ -189,9 +173,7 @@ func TestDeriveReviewerStates_ResolvedThreadNotCommented(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if result[0].State != domain.ReviewerNotStarted {
-		t.Errorf("want NotStarted (thread resolved), got %v", result[0].State)
-	}
+	assert.Equal(t, domain.ReviewerNotStarted, result[0].State, "thread resolved")
 }
 
 func TestDeriveReviewerStates_UnresolvedThreadStillCommented(t *testing.T) {
@@ -204,17 +186,13 @@ func TestDeriveReviewerStates_UnresolvedThreadStillCommented(t *testing.T) {
 
 	result := DeriveReviewerStates(m, discussions, approvals())
 
-	if result[0].State != domain.ReviewerCommented {
-		t.Errorf("want Commented (unresolved thread remains), got %v", result[0].State)
-	}
+	assert.Equal(t, domain.ReviewerCommented, result[0].State, "unresolved thread remains")
 }
 
 func TestDeriveReviewerStates_NoReviewers(t *testing.T) {
 	m := mr()
 	result := DeriveReviewerStates(m, nil, approvals())
-	if result != nil {
-		t.Errorf("want nil for no reviewers, got %v", result)
-	}
+	assert.Nil(t, result, "want nil for no reviewers")
 }
 
 func TestCountRoundTripsFromEvents(t *testing.T) {
@@ -268,9 +246,7 @@ func TestCountRoundTripsFromEvents(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			events := normalizeDiscussionEventsREST(tc.discussions)
-			if got := domain.CountRoundTrips(events); got != tc.want {
-				t.Errorf("CountRoundTrips: want %d, got %d", tc.want, got)
-			}
+			assert.Equal(t, tc.want, domain.CountRoundTrips(events))
 		})
 	}
 }
@@ -283,9 +259,7 @@ func TestMapMR_RoundTripCount(t *testing.T) {
 		discussion(systemNote("requested review from @alice", t3)),
 	}
 	result := MapMR(m, discussions, approvals(), nil)
-	if result.RoundTripCount != 2 {
-		t.Errorf("want RoundTripCount=2, got %d", result.RoundTripCount)
-	}
+	assert.Equal(t, 2, result.RoundTripCount)
 }
 
 func approvalRule(name string, usernames ...string) *gl.MergeRequestApprovalRule {
@@ -301,11 +275,11 @@ func TestMapMR_IsApprover_InApproversRule(t *testing.T) {
 	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
 	result := MapMR(m, nil, approvals(), rules)
 	for _, r := range result.Reviewers {
-		if r.Username == "alice" && !r.IsApprover {
-			t.Errorf("alice should be IsApprover=true")
+		if r.Username == "alice" {
+			assert.True(t, r.IsApprover, "alice should be IsApprover=true")
 		}
-		if r.Username == "bob" && r.IsApprover {
-			t.Errorf("bob should be IsApprover=false")
+		if r.Username == "bob" {
+			assert.False(t, r.IsApprover, "bob should be IsApprover=false")
 		}
 	}
 }
@@ -314,9 +288,7 @@ func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	result := MapMR(m, nil, approvals(), nil)
 	for _, r := range result.Reviewers {
-		if r.IsApprover {
-			t.Errorf("want IsApprover=false when no Approvers rule, got true for %s", r.Username)
-		}
+		assert.False(t, r.IsApprover, "want IsApprover=false when no Approvers rule, got true for %s", r.Username)
 	}
 }
 
@@ -324,28 +296,22 @@ func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	m.DetailedMergeStatus = detailedMergeStatusMergeable
 	result := MapMR(m, nil, approvals(), nil)
-	if result.DetailedMergeStatus != detailedMergeStatusMergeable {
-		t.Errorf("want DetailedMergeStatus=%s stored on domain MR, got %q",
-			detailedMergeStatusMergeable, result.DetailedMergeStatus)
-	}
+	assert.Equal(t, detailedMergeStatusMergeable, result.DetailedMergeStatus,
+		"want DetailedMergeStatus stored on domain MR")
 }
 
 func TestMapMR_DetailedMergeStatus_Stored_NonMergeable(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	m.DetailedMergeStatus = "ci_must_pass"
 	result := MapMR(m, nil, approvals(), nil)
-	if result.DetailedMergeStatus != "ci_must_pass" {
-		t.Errorf("want DetailedMergeStatus=ci_must_pass stored, got %q", result.DetailedMergeStatus)
-	}
+	assert.Equal(t, "ci_must_pass", result.DetailedMergeStatus, "want DetailedMergeStatus=ci_must_pass stored")
 }
 
 func TestMapMRFromGraphQL_DetailedMergeStatus_NormalizedToLowercase(t *testing.T) {
 	mr := pkggitlab.GQLMergeRequest{}
 	mr.DetailedMergeStatus = "MERGEABLE"
 	result := MapMRFromGraphQL(mr)
-	if result.DetailedMergeStatus != "mergeable" {
-		t.Errorf("want DetailedMergeStatus normalized to %q, got %q", "mergeable", result.DetailedMergeStatus)
-	}
+	assert.Equal(t, "mergeable", result.DetailedMergeStatus, "want DetailedMergeStatus normalized")
 }
 
 func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing.T) {
@@ -353,9 +319,7 @@ func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing
 	mr.DetailedMergeStatus = "CI_MUST_PASS"
 	result := MapMRFromGraphQL(mr)
 	const wantStatus = "ci_must_pass"
-	if result.DetailedMergeStatus != wantStatus {
-		t.Errorf("want DetailedMergeStatus normalized to %q, got %q", wantStatus, result.DetailedMergeStatus)
-	}
+	assert.Equal(t, wantStatus, result.DetailedMergeStatus, "want DetailedMergeStatus normalized")
 }
 
 func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
@@ -363,9 +327,7 @@ func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
 	m := mr(basicUser("alice", "Alice"))
 	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
 	result := MapMR(m, nil, approvals("alice"), rules)
-	if result.Phase != domain.PhaseReadyToMerge {
-		t.Errorf("want PhaseReadyToMerge when all approvers approved, got %v", result.Phase)
-	}
+	assert.Equal(t, domain.PhaseReadyToMerge, result.Phase, "want PhaseReadyToMerge when all approvers approved")
 }
 
 func TestExtractReReviewUsername(t *testing.T) {
@@ -381,10 +343,6 @@ func TestExtractReReviewUsername(t *testing.T) {
 	}
 	for _, tc := range cases {
 		got := extractReReviewUsername(tc.body)
-		if tc.want == "" && got != "" {
-			t.Errorf("body=%q: want empty, got %q", tc.body, got)
-		} else if tc.want != "" && got != tc.want {
-			t.Errorf("body=%q: want %q, got %q", tc.body, tc.want, got)
-		}
+		assert.Equal(t, tc.want, got, "body=%q", tc.body)
 	}
 }

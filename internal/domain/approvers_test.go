@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func mrWithApprovers(usernames ...string) MergeRequest {
 	reviewers := make([]ReviewerInfo, len(usernames))
@@ -13,33 +17,25 @@ func mrWithApprovers(usernames ...string) MergeRequest {
 func TestApproversConflict_SameSet_NoConflict(t *testing.T) {
 	a := mrWithApprovers("alice", "bob")
 	b := mrWithApprovers("bob", "alice") // order must not matter
-	if ApproversConflict(a, b) {
-		t.Error("identical approver sets should not conflict")
-	}
+	assert.False(t, ApproversConflict(a, b), "identical approver sets should not conflict")
 }
 
 func TestApproversConflict_DifferentMembers_Conflict(t *testing.T) {
 	a := mrWithApprovers("alice", "bob")
 	b := mrWithApprovers("alice", "carol")
-	if !ApproversConflict(a, b) {
-		t.Error("different approver sets should conflict")
-	}
+	assert.True(t, ApproversConflict(a, b), "different approver sets should conflict")
 }
 
 func TestApproversConflict_DifferentSize_Conflict(t *testing.T) {
 	a := mrWithApprovers("alice", "bob")
 	b := mrWithApprovers("alice")
-	if !ApproversConflict(a, b) {
-		t.Error("approver sets of different sizes should conflict")
-	}
+	assert.True(t, ApproversConflict(a, b), "approver sets of different sizes should conflict")
 }
 
 func TestApproversConflict_BothEmpty_NoConflict(t *testing.T) {
 	a := MergeRequest{Reviewers: []ReviewerInfo{{Username: "dave"}}} // reviewer, not approver
 	b := MergeRequest{}
-	if ApproversConflict(a, b) {
-		t.Error("MRs with no designated approvers should not conflict")
-	}
+	assert.False(t, ApproversConflict(a, b), "MRs with no designated approvers should not conflict")
 }
 
 func TestApproversConflict_NonApproverReviewersIgnored(t *testing.T) {
@@ -48,7 +44,5 @@ func TestApproversConflict_NonApproverReviewersIgnored(t *testing.T) {
 		{Username: "eve", IsApprover: false},
 	}}
 	b := mrWithApprovers("alice")
-	if ApproversConflict(a, b) {
-		t.Error("a non-approver reviewer must not affect the approver-set comparison")
-	}
+	assert.False(t, ApproversConflict(a, b), "a non-approver reviewer must not affect the approver-set comparison")
 }

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	gl "gitlab.com/gitlab-org/api/client-go"
 
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
@@ -117,12 +119,11 @@ func TestUpdateDescription_PassesThrough(t *testing.T) {
 	c := &fakeDescriptionClient{}
 	a := &GitLabAdapter{client: c}
 
-	if err := a.UpdateDescription(context.Background(), 1, 10, "new body"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(c.updateCalls) != 1 || c.updateCalls[0] != "new body" {
-		t.Errorf("expected UpdateMRDescription called once with %q, got %v", "new body", c.updateCalls)
-	}
+	err := a.UpdateDescription(context.Background(), 1, 10, "new body")
+	require.NoError(t, err)
+
+	require.Len(t, c.updateCalls, 1, "expected UpdateMRDescription called once, got %v", c.updateCalls)
+	assert.Equal(t, "new body", c.updateCalls[0])
 }
 
 func TestUpdateDescription_PropagatesError(t *testing.T) {
@@ -131,7 +132,5 @@ func TestUpdateDescription_PropagatesError(t *testing.T) {
 	a := &GitLabAdapter{client: c}
 
 	err := a.UpdateDescription(context.Background(), 1, 10, "new body")
-	if !errors.Is(err, boom) {
-		t.Errorf("expected wrapped write error, got %v", err)
-	}
+	assert.ErrorIs(t, err, boom, "expected wrapped write error, got %v", err)
 }

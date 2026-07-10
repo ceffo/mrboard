@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc/mocks"
@@ -56,16 +58,11 @@ func TestReviewerEditorWidget_NoSiblings_ConfirmSavesDirectly(t *testing.T) {
 	updated, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	w2 := updated.(*reviewerEditorWidget)
 
-	if !w2.saving {
-		t.Fatal("expected saving=true on the direct-save path")
-	}
-	if cmd == nil {
-		t.Fatal("expected a non-nil save command")
-	}
+	assert.True(t, w2.saving, "expected saving=true on the direct-save path")
+	require.NotNil(t, cmd, "expected a non-nil save command")
 	msg := cmd()
-	if _, ok := msg.(ReviewersSavedMsg); !ok {
-		t.Fatalf("expected ReviewersSavedMsg, got %T", msg)
-	}
+	_, ok := msg.(ReviewersSavedMsg)
+	assert.True(t, ok, "expected ReviewersSavedMsg, got %T", msg)
 }
 
 func TestReviewerEditorWidget_SingleSelfSibling_ConfirmSavesDirectly(t *testing.T) {
@@ -79,9 +76,8 @@ func TestReviewerEditorWidget_SingleSelfSibling_ConfirmSavesDirectly(t *testing.
 
 	w := newTestReviewerEditor([]domain.MergeRequest{focusedMR()}, src)
 	_, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if _, ok := cmd().(ReviewersSavedMsg); !ok {
-		t.Fatal("expected direct save when siblings only contains the focused MR")
-	}
+	_, ok := cmd().(ReviewersSavedMsg)
+	assert.True(t, ok, "expected direct save when siblings only contains the focused MR")
 }
 
 func TestReviewerEditorWidget_WithSiblings_ConfirmOpensPreview(t *testing.T) {
@@ -91,43 +87,27 @@ func TestReviewerEditorWidget_WithSiblings_ConfirmOpensPreview(t *testing.T) {
 	updated, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	w2 := updated.(*reviewerEditorWidget)
 
-	if w2.saving {
-		t.Fatal("saving must stay false when handing off to the preview screen")
-	}
-	if cmd == nil {
-		t.Fatal("expected a non-nil preview command")
-	}
+	assert.False(t, w2.saving, "saving must stay false when handing off to the preview screen")
+	require.NotNil(t, cmd, "expected a non-nil preview command")
 	msg, ok := cmd().(BatchReviewerEditorPreviewMsg)
-	if !ok {
-		t.Fatalf("expected BatchReviewerEditorPreviewMsg, got %T", cmd())
-	}
-	if len(msg.Siblings) != 3 {
-		t.Fatalf("expected 3 siblings forwarded, got %d", len(msg.Siblings))
-	}
-	if msg.FocusedMR.IID != focusedMR().IID {
-		t.Fatalf("expected FocusedMR IID %d, got %d", focusedMR().IID, msg.FocusedMR.IID)
-	}
+	require.True(t, ok, "expected BatchReviewerEditorPreviewMsg, got %T", cmd())
+	assert.Len(t, msg.Siblings, 3, "expected 3 siblings forwarded")
+	assert.Equal(t, focusedMR().IID, msg.FocusedMR.IID)
 }
 
 // --- Sibling panel navigation ---
 
 func TestReviewerEditorWidget_Tab_TogglesPanel(t *testing.T) {
 	w := newTestReviewerEditor([]domain.MergeRequest{focusedMR(), siblingMR(20)}, nil)
-	if w.panel != reviewerEditorPanelReviewers {
-		t.Fatal("expected reviewers panel focused initially")
-	}
+	assert.Equal(t, reviewerEditorPanelReviewers, w.panel, "expected reviewers panel focused initially")
 
 	updated, _ := w.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	w2 := updated.(*reviewerEditorWidget)
-	if w2.panel != reviewerEditorPanelSiblings {
-		t.Fatal("expected siblings panel after first tab")
-	}
+	assert.Equal(t, reviewerEditorPanelSiblings, w2.panel, "expected siblings panel after first tab")
 
 	updated, _ = w2.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	w3 := updated.(*reviewerEditorWidget)
-	if w3.panel != reviewerEditorPanelReviewers {
-		t.Fatal("expected reviewers panel after second tab")
-	}
+	assert.Equal(t, reviewerEditorPanelReviewers, w3.panel, "expected reviewers panel after second tab")
 }
 
 func TestReviewerEditorWidget_SiblingsPanel_DownMovesSiblingCursorOnly(t *testing.T) {
@@ -137,12 +117,8 @@ func TestReviewerEditorWidget_SiblingsPanel_DownMovesSiblingCursorOnly(t *testin
 	updated, _ := w.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})
 	w2 := updated.(*reviewerEditorWidget)
 
-	if w2.sibCursor != 1 {
-		t.Fatalf("expected sibCursor=1, got %d", w2.sibCursor)
-	}
-	if w2.cursor != 0 {
-		t.Fatalf("expected reviewer cursor unchanged at 0, got %d", w2.cursor)
-	}
+	assert.Equal(t, 1, w2.sibCursor, "expected sibCursor=1")
+	assert.Equal(t, 0, w2.cursor, "expected reviewer cursor unchanged at 0")
 }
 
 func TestReviewerEditorWidget_SiblingsPanel_ToggleApproverIsNoop(t *testing.T) {
@@ -153,9 +129,7 @@ func TestReviewerEditorWidget_SiblingsPanel_ToggleApproverIsNoop(t *testing.T) {
 	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
 	w2 := updated.(*reviewerEditorWidget)
 
-	if w2.staged[0].IsApprover != before {
-		t.Fatal("toggling approver from the siblings panel must be a no-op")
-	}
+	assert.Equal(t, before, w2.staged[0].IsApprover, "toggling approver from the siblings panel must be a no-op")
 }
 
 func TestReviewerEditorWidget_SiblingsPanel_SearchIsNoop(t *testing.T) {
@@ -165,9 +139,7 @@ func TestReviewerEditorWidget_SiblingsPanel_SearchIsNoop(t *testing.T) {
 	updated, _ := w.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
 	w2 := updated.(*reviewerEditorWidget)
 
-	if w2.mode != reviewerEditorModeList {
-		t.Fatal("search must not activate from the siblings panel")
-	}
+	assert.Equal(t, reviewerEditorModeList, w2.mode, "search must not activate from the siblings panel")
 }
 
 // --- Conflict rendering ---
@@ -183,12 +155,8 @@ func TestReviewerEditorWidget_RenderSiblings_BadgesConflictsAndSelf(t *testing.T
 
 	out := w.render()
 
-	if strings.Count(out, "(this)") != 1 {
-		t.Fatalf("expected exactly one (this) marker, got %d in:\n%s", strings.Count(out, "(this)"), out)
-	}
-	if strings.Count(out, "approvers differ") != 1 {
-		t.Fatalf("expected exactly one conflict badge, got %d in:\n%s", strings.Count(out, "approvers differ"), out)
-	}
+	assert.Equal(t, 1, strings.Count(out, "(this)"), "expected exactly one (this) marker in:\n%s", out)
+	assert.Equal(t, 1, strings.Count(out, "approvers differ"), "expected exactly one conflict badge in:\n%s", out)
 }
 
 func TestNewBatchPreviewWidget_MarksSelfAndConflict(t *testing.T) {
@@ -198,16 +166,8 @@ func TestNewBatchPreviewWidget_MarksSelfAndConflict(t *testing.T) {
 
 	w := newBatchPreviewWidget(staged, siblings, focused, Styles{}, DefaultBatchPreviewKeyMap)
 
-	if !w.rows[0].isSelf {
-		t.Fatal("expected the focused MR's row to be marked isSelf")
-	}
-	if w.rows[0].conflict {
-		t.Fatal("the self row must never be flagged as conflicting")
-	}
-	if w.rows[1].conflict {
-		t.Fatal("sibling with matching approvers must not be flagged as conflicting")
-	}
-	if !w.rows[2].conflict {
-		t.Fatal("sibling with different approvers must be flagged as conflicting")
-	}
+	assert.True(t, w.rows[0].isSelf, "expected the focused MR's row to be marked isSelf")
+	assert.False(t, w.rows[0].conflict, "the self row must never be flagged as conflicting")
+	assert.False(t, w.rows[1].conflict, "sibling with matching approvers must not be flagged as conflicting")
+	assert.True(t, w.rows[2].conflict, "sibling with different approvers must be flagged as conflicting")
 }

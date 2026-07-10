@@ -4,17 +4,17 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "mrboard-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString(content); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = f.WriteString(content)
+	require.NoError(t, err)
 	f.Close()
 	return f.Name()
 }
@@ -30,12 +30,8 @@ sources:
     ids: [my-team]
 `)
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.GitLab.URL != "https://gitlab.example.com" {
-		t.Errorf("got URL %q", cfg.GitLab.URL)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "https://gitlab.example.com", cfg.GitLab.URL)
 }
 
 func TestGitlabTokenEnvOverride(t *testing.T) {
@@ -51,12 +47,8 @@ sources:
 	t.Setenv("GITLAB_TOKEN", "from-env")
 
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.GitLab.Token != "from-env" {
-		t.Errorf("expected token from env, got %q", cfg.GitLab.Token)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "from-env", cfg.GitLab.Token)
 }
 
 func TestLoadExcludedAuthors(t *testing.T) {
@@ -74,15 +66,9 @@ sources:
     ids: [my-team]
 `)
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(cfg.ExcludedAuthors) != 2 {
-		t.Fatalf("expected 2 excluded authors, got %d", len(cfg.ExcludedAuthors))
-	}
-	if cfg.ExcludedAuthors[0] != "build-bot" {
-		t.Errorf("expected build-bot, got %q", cfg.ExcludedAuthors[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, cfg.ExcludedAuthors, 2)
+	assert.Equal(t, "build-bot", cfg.ExcludedAuthors[0])
 }
 
 func TestValidationMissingURL(t *testing.T) {
@@ -95,9 +81,7 @@ sources:
     ids: [x]
 `)
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for missing URL")
-	}
+	assert.Error(t, err, "expected error for missing URL")
 }
 
 func TestValidationMissingToken(t *testing.T) {
@@ -111,9 +95,7 @@ sources:
 `)
 	os.Unsetenv("GITLAB_TOKEN")
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for missing token")
-	}
+	assert.Error(t, err, "expected error for missing token")
 }
 
 func TestValidationMissingSources(t *testing.T) {
@@ -123,9 +105,7 @@ gitlab:
   token: glpat-abc
 `)
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for empty sources")
-	}
+	assert.Error(t, err, "expected error for empty sources")
 }
 
 func TestValidationInvalidSourceType(t *testing.T) {
@@ -139,9 +119,7 @@ sources:
     ids: [x]
 `)
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for invalid source type")
-	}
+	assert.Error(t, err, "expected error for invalid source type")
 }
 
 func TestValidationGroupSourceMissingIDs(t *testing.T) {
@@ -154,9 +132,7 @@ sources:
   - type: group
 `)
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for group source missing ids")
-	}
+	assert.Error(t, err, "expected error for group source missing ids")
 }
 
 func TestValidationSourceMissingIDs(t *testing.T) {
@@ -169,9 +145,7 @@ sources:
   - type: user
 `)
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for source missing ids")
-	}
+	assert.Error(t, err, "expected error for source missing ids")
 }
 
 func TestDefaultConfigPath(t *testing.T) {
@@ -185,24 +159,16 @@ sources:
   - type: group
     ids: [x]
 `
-	if err := os.WriteFile(filepath.Join(dir, "mrboard.yaml"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "mrboard.yaml"), []byte(content), 0o600))
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) })
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chdir(dir))
 	os.Unsetenv("GITLAB_TOKEN")
 
 	cfg, err := Load("")
-	if err != nil {
-		t.Fatalf("unexpected error with default path: %v", err)
-	}
-	if cfg.GitLab.URL == "" {
-		t.Error("expected URL to be loaded")
-	}
+	require.NoError(t, err)
+	assert.NotEmpty(t, cfg.GitLab.URL, "expected URL to be loaded")
 }
 
 func TestSubConfigAccessors(t *testing.T) {
@@ -225,28 +191,16 @@ excluded_authors:
 current_user: alice
 `)
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	glClient := cfg.GitLabClientConfig()
-	if glClient.URL != "https://gitlab.example.com" {
-		t.Errorf("GitLabClientConfig.URL = %q", glClient.URL)
-	}
-	if glClient.Timeout.String() != "1m0s" {
-		t.Errorf("GitLabClientConfig.Timeout = %v", glClient.Timeout)
-	}
+	assert.Equal(t, "https://gitlab.example.com", glClient.URL, "GitLabClientConfig.URL")
+	assert.Equal(t, "1m0s", glClient.Timeout.String(), "GitLabClientConfig.Timeout")
 
 	glAdapt := cfg.GitLabAdapterConfig()
-	if len(glAdapt.Sources) != 2 {
-		t.Errorf("GitLabAdapterConfig.Sources len = %d", len(glAdapt.Sources))
-	}
+	assert.Len(t, glAdapt.Sources, 2, "GitLabAdapterConfig.Sources len")
 
 	mrSvc := cfg.MRServiceConfig()
-	if mrSvc.CurrentUser != "alice" {
-		t.Errorf("MRServiceConfig.CurrentUser = %q", mrSvc.CurrentUser)
-	}
-	if len(mrSvc.ExcludedAuthors) != 1 {
-		t.Errorf("MRServiceConfig.ExcludedAuthors len = %d", len(mrSvc.ExcludedAuthors))
-	}
+	assert.Equal(t, "alice", mrSvc.CurrentUser, "MRServiceConfig.CurrentUser")
+	assert.Len(t, mrSvc.ExcludedAuthors, 1, "MRServiceConfig.ExcludedAuthors len")
 }

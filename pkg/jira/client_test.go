@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -18,12 +21,8 @@ func TestGetRemoteLink_EmptyArray(t *testing.T) {
 		w.Write([]byte(`[]`))
 	})
 	title, err := c.GetRemoteLink(t.Context(), "OD-1", "mrboard:1:1")
-	if err != nil {
-		t.Fatalf("GetRemoteLink() error = %v", err)
-	}
-	if title != "" {
-		t.Fatalf("GetRemoteLink() = %q, want empty", title)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, title)
 }
 
 func TestGetRemoteLink_NotFound(t *testing.T) {
@@ -31,12 +30,8 @@ func TestGetRemoteLink_NotFound(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	})
 	title, err := c.GetRemoteLink(t.Context(), "OD-1", "mrboard:1:1")
-	if err != nil {
-		t.Fatalf("GetRemoteLink() error = %v", err)
-	}
-	if title != "" {
-		t.Fatalf("GetRemoteLink() = %q, want empty", title)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, title)
 }
 
 func TestGetRemoteLink_ArrayOfOne(t *testing.T) {
@@ -44,12 +39,8 @@ func TestGetRemoteLink_ArrayOfOne(t *testing.T) {
 		w.Write([]byte(`[{"object":{"title":"!1 my-mr","url":"https://example.com/1"}}]`))
 	})
 	title, err := c.GetRemoteLink(t.Context(), "OD-1", "mrboard:1:1")
-	if err != nil {
-		t.Fatalf("GetRemoteLink() error = %v", err)
-	}
-	if title != "!1 my-mr" {
-		t.Fatalf("GetRemoteLink() = %q, want %q", title, "!1 my-mr")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "!1 my-mr", title)
 }
 
 // Reproduces the production bug: when exactly one remote link matches the
@@ -59,10 +50,6 @@ func TestGetRemoteLink_SingleObject(t *testing.T) {
 		w.Write([]byte(`{"object":{"title":"!1 my-mr","url":"https://example.com/1"}}`))
 	})
 	title, err := c.GetRemoteLink(t.Context(), "OD-1", "mrboard:1:1")
-	if err != nil {
-		t.Fatalf("GetRemoteLink() error = %v", err)
-	}
-	if title != "!1 my-mr" {
-		t.Fatalf("GetRemoteLink() = %q, want %q", title, "!1 my-mr")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "!1 my-mr", title)
 }

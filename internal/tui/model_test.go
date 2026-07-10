@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 
 	"github.com/ceffo/mrboard/internal/config"
@@ -52,17 +53,13 @@ func someMRs() []domain.MergeRequest {
 
 func TestModel_FetchResultMsg_TransitionsToBoardState(t *testing.T) {
 	m := makeModel(t, someMRs(), "")
-	if m.State() != StateBoard {
-		t.Fatalf("expected stateBoard, got %v", m.State())
-	}
+	assert.Equal(t, StateBoard, m.State())
 }
 
 func TestModel_FetchResultMsg_PopulatesAllMRs(t *testing.T) {
 	mrs := someMRs()
 	m := makeModel(t, mrs, "")
-	if len(m.AllMRs()) != len(mrs) {
-		t.Fatalf("expected %d MRs, got %d", len(mrs), len(m.AllMRs()))
-	}
+	assert.Len(t, m.AllMRs(), len(mrs))
 }
 
 // --- Fetch error ---
@@ -75,12 +72,8 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	next, _ := m.Update(FetchErrMsg{Err: errors.New("network down")})
 	m2 := next.(Model)
 
-	if m2.State() != StateError {
-		t.Fatalf("expected stateError, got %v", m2.State())
-	}
-	if m2.ErrMsg() == "" {
-		t.Fatal("expected non-empty error message")
-	}
+	assert.Equal(t, StateError, m2.State())
+	assert.NotEmpty(t, m2.ErrMsg(), "expected non-empty error message")
 }
 
 // --- Partial results ---
@@ -96,15 +89,9 @@ func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
 	})
 	m2 := next.(Model)
 
-	if m2.State() != StateBoard {
-		t.Fatalf("expected stateBoard, got %v", m2.State())
-	}
-	if len(m2.AllMRs()) != 2 {
-		t.Fatalf("expected 2 MRs, got %d", len(m2.AllMRs()))
-	}
-	if len(m2.Errors()) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(m2.Errors()))
-	}
+	assert.Equal(t, StateBoard, m2.State())
+	assert.Len(t, m2.AllMRs(), 2)
+	assert.Len(t, m2.Errors(), 1)
 }
 
 // --- Sort cycling ---
@@ -115,64 +102,48 @@ func TestModel_SortKey_CyclesField(t *testing.T) {
 	// Starting state: repo_iid asc. First 's' → repo_iid desc.
 	m2, _ := m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m2m := m2.(Model)
-	if m2m.SortFieldKey() != "repo_iid" || !m2m.SortDesc() {
-		t.Fatalf("after 1st s: want repo_iid desc, got field=%s desc=%v",
-			m2m.SortFieldKey(), m2m.SortDesc())
-	}
+	assert.Equal(t, "repo_iid", m2m.SortFieldKey(), "after 1st s: want repo_iid desc")
+	assert.True(t, m2m.SortDesc(), "after 1st s: want repo_iid desc")
 
 	// Second 's' → assignee asc.
 	m3, _ := m2m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m3m := m3.(Model)
-	if m3m.SortFieldKey() != sortKeyAssignee || m3m.SortDesc() {
-		t.Fatalf("after 2nd s: want assignee asc, got field=%s desc=%v",
-			m3m.SortFieldKey(), m3m.SortDesc())
-	}
+	assert.Equal(t, sortKeyAssignee, m3m.SortFieldKey(), "after 2nd s: want assignee asc")
+	assert.False(t, m3m.SortDesc(), "after 2nd s: want assignee asc")
 
 	// Third 's' → assignee desc.
 	m4, _ := m3m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m4m := m4.(Model)
-	if m4m.SortFieldKey() != sortKeyAssignee || !m4m.SortDesc() {
-		t.Fatalf("after 3rd s: want assignee desc, got field=%s desc=%v",
-			m4m.SortFieldKey(), m4m.SortDesc())
-	}
+	assert.Equal(t, sortKeyAssignee, m4m.SortFieldKey(), "after 3rd s: want assignee desc")
+	assert.True(t, m4m.SortDesc(), "after 3rd s: want assignee desc")
 
 	// Fourth 's' → age asc.
 	m5, _ := m4m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
 	m5m := m5.(Model)
-	if m5m.SortFieldKey() != "age" || m5m.SortDesc() {
-		t.Fatalf("after 4th s: want age asc, got field=%s desc=%v",
-			m5m.SortFieldKey(), m5m.SortDesc())
-	}
+	assert.Equal(t, "age", m5m.SortFieldKey(), "after 4th s: want age asc")
+	assert.False(t, m5m.SortDesc(), "after 4th s: want age asc")
 }
 
 // --- My-view toggle ---
 
 func TestModel_TabKey_TogglesMyView(t *testing.T) {
 	m := makeModel(t, someMRs(), "alice")
-	if m.MyView() {
-		t.Fatal("expected myView=false initially")
-	}
+	assert.False(t, m.MyView(), "expected myView=false initially")
 
 	m2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m2m := m2.(Model)
-	if !m2m.MyView() {
-		t.Fatal("expected myView=true after first tab")
-	}
+	assert.True(t, m2m.MyView(), "expected myView=true after first tab")
 
 	m3, _ := m2m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m3m := m3.(Model)
-	if m3m.MyView() {
-		t.Fatal("expected myView=false after second tab")
-	}
+	assert.False(t, m3m.MyView(), "expected myView=false after second tab")
 }
 
 func TestModel_TabKey_DisabledWithoutCurrentUser(t *testing.T) {
 	m := makeModel(t, someMRs(), "") // no current user
 	m2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m2m := m2.(Model)
-	if m2m.MyView() {
-		t.Fatal("my-view should not activate when CurrentUser is empty")
-	}
+	assert.False(t, m2m.MyView(), "my-view should not activate when CurrentUser is empty")
 }
 
 // --- Detail panel open / close ---
@@ -185,9 +156,7 @@ func TestModel_EnterKey_OpensDetailPanel(t *testing.T) {
 	m2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m2m := m2.(Model)
 	// showDetail is set immediately on enter even before detail fetch resolves.
-	if !m2m.ShowDetail() {
-		t.Fatal("expected showDetail=true after pressing enter")
-	}
+	assert.True(t, m2m.ShowDetail(), "expected showDetail=true after pressing enter")
 }
 
 func TestModel_EscKey_ClosesDetailPanel(t *testing.T) {
@@ -202,9 +171,7 @@ func TestModel_EscKey_ClosesDetailPanel(t *testing.T) {
 	// Close with esc.
 	m3, _ := m2m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m3m := m3.(Model)
-	if m3m.ShowDetail() {
-		t.Fatal("expected showDetail=false after pressing esc")
-	}
+	assert.False(t, m3m.ShowDetail(), "expected showDetail=false after pressing esc")
 }
 
 // --- ticket index ---
@@ -232,24 +199,16 @@ func TestModel_TicketIndex_BuildsOnFetch(t *testing.T) {
 	m := makeModel(t, mrs, "")
 
 	got := m.SiblingMRs(ticketKeyAlpha)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 siblings for %s, got %d", ticketKeyAlpha, len(got))
-	}
-	if len(m.SiblingMRs(ticketKeyBeta)) != 1 {
-		t.Fatalf("expected 1 MR for %s, got %d", ticketKeyBeta, len(m.SiblingMRs(ticketKeyBeta)))
-	}
+	assert.Len(t, got, 2, "expected 2 siblings for %s", ticketKeyAlpha)
+	assert.Len(t, m.SiblingMRs(ticketKeyBeta), 1, "expected 1 MR for %s", ticketKeyBeta)
 }
 
 func TestModel_TicketIndex_EmptyKeyReturnsNil(t *testing.T) {
 	m := makeModel(t, someMRs(), "")
-	if m.SiblingMRs("") != nil {
-		t.Fatal("expected nil for empty ticket key")
-	}
+	assert.Nil(t, m.SiblingMRs(""), "expected nil for empty ticket key")
 }
 
 func TestModel_TicketIndex_NoTicketKeysProducesEmptyIndex(t *testing.T) {
 	m := makeModel(t, someMRs(), "") // someMRs have no ticket keys in titles
-	if m.SiblingMRs(ticketKeyAlpha) != nil {
-		t.Fatalf("expected nil when no MR has ticket key %s", ticketKeyAlpha)
-	}
+	assert.Nil(t, m.SiblingMRs(ticketKeyAlpha), "expected nil when no MR has ticket key %s", ticketKeyAlpha)
 }

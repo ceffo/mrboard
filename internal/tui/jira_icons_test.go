@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Test-local string constants to avoid goconst lint violations.
@@ -36,9 +38,7 @@ func TestIssueTypeIconResolver_Defaults(t *testing.T) {
 
 	for _, tc := range cases {
 		got := r.Resolve(tc.issueType)
-		if got != tc.want {
-			t.Errorf("Resolve(%q) = %q, want %q", tc.issueType, got, tc.want)
-		}
+		assert.Equal(t, tc.want, got, "Resolve(%q)", tc.issueType)
 	}
 }
 
@@ -64,8 +64,6 @@ func TestIssueTypeIconResolver_Overrides(t *testing.T) {
 
 	for _, tc := range cases {
 		got := r.Resolve(tc.issueType)
-		if got != tc.want {
-			t.Errorf("Resolve(%q) = %q, want %q", tc.issueType, got, tc.want)
-		}
+		assert.Equal(t, tc.want, got, "Resolve(%q)", tc.issueType)
 	}
 }

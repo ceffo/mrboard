@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func discardLogger() *slog.Logger {
@@ -18,10 +20,6 @@ func TestNewClient_ValidConfig(t *testing.T) {
 		Timeout: 30 * time.Second,
 	}
 	c, err := NewClient(cfg, discardLogger())
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
-	if c == nil {
-		t.Fatal("NewClient() returned nil client")
-	}
+	require.NoError(t, err, "NewClient() error")
+	require.NotNil(t, c, "NewClient() returned nil client")
 }

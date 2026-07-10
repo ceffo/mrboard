@@ -3,6 +3,9 @@ package domain
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -100,12 +103,8 @@ func TestDeriveReviewerInfos_SingleReviewer(t *testing.T) {
 				approvedBy = map[string]bool{}
 			}
 			result := DeriveReviewerInfos(singleReviewer(), tc.events, approvedBy, evT0)
-			if len(result) != 1 {
-				t.Fatalf("want 1 reviewer, got %d", len(result))
-			}
-			if result[0].State != tc.wantState {
-				t.Errorf("want state %v, got %v", tc.wantState, result[0].State)
-			}
+			require.Len(t, result, 1, "want 1 reviewer")
+			assert.Equal(t, tc.wantState, result[0].State, "want state")
 		})
 	}
 }
@@ -129,16 +128,12 @@ func TestDeriveReviewerInfos_MultipleReviewers(t *testing.T) {
 				return r.State
 			}
 		}
-		t.Fatalf("reviewer %q not found", username)
+		require.Failf(t, "reviewer not found", "reviewer %q not found", username)
 		return ReviewerNotStarted
 	}
 
-	if got := stateFor(testUsername); got != ReviewerCommented {
-		t.Errorf("alice: want Commented, got %v", got)
-	}
-	if got := stateFor(testOther); got != ReviewerReReviewRequested {
-		t.Errorf("bob: want ReReviewRequested, got %v", got)
-	}
+	assert.Equal(t, ReviewerCommented, stateFor(testUsername), "alice")
+	assert.Equal(t, ReviewerReReviewRequested, stateFor(testOther), "bob")
 }
 
 func TestDeriveReviewerInfos_WaitingSince_ReReviewRequested(t *testing.T) {
@@ -146,9 +141,7 @@ func TestDeriveReviewerInfos_WaitingSince_ReReviewRequested(t *testing.T) {
 		{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT2},
 	}
 	result := DeriveReviewerInfos(singleReviewer(), events, nil, evT0)
-	if result[0].WaitingSince != evT2 {
-		t.Errorf("WaitingSince should be re-review timestamp %v, got %v", evT2, result[0].WaitingSince)
-	}
+	assert.Equal(t, evT2, result[0].WaitingSince, "WaitingSince should be re-review timestamp")
 }
 
 func TestDeriveReviewerInfos_WaitingSince_Commented(t *testing.T) {
@@ -156,9 +149,7 @@ func TestDeriveReviewerInfos_WaitingSince_Commented(t *testing.T) {
 		{AuthorUsername: testUsername, Kind: KindComment, Timestamp: evT1},
 	}
 	result := DeriveReviewerInfos(singleReviewer(), events, nil, evT0)
-	if result[0].WaitingSince != evT1 {
-		t.Errorf("WaitingSince should be comment timestamp %v, got %v", evT1, result[0].WaitingSince)
-	}
+	assert.Equal(t, evT1, result[0].WaitingSince, "WaitingSince should be comment timestamp")
 }
 
 func TestDeriveReviewerInfos_ApprovedAt_Set(t *testing.T) {
@@ -166,16 +157,12 @@ func TestDeriveReviewerInfos_ApprovedAt_Set(t *testing.T) {
 		{AuthorUsername: testUsername, Kind: KindApproval, Timestamp: evT2},
 	}
 	result := DeriveReviewerInfos(singleReviewer(), events, map[string]bool{testUsername: true}, evT0)
-	if result[0].ApprovedAt != evT2 {
-		t.Errorf("ApprovedAt should be approval timestamp %v, got %v", evT2, result[0].ApprovedAt)
-	}
+	assert.Equal(t, evT2, result[0].ApprovedAt, "ApprovedAt should be approval timestamp")
 }
 
 func TestDeriveReviewerInfos_Empty(t *testing.T) {
 	result := DeriveReviewerInfos(nil, nil, nil, evT0)
-	if len(result) != 0 {
-		t.Errorf("want empty result for no reviewers, got %d", len(result))
-	}
+	assert.Empty(t, result, "want empty result for no reviewers")
 }
 
 func TestCountRoundTrips(t *testing.T) {
@@ -211,9 +198,7 @@ func TestCountRoundTrips(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := CountRoundTrips(tc.events); got != tc.want {
-				t.Errorf("want %d, got %d", tc.want, got)
-			}
+			assert.Equal(t, tc.want, CountRoundTrips(tc.events))
 		})
 	}
 }

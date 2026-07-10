@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestHasJiraLink(t *testing.T) {
 	tests := []struct {
@@ -14,9 +18,7 @@ func TestHasJiraLink(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := HasJiraLink(tc.description); got != tc.want {
-				t.Errorf("HasJiraLink(%q) = %v, want %v", tc.description, got, tc.want)
-			}
+			assert.Equal(t, tc.want, HasJiraLink(tc.description), "HasJiraLink(%q)", tc.description)
 		})
 	}
 }
@@ -43,12 +45,8 @@ func TestAppendJiraLink(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := AppendJiraLink(tc.description, instanceURL, issueKey)
-			if got != tc.want {
-				t.Errorf("AppendJiraLink() = %q, want %q", got, tc.want)
-			}
-			if !HasJiraLink(got) {
-				t.Errorf("AppendJiraLink() result does not satisfy HasJiraLink: %q", got)
-			}
+			assert.Equal(t, tc.want, got, "AppendJiraLink()")
+			assert.True(t, HasJiraLink(got), "AppendJiraLink() result does not satisfy HasJiraLink: %q", got)
 		})
 	}
 }

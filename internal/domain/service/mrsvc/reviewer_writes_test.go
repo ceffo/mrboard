@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -44,9 +46,8 @@ func TestApplyReviewerChanges_ResolvesUnknownIDs(t *testing.T) {
 	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(fetchedMR(), nil).Once()
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice}} // UserID unresolved
-	if _, _, err := applyChanges(src, staged, map[string]int64{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_, _, err := applyChanges(src, staged, map[string]int64{}, nil)
+	require.NoError(t, err)
 }
 
 func TestApplyReviewerChanges_SkipsResolutionWhenIDsKnown(t *testing.T) {
@@ -57,9 +58,8 @@ func TestApplyReviewerChanges_SkipsResolutionWhenIDsKnown(t *testing.T) {
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice}} // UserID unresolved but already in knownIDs
 	knownIDs := map[string]int64{userAlice: 101}
-	if _, _, err := applyChanges(src, staged, knownIDs, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_, _, err := applyChanges(src, staged, knownIDs, nil)
+	require.NoError(t, err)
 }
 
 func TestApplyReviewerChanges_DedupesReviewerIDs(t *testing.T) {
@@ -68,9 +68,8 @@ func TestApplyReviewerChanges_DedupesReviewerIDs(t *testing.T) {
 	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(fetchedMR(), nil).Once()
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101}, {Username: "alice-alias", UserID: 101}}
-	if _, _, err := applyChanges(src, staged, map[string]int64{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_, _, err := applyChanges(src, staged, map[string]int64{}, nil)
+	require.NoError(t, err)
 }
 
 func TestApplyReviewerChanges_SkipsSaveApproversWhenUnchanged(t *testing.T) {
@@ -82,12 +81,8 @@ func TestApplyReviewerChanges_SkipsSaveApproversWhenUnchanged(t *testing.T) {
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101, IsApprover: true}}
 	current := map[string]bool{userAlice: true}
 	_, changed, err := applyChanges(src, staged, map[string]int64{}, current)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if changed {
-		t.Error("approversChanged should be false when the set is unchanged")
-	}
+	require.NoError(t, err)
+	assert.False(t, changed, "approversChanged should be false when the set is unchanged")
 }
 
 func TestApplyReviewerChanges_CallsSaveApproversWhenChanged(t *testing.T) {
@@ -98,12 +93,8 @@ func TestApplyReviewerChanges_CallsSaveApproversWhenChanged(t *testing.T) {
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101, IsApprover: true}}
 	_, changed, err := applyChanges(src, staged, map[string]int64{}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !changed {
-		t.Error("approversChanged should be true when the set grows from empty")
-	}
+	require.NoError(t, err)
+	assert.True(t, changed, "approversChanged should be true when the set grows from empty")
 }
 
 func TestApplyReviewerChanges_OverlaysStagedApproverFlagsAfterFetch(t *testing.T) {
@@ -116,12 +107,8 @@ func TestApplyReviewerChanges_OverlaysStagedApproverFlagsAfterFetch(t *testing.T
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101, IsApprover: true}}
 	mr, _, err := applyChanges(src, staged, map[string]int64{}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !mr.Reviewers[0].IsApprover {
-		t.Error("staged approver intent should overlay the stale fetch result")
-	}
+	require.NoError(t, err)
+	assert.True(t, mr.Reviewers[0].IsApprover, "staged approver intent should overlay the stale fetch result")
 }
 
 func TestApplyReviewerChanges_PropagatesResolveError(t *testing.T) {
@@ -129,9 +116,8 @@ func TestApplyReviewerChanges_PropagatesResolveError(t *testing.T) {
 	src.EXPECT().GetProjectMembers(mock.Anything, writeTestProjectID).Return(nil, errors.New("boom")).Once()
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice}}
-	if _, _, err := applyChanges(src, staged, map[string]int64{}, nil); err == nil {
-		t.Fatal("expected error to propagate")
-	}
+	_, _, err := applyChanges(src, staged, map[string]int64{}, nil)
+	require.Error(t, err, "expected error to propagate")
 }
 
 func TestApplyReviewerChanges_PropagatesSetReviewersError(t *testing.T) {
@@ -140,9 +126,8 @@ func TestApplyReviewerChanges_PropagatesSetReviewersError(t *testing.T) {
 		Return(errors.New("boom")).Once()
 
 	staged := []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101}}
-	if _, _, err := applyChanges(src, staged, map[string]int64{}, nil); err == nil {
-		t.Fatal("expected error to propagate")
-	}
+	_, _, err := applyChanges(src, staged, map[string]int64{}, nil)
+	require.Error(t, err, "expected error to propagate")
 }
 
 func TestApplyStagedApproverFlags_OverlaysIntent(t *testing.T) {
@@ -154,10 +139,6 @@ func TestApplyStagedApproverFlags_OverlaysIntent(t *testing.T) {
 	}
 	mrsvc.ApplyStagedApproverFlags(&mr, map[string]bool{"doc": true})
 
-	if !mr.Reviewers[0].IsApprover {
-		t.Error("doc should be flagged as approver from staged intent")
-	}
-	if mr.Reviewers[1].IsApprover {
-		t.Error("biff was not staged as approver and must stay false")
-	}
+	assert.True(t, mr.Reviewers[0].IsApprover, "doc should be flagged as approver from staged intent")
+	assert.False(t, mr.Reviewers[1].IsApprover, "biff was not staged as approver and must stay false")
 }
