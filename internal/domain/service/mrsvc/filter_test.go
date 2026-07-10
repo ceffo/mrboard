@@ -99,6 +99,57 @@ func TestFilterAndSort_MyViewOn_ExcludesCommentedReviewer(t *testing.T) {
 	}
 }
 
+func TestFilterAndSort_MyViewOn_ApproversAssigned_ExcludesNonApproverReviewer(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, "bob", "repo/a", 1, t0,
+			domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted, IsApprover: false},
+			domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted, IsApprover: true},
+		),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
+	if len(got) != 0 {
+		t.Fatalf("expected 0 (alice is a reviewer but not an approver), got %v", got)
+	}
+}
+
+func TestFilterAndSort_MyViewOn_ApproversAssigned_IncludesApproverReviewer(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, "bob", "repo/a", 1, t0,
+			domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted, IsApprover: true},
+			domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted, IsApprover: true},
+		),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
+	if len(got) != 1 {
+		t.Fatalf("expected 1 (alice is an approver), got %v", got)
+	}
+}
+
+func TestFilterAndSort_MyViewOn_ApproversAssigned_AssigneeStillIncluded(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0,
+			domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted, IsApprover: true},
+		),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
+	if len(got) != 1 {
+		t.Fatalf("expected 1 (alice is the assignee), got %v", got)
+	}
+}
+
+func TestFilterAndSort_MyViewOn_ApproversAssigned_AuthorOnlyExcluded(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		{
+			ID: 1, IID: 1, ProjectPath: "repo/a", Author: userAlice, Assignee: "",
+			Reviewers: []domain.ReviewerInfo{{Username: userBob, State: domain.ReviewerNotStarted, IsApprover: true}},
+		},
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
+	if len(got) != 0 {
+		t.Fatalf("expected 0 (alice is only the author, not assignee or approver), got %v", got)
+	}
+}
+
 func TestFilterAndSort_MyViewOn_EmptyUserReturnsAll(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),

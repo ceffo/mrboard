@@ -102,16 +102,34 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 
 // mrIsRelevantToUser reports whether an MR should appear in "my view".
 func mrIsRelevantToUser(mr domain.MergeRequest, username string) bool {
-	effective := mr.Assignee
-	if effective == "" {
-		effective = mr.Author
-	}
-	if effective == username {
+	if mr.Assignee == username {
 		return true
 	}
+
+	hasApprovers := false
 	for _, r := range mr.Reviewers {
-		if r.Username == username &&
-			(r.State == domain.ReviewerNotStarted || r.State == domain.ReviewerReReviewRequested) {
+		if r.IsApprover {
+			hasApprovers = true
+			break
+		}
+	}
+
+	// Falling back to author-as-assignee only counts absent a real approver
+	// list; once approvers are assigned, being merely the author isn't enough.
+	if !hasApprovers && mr.Assignee == "" && mr.Author == username {
+		return true
+	}
+
+	for _, r := range mr.Reviewers {
+		if r.Username != username {
+			continue
+		}
+		// When approvers are assigned, only an approver's own reviewer state
+		// makes the MR relevant — a non-approver reviewer no longer counts.
+		if hasApprovers && !r.IsApprover {
+			continue
+		}
+		if r.State == domain.ReviewerNotStarted || r.State == domain.ReviewerReReviewRequested {
 			return true
 		}
 	}
