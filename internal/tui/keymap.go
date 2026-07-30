@@ -159,6 +159,34 @@ func NewContext(name, title string, keymap any, opts ...ContextOpt) *Context {
 	return c
 }
 
+// NewDynamicContext builds a context from an explicit slice of actions rather
+// than reflecting over a keymap struct's fields — for action sets whose count
+// and keys are only known at runtime (e.g. user-configured commands, see
+// docs/adr/0004-external-command-launcher.md). It builds the same byKey map as
+// NewContext, so footerItems, helpSections, and cross-context shadowing all
+// work unchanged; unlike NewContext it is not added to allContexts, since that
+// registry is for the fixed, compile-time set of contexts TestNoKeyConflicts
+// walks, not ones rebuilt per config load. Panics on an intra-context key
+// collision, the same invariant NewContext enforces — configured-command key
+// collisions are expected to be rejected earlier, at config load time.
+func NewDynamicContext(name, title string, actions []*Action, opts ...ContextOpt) *Context {
+	c := &Context{name: name, title: title, byKey: map[string]string{}}
+	for _, a := range actions {
+		label := a.Help().Desc
+		for _, k := range a.Keys() {
+			if prev, dup := c.byKey[k]; dup {
+				panic(fmt.Sprintf("keymap %q: key %q bound to both %s and %s", name, k, prev, label))
+			}
+			c.byKey[k] = label
+		}
+		c.actions = append(c.actions, a)
+	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}
+
 // Name returns the context's slug identifier.
 func (c *Context) Name() string { return c.name }
 

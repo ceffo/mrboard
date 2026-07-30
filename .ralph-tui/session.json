@@ -3,10 +3,10 @@
   "sessionId": "8294deb9-fff1-4da8-81ec-adbd749ed878",
   "status": "running",
   "startedAt": "2026-07-30T18:04:11.678Z",
-  "updatedAt": "2026-07-30T18:10:46.355Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-07-30T18:19:33.429Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -23,8 +23,8 @@
       {
         "id": "mrr-4z4.2",
         "title": "config: Command schema, parsing, and validation",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-4z4.3",
@@ -62,10 +62,32 @@
       "durationMs": 172843,
       "startedAt": "2026-07-30T18:04:22.031Z",
       "endedAt": "2026-07-30T18:07:14.874Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-4z4.2",
+      "taskTitle": "config: Command schema, parsing, and validation",
+      "taskCompleted": true,
+      "durationMs": 210210,
+      "startedAt": "2026-07-30T18:07:16.119Z",
+      "endedAt": "2026-07-30T18:10:46.329Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "mrr-4z4.3",
+      "taskTitle": "argv builder: template-variable projection + resolution",
+      "taskCompleted": false,
+      "durationMs": 264408,
+      "startedAt": "2026-07-30T18:10:47.574Z",
+      "endedAt": "2026-07-30T18:15:11.982Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
-  "activeTaskIds": [],
+  "activeTaskIds": [
+    "mrr-4z4.3"
+  ],
   "subagentPanelVisible": false
 }

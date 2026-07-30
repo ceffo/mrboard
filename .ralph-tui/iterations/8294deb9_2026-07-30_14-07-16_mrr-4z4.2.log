@@ -1,0 +1,96 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.2
+- **Task Title**: config: Command schema, parsing, and validation
+- **Description**: ## Scope
+
+New config schema for the launcher: a [[commands]] (or similar) list in mrboard.toml -- each entry a name, a keybinding, a binary, and an argv template (list of strings with {{.Var}} placeho...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-30T18:07:16.119Z
+- **Ended At**: 2026-07-30T18:10:46.329Z
+- **Duration**: 3m 30s
+- **Input Tokens**: 152
+- **Output Tokens**: 16365
+- **Total Tokens**: 16517
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading session context and the relevant files before implementing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m Check internal/log package API $ rg -n "func " /Users/moncefnaji/code/github.com/mrboard/internal/log/*.go
+[94m[Bash][0m Check for existing logging usage in config package $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go
+[94m[Bash][0m Find call order of config.Load and log.New $ rg -n "config.Load|log.New" /Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/*.go /Use...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m
+[94m[Bash][0m Show epic mrr-4z4 details and children $ br show mrr-4z4 --format toon 2>/dev/null | toon 2>/dev/null || br show mrr-4z4 2>&1 | head -80
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/root.go[0m
+[94m[Bash][0m Check for existing slog capture/test patterns in repo $ rg -n "slog.New\(|slog.SetDefault|slog.NewTextHandler|slog.NewJSONHandler" /Users/moncefnaji/code/gi...
+Now I have a clear picture. Let me check `keys.go`/`keymap.go` briefly to confirm the `Key` field should just be a plain string (config can't import charmbracelet), then implement the config schema.
+[94m[Bash][0m Check Act() signature for key string type $ rg -n "func Act\(" /Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go | head -5
+[94m[Bash][0m Locate Act() function definition $ rg -n "func Act\(" /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go
+Good — `Act` takes plain `string` keys, confirming `Command.Key` should just be a `string` in config. Now implementing the schema.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	v..." → "import (
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"pat..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "// AppConfig is the top-level application configur..." → "// Command is a user-configured external command l..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "	Notifications      Notifications `mapstructure:"n..." → "	Notifications      Notifications `mapstructure:"n..."
+Now update `Load` and `validate` to thread through warnings, and add `validateCommands`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "	if err := validate(&cfg); err != nil {
+		return n..." → "	warnings, err := validate(&cfg)
+	if err != nil {
+..."
+Now add `validateCommands` near the other validation helpers:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "func validateSource(src Source) error {
+	return va..." → "func validateSource(src Source) error {
+	return va..."
+Now let's verify the full file reads correctly, then add tests.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+Looks good. Now let's add unit tests in `config_test.go`, following the existing `writeTemp` pattern.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m edit: "func TestSubConfigAccessors(t *testing.T) {" → "func TestLoadCommandsValid(t *testing.T) {
+	path :..."
+Now let's run `just check`.
+[94m[Bash][0m Run project quality gates (fmt, lint, build, test) $ just check 2>&1 | tail -100
+Fixing the line-length lint violation by wrapping the assertion.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m edit: "	assert.Equal(t, "mrboard-nonexistent-binary-xyz",..." → "	assert.Equal(t, "mrboard-nonexistent-binary-xyz",..."
+[94m[Bash][0m Re-run project quality gates $ just check 2>&1 | tail -100
+`just check` passes. Let me confirm the config package's own tests specifically, to be certain the new ones ran and passed.
+[94m[Bash][0m Run the new command-related config tests directly $ go test ./internal/config/... -run 'Command' -v 2>&1
+All four new tests pass, and the log output confirms the missing-binary case genuinely logs a warning (not a fatal error) while the config still loads.
+
+`★ Insight ─────────────────────────────────────`
+- **The chicken-and-egg logger problem**: `config.Load()` runs in `root.go` *before* mrboard's real `slog.Logger` is constructed in `core.New()` (which itself derives its settings from the config just loaded). That ordering rules out threading the app's structured logger into `validateCommands`. The fix was to keep `validate()` a pure function that returns `([]string, error)` — warnings as data, not a side effect — and let `Load()` be the one place that actually calls `slog.Default().Warn(...)`. This is a common pattern for "bootstrap-phase" diagnostics: anything that must be reported before your real logging infrastructure exists falls back to the stdlib's zero-config default logger.
+- **Why warnings return as `[]string` instead of writing directly to a logger inside validation**: it keeps `validateCommands` trivially testable — the missing-binary test asserts on `cfg.Commands` and `err == nil`, with no need to inject a fake logger or capture stderr. Compare this to `pkg/gitlab/client.go`, which *does* accept a `*slog.Logger` as an explicit dependency — that works there because the client is constructed well after logging is live. Same principle (avoid global mutable logging state) expressed differently depending on where in the boot sequence the code runs.
+- **Scope discipline from the ADR**: the ADR explicitly assigns argv-template *resolution* to a separate ticket (mrr-4z4.3) and duplicate-key-vs-built-in-key shadowing to the keymap layer (mrr-4z4.4, resolved automatically by context stack order, no validation needed). This task only had to validate structural correctness (`Required` fields, one binary check, one duplicate-key check) — resisting the urge to also validate `{{.Var}}` template syntax here, since that variable set isn't config's concern to know about.
+`─────────────────────────────────────────────────`
+
+Now closing out the bead per the workflow.
+[94m[Bash][0m Close bead mrr-4z4.2 and flush tracker state to JSONL $ br close mrr-4z4.2 --reason "config: Command schema, parsing, duplicate-key error, missing-binary wa...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - No downstream TUI/domain consumers needed chan..." → "  - No downstream TUI/domain consumers needed chan..."
+Now saving the key decision to engram memory per the mandatory session protocol.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Added `config.Command{Name, Key, Binary, Args []string}` + `AppConfig.Commands []Command` in internal/config/config.go, for the external-command-launcher feature (docs/adr/0004). `validate()... (1292 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-4z4.2 (child of epic mrr-4z4, external-command-launcher): config schema, parsing, and validation for user-configured external commands in mrboard.toml/yaml.
+
+## Instructions
+- Be... (2531 chars)"
+mrr-4z4.2 is complete: added `config.Command` (name/key/binary/args) plumbed into `AppConfig.Commands`, with duplicate-key validation as a load-time error and missing-binary detection as a warning-only path (config still loads). 4 new tests pass, `just check` is green, the bead is closed, beads state flushed, progress.md updated, and the decision/session summary are saved to engram memory.
+
+<promise>COMPLETE</promise>

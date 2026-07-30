@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/ceffo/mrboard/internal/config"
+
 // This file is the single source of truth for every keybinding in mrboard:
 // each action is defined exactly once as an Action and registered into a
 // Context. Widgets dispatch against these same values; the footer and the
@@ -263,3 +265,18 @@ var DefaultBatchPreviewKeyMap = BatchPreviewKeyMap{
 var BatchPreviewCtx = NewContext("batch-preview", "Batch preview", &DefaultBatchPreviewKeyMap,
 	WithFooterGroup("↑↓", "move", &DefaultBatchPreviewKeyMap.Up, &DefaultBatchPreviewKeyMap.Down),
 )
+
+// BuildCustomCommandsContext builds the context for user-configured external
+// commands (docs/adr/0004-external-command-launcher.md). Every configured
+// command is PriorityModal (never competes for footer space) and CategoryAct
+// (grouped with refresh/open MR/reviewers/diff in the '?' help modal). Callers
+// push the returned context above BoardCtx so a configured key colliding with
+// a board default shadows it via the existing stacking rule.
+func BuildCustomCommandsContext(cmds []config.Command) *Context {
+	actions := make([]*Action, 0, len(cmds))
+	for _, cmd := range cmds {
+		a := Act(cmd.Key, cmd.Name, PriorityModal, CategoryAct)
+		actions = append(actions, &a)
+	}
+	return NewDynamicContext("custom-commands", "Commands", actions)
+}

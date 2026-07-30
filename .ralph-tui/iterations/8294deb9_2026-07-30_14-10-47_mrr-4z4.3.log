@@ -1,0 +1,145 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.3
+- **Task Title**: argv builder: template-variable projection + resolution
+- **Description**: ## Scope
+
+The argv-resolution engine: given a `domain.MergeRequest` and a configured command's argv template, produce the final `[]string` to exec. Per the ADR, this is an explicitly-named projection ...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-30T18:10:47.574Z
+- **Ended At**: 2026-07-30T18:15:11.982Z
+- **Duration**: 4m 24s
+- **Input Tokens**: 182
+- **Output Tokens**: 19487
+- **Total Tokens**: 19669
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading session context and the relevant design docs before implementing the argv builder.
+[94m[Bash][0m $ \cat .ralph-tui/progress.md 2>/dev/null | tail -150
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m
+[94m[Bash][0m Check domain.MergeRequest field names for template projection $ \cat internal/domain/mr.go | \grep -n "ProjectPath\|WebURL\|Title\|Author\|IID\|SourceBranch\|Target...
+[94m[Bash][0m Check config.Command struct shape from mrr-4z4.2 $ \cat internal/config/config.go | \grep -n "type Command\|type AppConfig\|Commands \[\]Command" -A 8
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m
+[94m[Bash][0m Check which packages import internal/config and internal/domain, to decide new package placement $ \rg -l "internal/config\"" internal/tui internal/core internal/domain internal/adapters 2>/dev/null ...
+[94m[Bash][0m List tui package files and check for existing scaffolding related to this ADR $ \ls internal/tui/ | \rg -v "_test.go" echo "---" \rg -n "^func|^type" internal/tui/notify.go 2>/dev/...
+
+[91m[Error: Exit code 1
+approver_editor.go
+batch_preview.go
+board.go
+card.go
+column.go
+detail.go
+diff_view.go
+filter.go
+footer.go
+header.go
+help_modal.go
+jira_icons.go
+keymap.go
+keys.go
+model.go
+overlay_router.go
+settings_widget.go
+spinner.go
+state.go
+styles.go
+theme.go
+themes
+themes.go
+viewport.go
+---
+--- check keys.go for BuildCustomCommandsContext already stubbed? ---][0m
+[94m[Bash][0m Check for structural convention tests that might constrain new non-widget files in internal/tui $ \rg -n "func Test" internal/tui/*_test.go | \rg -i "widget|struct|fileconvention|layout"  echo "---"...
+No structural convention tests block adding a plain helper file. `internal/tui/filter.go` already holds pure logic (non-widget), confirming the pattern. I'll add the argv builder there as a new file.
+[94m[Bash][0m Confirm package name and import style for internal/tui files $ \rg -n "^package|^import" internal/tui/filter.go | head -5
+Now I'll write the argv builder file.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv.go[0m "package tui
+
+import (
+	"fmt"
+	"strings"
+	"text/template"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+// commandTemplateData is the explicit, named proje... (1909 chars)"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv.go[0m edit: "		tmpl, err := template.New(fmt.Sprintf("%s[%d]", ..." → "		tmpl, err := template.New(fmt.Sprintf("%s[%d]", ..."
+Now let's write table-driven tests covering all seven variables plus error cases.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/filter_test.go[0m
+[94m[Bash][0m Check test package convention in internal/tui $ \rg -n "^package" internal/tui/filter_test.go internal/tui/model_test.go 2>/dev/null
+
+[91m[Error: Exit code 2
+internal/tui/model_test.go:1:package tui][0m
+internal/tui tests use the internal `package tui` (no filter_test.go there — that was mrsvc). I'll follow that convention.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m "package tui
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain"
+... (2240 chars)"
+Now let's run `just check`.
+[94m[Bash][0m Run project quality gates (fmt, lint, build, test) $ just check 2>&1 | tail -80
+[94m[Bash][0m Find existing alice constant to reuse $ \rg -n "editorTestApprover" internal/tui/*.go
+I'll reuse the existing `editorTestApprover` constant and add a local const for "review" to satisfy `goconst`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m edit: "func TestBuildCommandArgv(t *testing.T) {
+	mr := d..." → "const argvTestCommandName = "review"
+
+func TestBui..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m edit: "		{
+			name: "Author",
+			args: []string{"{{.Autho..." → "		{
+			name: "Author",
+			args: []string{"{{.Autho..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m edit: "		{
+			name: "literal arg with no template",
+			ar..." → "		{
+			name: "literal arg with no template",
+			ar..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m edit: "			cmd := config.Command{Name: "review", Binary: "..." → "			cmd := config.Command{Name: argvTestCommandName..."
+Now re-run `just check`.
+[94m[Bash][0m Re-run project quality gates after goconst fixes $ just check 2>&1 | tail -80
+All checks passed. Let's verify our specific test ran and confirm exit code.
+[94m[Bash][0m Run the new argv-builder tests directly to confirm all subtests pass $ echo "EXIT: $?"
+All tests pass and `just check` is green. Let me close the bead and record progress.
+[94m[Bash][0m Close bead mrr-4z4.3 and flush tracker state to JSONL $ br close mrr-4z4.3 --reason "Added BuildCommandArgv in internal/tui: named MR projection resolved vi...
+[94m[Bash][0m Verify bead close was persisted to issues.jsonl $ \rg -n "mrr-4z4.3" .beads/issues.jsonl | \rg -o '"status":"[a-z_]*"'
+Good — the close is persisted. Now let's append the progress log entry.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - Template-placeholder syntax inside `Command.Ar..." → "  - Template-placeholder syntax inside `Command.Ar..."
+Per this repo's convention, package-placement is an architectural decision that belongs in the ADR rather than only in beads/progress notes. Let me add a short resolved-decision subsection to ADR-0004.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m edit: "## Consequences" → "### Package placement for the argv builder (resolv..."
+Now let's save this decision to engram memory per the mandatory protocol, then do a final sanity check.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Added `BuildCommandArgv(mr domain.MergeRequest, cmd config.Command) ([]string, error)` in `internal/tui/command_argv.go`, closing mrr-4z4.3 (external-command-launcher epic mrr-4z4). Resolves... (1922 chars)"
+Memory saved, no conflicts flagged. Let's do one last full `just check` run to confirm everything is still green after the ADR edit, then wrap up with a session summary.
+[94m[Bash][0m Final verification that just check reports no errors or failures $ echo "exit status check: $?"
+`just check` is clean — the matched lines are just test names containing "Err" and an expected `WARN`/`err=` log line from an intentional bad-directory test case, not failures. Let me close out with the mandatory session summary.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-4z4.3 (child of epic mrr-4z4, external-command-launcher): the argv-resolution engine mapping (domain.MergeRequest, config.Command template) -> ([]string, error).
+
+## Instructions... (3436 chars)"
+`★ Insight ─────────────────────────────────────`
+1. **Struct-typed template data gets validation for free.** Go's `text/template` distinguishes structs from maps at execution time: a struct field lookup that doesn't exist (`{{.NotAField}}`) is always a hard error ("can't evaluate field..."), regardless of any `Option()` setting — that option only changes behavior for `map[string]any` lookups. By projecting `domain.MergeRequest` into a small named struct instead of a map, the "unknown variable" acceptance criterion was satisfied by the type system, with no bespoke validation code.
+
+2. **Package placement followed the dependency graph, not intuition.** The bead flagged placement as undecided; tracing docs/architecture.md's import rules narrowed it to exactly one sane choice: of the packages that already import both `internal/domain` and `internal/config`, `internal/core` is a composition root (wrong layer for reusable logic) and `internal/tui` is where the ADR's `tea.ExecProcess` call will eventually live — so the pure builder sits right next to its future caller.
+
+3. **Returning args-only instead of a combined argv slice mirrors the stdlib's own API shape.** `exec.Command(name string, arg ...string)` already splits binary from arguments; making `BuildCommandArgv` return just the resolved `[]string` args (not prepending `cmd.Binary`) means the next ticket calls `exec.Command(cmd.Binary, argv...)` with zero re-splitting logic.
+`─────────────────────────────────────────────────`
+
+Implemented `BuildCommandArgv` in `internal/tui/command_argv.go`, resolving each `config.Command.Args` template entry against the ADR's seven-variable named projection via `text/template`. Added 11 table-driven subtests (all seven variables, a combined case, a literal arg, and unknown-variable/malformed-template error cases). `just check` passes; the package-placement rationale is now recorded as a "Decision" subsection in `docs/adr/0004-external-command-launcher.md`, and bead `mrr-4z4.3` is closed. Next up per the epic: `mrr-4z4.4`/`.5` (keybinding wiring and the actual `tea.ExecProcess` call).

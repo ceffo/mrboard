@@ -136,6 +136,30 @@ Resolution:
    error. On success, nothing is shown — the resumed, redrawn board is itself the success signal, so
    an extra toast (unlike `Notify`, which has no other visible effect) would just be noise.
 
+### Package placement for the argv builder (resolved 2026-07-30)
+
+The projection/resolution logic needs both `domain.MergeRequest` and `config.Command`, so it
+cannot live in `internal/domain` (stdlib-only) or `internal/domain/service/mrsvc` (imports only
+`internal/domain`, per docs/architecture.md).
+
+Resolution:
+
+1. **`internal/tui`.** Of the packages that already import both `internal/domain` and
+   `internal/config` (`internal/core` and `internal/tui`), `internal/tui` is the better fit:
+   `internal/core` is the composition root, not a home for reusable business logic, and the
+   feature's actual `exec` call rides on `tea.ExecProcess` — a bubbletea primitive only
+   `internal/tui` may import — so the pure argv builder sits next to its future caller
+   (execution work, a later ticket) instead of across a package boundary from it.
+2. **Plain function, not a widget.** `internal/tui/command_argv.go` holds a private
+   `commandTemplateData` struct (the named projection: `ProjectPath`, `IID`, `SourceBranch`,
+   `TargetBranch`, `WebURL`, `Title`, `Author`) and an exported `BuildCommandArgv(mr, cmd)
+   ([]string, error)` — no `Init`/`Update`/`View`, since it renders nothing. `internal/tui/filter.go`
+   already establishes that plain non-widget helper files are an accepted pattern in this package.
+3. **Returns resolved args only, not the binary.** `BuildCommandArgv` returns `cmd.Args` resolved
+   via `text/template`, mirroring `exec.Command(name, arg...)`'s own name/args split — the
+   execution ticket calls `exec.Command(cmd.Binary, argv...)` directly rather than re-splitting a
+   combined slice.
+
 ## Consequences
 
 - `internal/tui/keymap.go` gains a second Context-construction path (slice-based, alongside the

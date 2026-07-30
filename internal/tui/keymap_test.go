@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/config"
 )
 
 // TestNoKeyConflicts asserts the registry invariant: within one context every
@@ -118,4 +120,44 @@ func TestHelpSectionsShadowing(t *testing.T) {
 				"base action %q visible under text-capturing context", e.label)
 		}
 	}
+}
+
+// TestBuildCustomCommandsContext covers the configured-commands context from
+// docs/adr/0004-external-command-launcher.md: commands are modal-only (never
+// footer items) and a configured key colliding with a board default shadows
+// it once stacked above BoardCtx — the existing stacking rule, no new
+// override logic.
+func TestBuildCustomCommandsContext(t *testing.T) {
+	cmds := []config.Command{
+		{Name: "code review", Key: "R", Binary: "tuicr"},
+		{Name: "refresh via tool", Key: "r", Binary: "hunk"}, // collides with Board's "r" refresh
+	}
+	ctx := BuildCustomCommandsContext(cmds)
+
+	assert.Empty(t, ctx.footerItems(), "configured commands must never appear in the footer")
+
+	sections := helpSections([]*Context{BaseCtx, BoardCtx, ctx})
+	var labels []string
+	for _, s := range sections {
+		for _, e := range s.entries {
+			labels = append(labels, e.label)
+		}
+	}
+	joined := strings.Join(labels, ",")
+	assert.True(t, strings.Contains(joined, "code review"), "custom command missing from help modal: %v", labels)
+	assert.True(t, strings.Contains(joined, "refresh via tool"),
+		"shadowing custom command missing from help modal: %v", labels)
+	assert.False(t, strings.Contains(joined, "refresh"+","),
+		"board default not shadowed by colliding custom key: %v", labels)
+}
+
+// TestNewDynamicContextPanicsOnDuplicateKey mirrors NewContext's intra-context
+// conflict panic. Configured-command duplicate keys are expected to be
+// rejected earlier, at config load time — this stays a defensive invariant.
+func TestNewDynamicContextPanicsOnDuplicateKey(t *testing.T) {
+	a1 := Act("x", "one", PriorityModal, CategoryAct)
+	a2 := Act("x", "two", PriorityModal, CategoryAct)
+	assert.Panics(t, func() {
+		NewDynamicContext("dup-test", "Dup", []*Action{&a1, &a2})
+	})
 }
