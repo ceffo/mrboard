@@ -98,6 +98,32 @@ Widgets keep their existing `key.Matches` switches — but they match against th
 bindings. `key.NewBinding` may only be called inside `keys.go` context
 definitions; a lint-style test enforces this (grep-test over the package).
 
+### Configured commands (external launcher)
+
+User-defined commands from `mrboard.yaml`'s `commands:` list (see
+`mrboard.yaml.example` and [ADR-0004](adr/0004-external-command-launcher.md))
+become a keybinding context at runtime, built by
+`BuildCustomCommandsContext(cfg.Commands)` in `keys.go`. Unlike every other
+context, its `Action`s are not declared as struct fields — the set of commands
+is only known once config is loaded — so it is built via
+`NewDynamicContext(name, title string, actions []*Action, opts ...ContextOpt)`
+in `keymap.go`, a slice-based sibling to the reflection-based `NewContext`.
+Downstream machinery (footer fill, help modal, shadowing) is unchanged, since
+none of it depends on how a context's `actions` were populated.
+
+The resulting context is pushed only in the `[Base, Board]` stack —
+`[Base, Board, Commands]` — never in Detail or an overlay. Sitting above
+`Board` means a configured key colliding with a board default (e.g. `r`)
+shadows it via the ordinary shadowing rule, with no override logic of its own.
+Every configured command is `PriorityModal` (footer never shows it,
+regardless of count) and `CategoryAct` (grouped with `refresh`/`open
+MR`/`reviewers`/`diff` in the `?` help modal).
+
+A duplicate key across two configured commands is rejected by `internal/config`
+at load time (mrboard refuses to start) — distinct from `NewContext`'s
+init-time panic, which is reserved for bugs in `keys.go` itself, not user
+config mistakes.
+
 ## Footer (status line)
 
 ```
@@ -178,8 +204,8 @@ Sort mode and view mode move out of key labels into the header stats area:
 
 | File | Role |
 |---|---|
-| `internal/tui/keymap.go` | `Action`, `Category`, `Priority`, `Context`, `NewContext` (reflection + conflict panic), registry |
-| `internal/tui/keys.go` | **Only** place where `key.NewBinding` appears: all context definitions |
+| `internal/tui/keymap.go` | `Action`, `Category`, `Priority`, `Context`, `NewContext` (reflection + conflict panic), `NewDynamicContext` (slice-based, for configured commands), registry |
+| `internal/tui/keys.go` | **Only** place where `key.NewBinding` appears: all context definitions, plus `BuildCustomCommandsContext` |
 | `internal/tui/footer.go` | Priority-fill renderer; version pinned right |
 | `internal/tui/help_modal.go` | `?` modal widget |
 | `internal/tui/keymap_test.go` | conflict test + single-definition-site test |

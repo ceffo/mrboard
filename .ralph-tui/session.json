@@ -3,10 +3,10 @@
   "sessionId": "8294deb9-fff1-4da8-81ec-adbd749ed878",
   "status": "running",
   "startedAt": "2026-07-30T18:04:11.678Z",
-  "updatedAt": "2026-07-30T18:29:30.734Z",
-  "currentIteration": 4,
+  "updatedAt": "2026-07-30T19:37:26.553Z",
+  "currentIteration": 6,
   "maxIterations": 10,
-  "tasksCompleted": 3,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -41,8 +41,8 @@
       {
         "id": "mrr-4z4.5",
         "title": "tui: wire ExecProcess suspend/resume + result toast",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-4z4.6",
@@ -92,12 +92,30 @@
       "durationMs": 260275,
       "startedAt": "2026-07-30T18:15:13.119Z",
       "endedAt": "2026-07-30T18:19:33.394Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "mrr-4z4.5",
+      "taskTitle": "tui: wire ExecProcess suspend/resume + result toast",
+      "taskCompleted": true,
+      "durationMs": 595973,
+      "startedAt": "2026-07-30T18:19:34.706Z",
+      "endedAt": "2026-07-30T18:29:30.679Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "mrr-4z4.6",
+      "taskTitle": "fixture command + example config/docs + agent-tui verification",
+      "taskCompleted": false,
+      "durationMs": 382211,
+      "startedAt": "2026-07-30T18:29:32.002Z",
+      "endedAt": "2026-07-30T18:35:54.213Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
-  "activeTaskIds": [
-    "mrr-4z4.3"
-  ],
+  "activeTaskIds": [],
   "subagentPanelVisible": false
 }

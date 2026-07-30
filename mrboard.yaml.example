@@ -20,3 +20,31 @@ current_user: alice       # your GitLab username — highlights your MRs in the 
 log:
   path: /tmp/mrboard.log  # optional; omit to disable file logging
   level: info             # debug | info | warn | error
+
+# External command launcher (docs/adr/0004-external-command-launcher.md).
+# Each entry binds a key on the board to an external program, launched with
+# mrboard's terminal suspended (tea.ExecProcess) and resumed on exit — useful
+# for handing the selected MR off to a dedicated review tool that wants full
+# control of the terminal (e.g. tuicr, hunk), rather than a captured-output
+# filter like the built-in diff view (`d`).
+#
+# `args` is an argv template (no shell interpretation); available variables:
+# {{.ProjectPath}} {{.IID}} {{.SourceBranch}} {{.TargetBranch}} {{.WebURL}}
+# {{.Title}} {{.Author}}
+commands:
+  - name: fixture test         # shown in the '?' help modal
+    key: x                     # keybinding on the board
+    binary: ./scripts/testdata/fixture-command.sh  # checked-in test fixture
+    args: ["{{.ProjectPath}}", "{{.SourceBranch}}", "{{.TargetBranch}}"]
+
+  # Example wiring a real review tool (not installed by default):
+  #
+  # tuicr must run from inside a local git checkout of the MR's project, since it diffs
+  # commit ranges — mrboard deliberately doesn't resolve local checkout paths for you
+  # (docs/adr/0004's non-goals), so a personal wrapper script on your $PATH is expected
+  # to do that glue: locate (or offer to clone) the checkout, cd into it, then hand off
+  # to `tuicr mr <iid>` — tuicr resolves the repo from cwd's git remote for a bare number.
+  # - name: review in tuicr
+  #   key: T
+  #   binary: tuicr-mr    # a personal script on $PATH, not part of mrboard itself
+  #   args: ["{{.WebURL}}", "{{.ProjectPath}}", "{{.IID}}"]

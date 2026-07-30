@@ -122,6 +122,7 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `card.go` | Card widget — renders one `domain.MergeRequest` |
 | `detail.go` | Detail panel widget — MR description + discussion threads |
 | `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
+| `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
 | `approver_editor.go` | Reviewer/approver editor overlay (`v`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs |
 | `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — include/exclude toggle + change/conflict indicators |
 | `filter_popup.go` | Filter popup overlay (`f`) |
@@ -288,6 +289,13 @@ Patterns:
 
 Never render a blank panel, empty list, or silent cursor while an async cmd is running.
 The spinner gives the user confidence the app is working and prevents spurious key presses.
+
+**Exception — external command launcher.** A configured command (`commands:` in
+`mrboard.yaml`, see [keybindings.md](keybindings.md#configured-commands-external-launcher))
+suspends the whole TUI via `tea.ExecProcess` instead of showing a spinner: the
+child process takes over the terminal entirely until it exits, at which point
+mrboard redraws. There is nothing to spin — the terminal isn't mrboard's to
+render into for the duration of the call.
 
 ## UX rules
 

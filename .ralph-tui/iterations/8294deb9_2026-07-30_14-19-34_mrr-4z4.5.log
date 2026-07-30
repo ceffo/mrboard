@@ -1,0 +1,153 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.5
+- **Task Title**: tui: wire ExecProcess suspend/resume + result toast
+- **Description**: ## Scope
+
+Wire the pieces from mrr-4z4.3 and mrr-4z4.4 into a working keypress-to-exec flow in internal/tui/model.go:
+
+- On a configured-command key: resolve argv (mrr-4z4.3), wrap in a tea.Cmd using ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-30T18:19:34.706Z
+- **Ended At**: 2026-07-30T18:29:30.679Z
+- **Duration**: 9m 55s
+- **Input Tokens**: 418
+- **Output Tokens**: 47089
+- **Total Tokens**: 47507
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading session context and understanding the current state of the codebase for this task.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m
+[94m[Bash][0m Check file sizes before reading $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go /Users/moncefnaji/code/github....
+model.go is 1520 lines — I'll grep for the notify pattern first rather than reading the whole file.
+[94m[Bash][0m Find the notify pattern in model.go $ rg -n "NotifyResultMsg|notifyCmd|handleNotifyResult|ErrorAlert|InfoAlert|toast\." internal/tui/model...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Search for custom commands context wiring in model.go $ rg -n "BuildCustomCommandsContext|contextStack|customCommands|Commands\b" internal/tui/model.go inte...
+[94m[Bash][0m Show epic details for mrr-4z4 $ br show mrr-4z4 --format toon 2>/dev/null | toon 2>/dev/null || br show mrr-4z4
+[94m[Bash][0m Show sibling task mrr-4z4.6 details $ br show mrr-4z4.6
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Bash][0m Find Model struct and constructor $ rg -n "func NewModel|type Model struct" internal/tui/model.go
+[94m[Bash][0m Locate Model constructor and config wiring points $ rg -n "config\.Command|config\.AppConfig|cfg \*config\.|cfg config\." internal/tui/*.go internal/cor...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m Locate bubbletea v2 module cache path $ find "$MODCACHE/charm.land" -maxdepth 1 -iname "bubbletea*" 2>/dev/null
+[94m[Bash][0m Find bubbletea v2 versioned dir $ find /Users/moncefnaji/go/pkg/mod/charm.land/bubbletea -maxdepth 1 -iname "v2*"
+[94m[Bash][0m Inspect ExecProcess signature in bubbletea v2 source $ rg -n "func ExecProcess|type ExecCallback|ExecProcess" "/Users/moncefnaji/go/pkg/mod/charm.land/bubb...
+Confirmed signature. Let me view the full doc comment for exact usage guidance.
+[94m[Read][0m [95m/Users/moncefnaji/go/pkg/mod/charm.land/bubbletea/v2@v2.0.7/exec.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Check existing os/exec usage in model.go $ rg -n "exec\." internal/tui/model.go
+Now I have a complete picture. Let me implement the changes, starting with the Model struct and constructor.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	errors             []error
+	errMsg             st..." → "	errors             []error
+	errMsg             st..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		hasDarkBg:          initialDark,
+		cfg:         ..." → "		hasDarkBg:          initialDark,
+		cfg:         ..."
+Now update `baseStack()` to push the custom-commands context above `BoardCtx`, per the ADR's stacking rule:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if m.showDetail {
+		return append(stack, DetailCt..." → "	if m.showDetail {
+		return append(stack, DetailCt..."
+Now add the `CommandResultMsg` type, mirroring `NotifyResultMsg`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// NotifyResultMsg carries the result of a webhook..." → "// NotifyResultMsg carries the result of a webhook..."
+Now wire the message into the `coreUpdate` dispatch switch:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case NotifyResultMsg:
+		return m.handleNotifyResu..." → "	case NotifyResultMsg:
+		return m.handleNotifyResu..."
+Now let's wire the actual dispatch in `handleKeyBoard` — checking custom commands first so they correctly shadow board defaults per the stacking rule:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// handleKeyBoard handles keys while the kanban bo..." → "// handleKeyBoard handles keys while the kanban bo..."
+Now add the helper functions — `matchCustomCommand`, `execCommandCmd`, `handleCommandResult` — right next to the existing `notifyCmd`/`handleNotifyResult` pair for locality:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m Model) handleNotifyResult(msg NotifyResult..." → "func (m Model) handleNotifyResult(msg NotifyResult..."
+[94m[Bash][0m Find test files constructing Model directly $ rg -n "Model{" internal/tui/*_test.go | head -30
+[94m[Bash][0m Find test files constructing Model literal directly $ rg -n 'Model\{' internal/tui/*_test.go | wc -l
+[94m[Bash][0m Check how model_test.go constructs Model instances $ rg -n "^func Test|New\(" internal/tui/model_test.go | head -60
+[94m[Bash][0m Find existing tests asserting on toast/notify result handling $ rg -rn "NotifyResultMsg|handleNotifyResult|toast\." internal/tui/*_test.go | head -40
+[94m[Bash][0m Locate toast module in mod cache $ rg -n "ceffo/toast" go.mod go.sum | head
+[94m[Bash][0m Look for existing assertion patterns on returned tea.Cmd in handler tests $ rg -n "handleReviewersSaved|ReviewersSavedMsg" internal/tui/*_test.go | head -20
+There's an existing `notify_test.go` with a `runCmd` helper — exactly the pattern I should mirror. Let me read it in full.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/notify_test.go[0m
+[94m[Bash][0m Inspect toast package NewAlertCmd signature $ rg -n "func.*NewAlertCmd|type Model struct|func New\(" "$D"/*.go 2>/dev/null | head -20
+[94m[Bash][0m List ceffo module cache entries $ ls "$(go env GOMODCACHE)/github.com/ceffo/" 2>/dev/null
+[94m[Bash][0m Inspect toast package alert API $ rg -n "func.*NewAlertCmd|ErrorAlert|InfoAlert|WarnAlert" "$D"/*.go 2>/dev/null | head -20
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m
+[94m[Bash][0m Find KeyPressMsg construction patterns across tui package $ rg -n "KeyPressMsg\{" internal/tui/*.go | head -30
+[94m[Bash][0m Check KeyPressMsg String method $ rg -n "func.*KeyPressMsg.*String|func.*Key\)\s*String" "$D"/*.go | head
+[94m[Read][0m [95m/Users/moncefnaji/go/pkg/mod/charm.land/bubbletea/v2@v2.0.7/key.go[0m
+[94m[Bash][0m Inspect Key.String implementation $ rg -n "func \(k Key\) String" -A 15 "$D"/key.go
+[94m[Bash][0m Check gci import grouping config $ rg -n -A 15 "gci" /Users/moncefnaji/code/github.com/mrboard/.golangci.yml
+[94m[Bash][0m Check Go module name $ head -1 /Users/moncefnaji/code/github.com/mrboard/go.mod
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_exec_test.go[0m "package tui
+
+import (
+	"context"
+	"os/exec"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/stretchr/testify/assert"
+	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/requ... (4001 chars)"
+Now let's run `just check` to verify everything builds, lints, and passes.
+[94m[Bash][0m Run project quality gate (fmt, lint, build, test) $ just check 2>&1 | tail -150
+[94m[Bash][0m Find all occurrences of the hunk string literal $ rg -n '"hunk"' internal/tui/*.go
+[94m[Bash][0m Count occurrences of tuicr string literal $ rg -n '"tuicr"' internal/tui/*.go
+[94m[Bash][0m Check goconst linter settings $ rg -n -B2 -A 15 "goconst" /Users/moncefnaji/code/github.com/mrboard/.golangci.yml
+[94m[Bash][0m Count quoted true string literal occurrences $ rg -n '"true"' internal/tui/*.go internal/config/*.go
+[94m[Bash][0m Verify chosen replacement literal is unused elsewhere $ rg -n '"code-viewer"|"hunk-view"' internal/tui/*.go internal/config/*.go
+Good, no collisions. Let me fix the `"hunk"` literal in my new test file.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_exec_test.go[0m edit: "		{Name: "hunk view", Key: "H", Binary: "hunk"}," → "		{Name: "hunk view", Key: "H", Binary: "hunk-view..."
+[94m[Bash][0m Check for existing gosec suppressions and openBrowser implementation $ sed -n '1495,1520p' /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Bash][0m Check nolintlint settings for comment format requirements $ rg -n -A 10 "nolintlint" /Users/moncefnaji/code/github.com/mrboard/.golangci.yml
+No custom nolintlint settings, so defaults apply (require an explanation after `//`). Let me add a justified suppression matching the existing `//nolint:forcetypeassert` style in this file.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	execCmd := exec.Command(cmd.Binary, argv...)" → "	//nolint:gosec // G204: cmd.Binary is an admin-co..."
+Now let's rerun `just check`.
+[94m[Bash][0m Re-run project quality gate $ just check 2>&1 | tail -200
+All tests pass. Let me confirm the full pipeline (fmt + lint + build + test) exited cleanly at the top.
+[94m[Bash][0m Confirm just check exit status $ echo "EXIT_STATUS=${PIPESTATUS[0]}"
+`just check` passes cleanly. Let me review the complete diff before closing out.
+[94m[Bash][0m Show diff summary and working tree status $ git status --short
+[94m[Bash][0m Show full diff of model.go changes $ git diff internal/tui/model.go
+Now let's close the bead and sync the tracker state.
+[94m[Bash][0m Close bead mrr-4z4.5 and flush tracker state to JSONL $ br close mrr-4z4.5 --reason "Wired custom-command keypress dispatch, tea.ExecProcess suspend/resume,...
+[94m[Bash][0m Verify bead closed status and beads file diff $ git status --short .beads/
+Good — the bead is closed and `.beads/issues.jsonl` already reflects it (it was auto-synced on close; the "nothing to export" was just confirming no additional pending changes). Now let's append the progress log entry and save an engram memory decision.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `NewContext`'s panic-on-duplicate-key is a dev..." → "  - `NewContext`'s panic-on-duplicate-key is a dev..."
+[94m[mcp__plugin_engram_engram__mem_save][0m "What: Closed mrr-4z4.5 (external-command-launcher epic mrr-4z4). Added Model.customCommandsCtx *Context (built via BuildCustomCommandsContext(cfg.Commands) from mrr-4z4.4 in New()); baseStack()'s fina... (2374 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-4z4.5 (child of epic mrr-4z4, external-command-launcher): wire mrr-4z4.3's argv builder and mrr-4z4.4's dynamic keymap context into a working keypress-to-exec flow in internal/tu... (2660 chars)"
+**mrr-4z4.5 complete.** Summary of what was wired into `internal/tui/model.go`:
+
+- `Model.customCommandsCtx *Context` — built once from `cfg.Commands` in `New()`, pushed above `BoardCtx` in `baseStack()` only in the exact `[Base, Board]` state.
+- `handleKeyBoard` now checks configured commands *before* its static key switch, so a configured key colliding with a board default (e.g. `r`) correctly shadows it — verified with a test that presses `r` and confirms `isRefreshing` never flips.
+- `CommandResultMsg` + `execCommandCmd`/`handleCommandResult`, mirroring the existing `notifyCmd`/`handleNotifyResult` pattern: argv-template failures and `tea.ExecProcess` run failures (`*exec.Error` for missing binary, `*exec.ExitError` for non-zero exit) both funnel through one error-toast handler; success shows nothing, since the redrawn board is the signal.
+- Added `internal/tui/command_exec_test.go` with table-driven tests covering all three outcomes plus the shadowing and argv-failure paths.
+
+`★ Insight ─────────────────────────────────────`
+The trickiest part here was realizing `tea.ExecProcess`'s returned `Cmd`, when called directly, just produces bubbletea's *unexported* `execMsg{cmd, fn}` — actually running the child process only happens inside `Program.exec()`, which is driven by the live event loop, not by invoking the `Cmd` in isolation. That means the "success / missing binary / non-zero exit" behavior can't be unit-tested through the `tea.Cmd` layer at all — you have to drop down a level and get real `*exec.Error`/`*exec.ExitError` values straight from `exec.Command(...).Run()`, then feed those into the message handler directly. This is a good example of testing at the right seam: the plumbing that talks to `tea.Program` is verified manually with `agent-tui` (that's mrr-4z4.6), while the pure message-handling logic gets fast, deterministic unit tests.
+`─────────────────────────────────────────────────`
+
+`just check` passes; bead closed and synced. Manual `agent-tui` verification of the actual suspend/resume UX is intentionally deferred to mrr-4z4.6, which also adds the fixture script this flow needs for that end-to-end check.
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,171 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.6
+- **Task Title**: fixture command + example config/docs + agent-tui verification
+- **Description**: ## Scope
+
+Close out the feature:
+
+- Add a small fixture script (e.g. scripts/testdata/fixture-command.sh: prints something distinctive, exits) checked in permanently, used as the configured command fo...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-30T18:29:32.002Z
+- **Ended At**: 2026-07-30T18:35:54.213Z
+- **Duration**: 6m 22s
+- **Input Tokens**: 316
+- **Output Tokens**: 26071
+- **Total Tokens**: 26387
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context: engram memory, the progress log, and the ADR that defines this feature's verification strategy.
+[94m[Bash][0m $ \ls .beads .ralph-tui 2>&1 | head -20 && echo "---" && wc -l .ralph-tui/progress.md docs/adr/0004-ex...
+
+[91m[Error: Exit code 1
+.beads:
+beads.db
+beads.db-shm
+beads.db-wal
+config.yaml
+issues.jsonl
+last-touched
+metadata.json
+
+.ralph-tui:
+config.toml
+iterations
+progress.md
+ralph.lock
+reports
+session-meta.json
+session.json
+---
+wc: mrboard.toml.example: open: No such file or directory
+      82 .ralph-tui/progress.md
+     174 docs/adr/0004-external-command-launcher.md
+     195 docs/keybindings.md
+     299 docs/tui-conventions.md
+     750 total][0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[Bash][0m $ /opt/homebrew/bin/fd -HI "example" . -t f 2>/dev/null | /opt/homebrew/bin/rg -i "mrboard|config"
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/mrboard.yaml.example[0m
+[94m[Bash][0m $ \cat scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ /opt/homebrew/bin/rg -n "Command|command" docs/keybindings.md docs/tui-conventions.md
+
+[91m[Error: Exit code 1][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/keybindings.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/tui-conventions.md[0m
+[94m[Bash][0m $ \ls -la /Users/moncefnaji/code/github.com/mrboard/*.yaml /Users/moncefnaji/code/github.com/mrboard/*...
+
+[91m[Error: Exit code 1
+ls: /Users/moncefnaji/code/github.com/mrboard/*.toml: No such file or directory
+ls: /Users/moncefnaji/code/github.com/mrboard/*.yaml: No such file or directory][0m
+[94m[Bash][0m Find config path resolution and gitignore for local config $ /opt/homebrew/bin/rg -n "mrboard.yaml|MRBOARD_CONFIG|\.gitignore" /Users/moncefnaji/code/github.com/...
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/ 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/root.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+[94m[Bash][0m $ \ls -la /Users/moncefnaji/code/github.com/mrboard/bin/ 2>&1
+Good, there's a real config at `~/.config/mrboard/mrboard.yaml` and a built binary already. Now let me look at the existing config schema for `Command` and check `keys.go`/`config.go` before writing the fixture script and example config entry.
+[94m[Bash][0m $ /opt/homebrew/bin/rg -n "Command|Commands" /Users/moncefnaji/code/github.com/mrboard/internal/config...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_argv.go[0m
+Now let's look at the exact `Command` struct fields/tags and the model.go exec wiring to make sure the fixture config entry and script align precisely.
+[94m[Read][0m
+
+[91m[Error: <tool_use_error>InputValidationError: Read was called with input that could not be parsed as JSON.
+You sent (first 100 of 100 bytes): {"file_path": "/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go", "offset": 55, }
+Common causes: unescaped backslashes in file paths (use / or \\), unescaped control characters, or truncated output. Retry with valid JSON.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/.config/mrboard/mrboard.yaml[0m
+[94m[Bash][0m $ /opt/homebrew/bin/rg -n 'Act\(' /Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Bash][0m $ /opt/homebrew/bin/rg -n "ExecProcess|execCommandCmd|CommandResultMsg|customCommandsCtx|matchCustomCo...
+Now I have everything needed. Let me create the fixture script first.
+[94m[Bash][0m Create scripts/testdata directory $ mkdir -p /Users/moncefnaji/code/github.com/mrboard/scripts/testdata
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/scripts/testdata/fixture-command.sh[0m "#!/bin/sh
+# Permanent test fixture for the external-command-launcher feature
+# (docs/adr/0004-external-command-launcher.md). Configured as a real "commands"
+# entry in mrboard.yaml.example so the tea.... (545 chars)"
+[94m[Bash][0m Make fixture script executable $ chmod +x /Users/moncefnaji/code/github.com/mrboard/scripts/testdata/fixture-command.sh && \ls -la /U...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/mrboard.yaml.example[0m edit: "log:
+  path: /tmp/mrboard.log  # optional; omit to..." → "log:
+  path: /tmp/mrboard.log  # optional; omit to..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/keybindings.md[0m edit: "## Footer (status line)" → "### Configured commands (external launcher)
+
+User-..."
+Now update the "File layout" table in keybindings.md to mention `keys.go`'s new `BuildCustomCommandsContext`, and update `docs/tui-conventions.md`'s file-responsibilities table and async-operations section.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/keybindings.md[0m edit: "| `internal/tui/keymap.go` | `Action`, `Category`,..." → "| `internal/tui/keymap.go` | `Action`, `Category`,..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/tui-conventions.md[0m edit: "| `diff_view.go` | Full-screen diff view (`d`) — p..." → "| `diff_view.go` | Full-screen diff view (`d`) — p..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/tui-conventions.md[0m edit: "Never render a blank panel, empty list, or silent ..." → "Never render a blank panel, empty list, or silent ..."
+Now let's run the quality gate before moving to agent-tui verification.
+[94m[Bash][0m Run fmt+lint+build+test quality gate $ just check 2>&1 | tail -80
+`just check` passed. Now let's rebuild the binary so it picks up any changes (none to Go code, but the fixture script and config example are new) and proceed to agent-tui verification.
+[94m[Bash][0m Rebuild mrboard binary $ \ls -la bin/mrboard
+[94m[Edit][0m [95m/Users/moncefnaji/.config/mrboard/mrboard.yaml[0m edit: "log:
+  path: /tmp/mrboard.log 
+  level: info " → "log:
+  path: /tmp/mrboard.log
+  level: info
+
+comma..."
+I've temporarily added a `commands:` entry to your real local config (`~/.config/mrboard/mrboard.yaml`, gitignored, not part of the repo) so agent-tui can exercise the actual keypress-to-exec flow. I'll revert this after verification. Now let's load the agent-tui skill and run the verification gate.
+[94m[Skill][0m
+[94m[Bash][0m Launch mrboard TUI under agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for TUI to stabilize $ agent-tui wait --stable 2>&1
+[94m[Bash][0m Screenshot initial board state $ agent-tui screenshot 2>&1
+[94m[Bash][0m Open help modal to inspect active keybindings $ agent-tui press "?" 2>&1 && agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+The help modal shows "Help · Commands" context with `x fixture test` correctly grouped under **Act** — confirming the config wiring, `BuildCustomCommandsContext`, and help-modal integration all work end to end. Let me close the modal and trigger the fixture command.
+[94m[Bash][0m Close help modal $ agent-tui press Escape 2>&1 && agent-tui wait --stable 2>&1
+[94m[Bash][0m Trigger fixture command via configured 'x' key $ agent-tui press x 2>&1
+[94m[Bash][0m Screenshot fixture command output while mrboard is suspended $ agent-tui screenshot 2>&1
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Trigger fixture command and poll for its distinctive output $ agent-tui press x 2>&1 && agent-tui wait "mrboard fixture command" --assert 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/scripts/testdata/fixture-command.sh[0m edit: "sleep 2" → "sleep 5"
+[94m[Bash][0m Trigger fixture command and screenshot immediately $ agent-tui press x 2>&1 && agent-tui screenshot 2>&1
+Captured the fixture output mid-flight: mrboard suspended and handed off to the script, with the template-resolved args (`ProjectPath`, `SourceBranch`, `TargetBranch`) correctly filled in for the focused MR (`!534 boris-od-workflow`, branch `move_e2e_tests` → `master`). Now let's wait for it to exit and verify mrboard redraws cleanly.
+[94m[Bash][0m Wait for fixture exit and mrboard redraw, then screenshot $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+[94m[Bash][0m Wait for board footer to reappear after fixture exits, then screenshot $ agent-tui wait "? help" --assert --timeout 15000 2>&1 && agent-tui screenshot 2>&1
+mrboard resumed cleanly — full board redraw restored, no leftover fixture text, no error toast, no artifacts. This confirms the complete suspend/resume cycle works correctly. Let's clean up the agent-tui session and revert the temporary local-config edit.
+[94m[Bash][0m Clean up agent-tui session $ agent-tui kill 2>&1
+Now revert the temporary edit to the user's real local config (it's gitignored, not part of the repo — the fixture wiring lives permanently in `mrboard.yaml.example` instead).
+[94m[Edit][0m [95m/Users/moncefnaji/.config/mrboard/mrboard.yaml[0m edit: "log:
+  path: /tmp/mrboard.log
+  level: info
+
+comma..." → "log:
+  path: /tmp/mrboard.log
+  level: info"
+[94m[Bash][0m Review repo changes $ git status --short && echo "---diff config example---" && git diff mrboard.yaml.example
+Everything looks clean. Let's run `just check` once more as a final gate before closing the bead.
+[94m[Bash][0m Final quality gate $ just check 2>&1 | tail -20
+Passes. Now let's close out the bead: close it in beads, sync, save engram memory, and update the progress log.
+[94m[Bash][0m Close bead and flush to JSONL $ br close mrr-4z4.6 --reason "Fixture script + mrboard.yaml.example commands section + docs + agent-t...
+[94m[Bash][0m Verify bead close persisted to jsonl $ br show mrr-4z4.6 --format toon 2>&1 | head -20
+Good, it's closed and flushed correctly. Now let me update the progress log and save to engram memory.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `goconst` counts exact string literals **per p..." → "  - `goconst` counts exact string literals **per p..."
+Now let me save this to engram memory per the mandatory protocol.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-4z4.6, the final child of epic mrr-4z4 (external-command-launcher). Added `scripts/testdata/fixture-command.sh` (executable, permanent) — prints a banner + argv then `sleep 5` bef... (1455 chars)"
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: When using agent-tui to verify a TUI's suspend-and-exec-child-process flow (e.g. mrboard's `tea.ExecProcess`-based external command launcher, docs/adr/0004-external-command-launcher.md), two... (1695 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-4z4.6 (final child of epic mrr-4z4, external-command-launcher): fixture command script, mrboard.yaml.example config section, docs updates, and the mandatory manual agent-tui veri... (3688 chars)"
+[94m[Bash][0m Check epic status now that last child closed $ br show mrr-4z4 --format toon 2>&1 | head -15
+`★ Insight ─────────────────────────────────────`
+The trickiest part of this ticket wasn't the code — there was none to write, since mrr-4z4.5 already wired the exec dispatch — it was proving the suspend/resume handoff actually works. Two agent-tui behaviors made this non-obvious: `wait` matches against scrollback rather than the live screen (so a phrase the fixture printed minutes ago can still "pass" an assertion), and separate tool calls introduce enough latency to race past a short-lived child process. Chaining the trigger keypress and screenshot into one shell command, plus giving the fixture a deliberate `sleep`, turned an unreliable check into a real one — this is a general lesson for testing any terminal-takeover primitive (`tea.ExecProcess`, `pty.Start`, etc.), not just mrboard-specific.
+`─────────────────────────────────────────────────`
+
+All child tickets of epic `mrr-4z4` (external-command-launcher) are now closed. I left the epic itself open since closing it wasn't asked for — worth a `br close mrr-4z4` if you want to wrap it up.
+
+**Summary of mrr-4z4.6:**
+- Added `scripts/testdata/fixture-command.sh` — a permanent, checked-in fixture that prints a banner + its argv and sleeps before exiting.
+- Wired it into `mrboard.yaml.example` under a new `commands:` section (key `x`), plus a commented example showing a real tool (`tuicr`).
+- Documented the feature in `docs/keybindings.md` (new "Configured commands" section) and `docs/tui-conventions.md` (file table + the async-spinner exception).
+- Verified live with agent-tui: help modal shows the command, triggering it correctly suspends mrboard and hands off with resolved template variables, and the board redraws cleanly afterward with no artifacts.
+- `just check` passes; bead closed and synced.
