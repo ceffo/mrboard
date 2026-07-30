@@ -322,6 +322,24 @@ func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing
 	assert.Equal(t, wantStatus, result.DetailedMergeStatus, "want DetailedMergeStatus normalized")
 }
 
+func TestMapMR_SourceTargetBranch_Stored(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	m.SourceBranch = "feature/foo"
+	m.TargetBranch = "main"
+	result := MapMR(m, nil, approvals(), nil)
+	assert.Equal(t, "feature/foo", result.SourceBranch, "want SourceBranch stored on domain MR")
+	assert.Equal(t, "main", result.TargetBranch, "want TargetBranch stored on domain MR")
+}
+
+func TestMapMRFromGraphQL_SourceTargetBranch_Stored(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.SourceBranch = "feature/foo"
+	mr.TargetBranch = "main"
+	result := MapMRFromGraphQL(mr)
+	assert.Equal(t, "feature/foo", result.SourceBranch, "want SourceBranch stored on domain MR")
+	assert.Equal(t, "main", result.TargetBranch, "want TargetBranch stored on domain MR")
+}
+
 func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
 	// alice is in the Approvers rule and has approved
 	m := mr(basicUser("alice", "Alice"))

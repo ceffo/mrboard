@@ -26,6 +26,8 @@ query($username: String!) {
         updatedAt
         webUrl
         detailedMergeStatus
+        sourceBranch
+        targetBranch
         author { username name }
         assignees { nodes { username name } }
         reviewers { nodes { username name } }
@@ -96,6 +98,8 @@ type GQLMergeRequest struct {
 	UpdatedAt           string  `json:"updatedAt"`
 	WebURL              string  `json:"webUrl"`
 	DetailedMergeStatus string  `json:"detailedMergeStatus"`
+	SourceBranch        string  `json:"sourceBranch"`
+	TargetBranch        string  `json:"targetBranch"`
 	Author              GQLUser `json:"author"`
 	Assignees           struct {
 		Nodes []GQLUser `json:"nodes"`
@@ -172,6 +176,8 @@ query($username: String!) {
         updatedAt
         webUrl
         detailedMergeStatus
+        sourceBranch
+        targetBranch
         author { username name }
         assignees { nodes { username name } }
         reviewers { nodes { username name } }

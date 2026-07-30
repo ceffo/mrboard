@@ -143,6 +143,8 @@ type MergeRequest struct {
 
 	Phase               MRPhase
 	DetailedMergeStatus string // raw value from GitLab's detailed_merge_status field
+	SourceBranch        string // raw value from GitLab's source_branch field
+	TargetBranch        string // raw value from GitLab's target_branch field
 	Reviewers           []ReviewerInfo
 
 	CreatedAt         time.Time
