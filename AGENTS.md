@@ -22,6 +22,7 @@ in a kanban board. Primary use: team daily standups.
 - [`docs/domain-model.md`](docs/domain-model.md) — domain types, reviewer state machine, phase rules
 - [`docs/tui-conventions.md`](docs/tui-conventions.md) — TUI file structure, widget rules, keybinding conventions
 - [`docs/clean_architecture.md`](docs/clean_architecture.md) — generic principles for building a (micro) service in go following a ports-and-adapters architecture. Use that when you need to redesign a significant part of the architecture or when evaluating architectural improvements.
+- [`docs/adr/`](docs/adr/) — numbered Architecture Decision Records, one per feature area. The durable record of *why* a design was chosen, including decisions reached via a `/wayfinder` ticket.
 
 ## Quality gates
 
@@ -318,6 +319,21 @@ Five canonical roles using default strings (`needs-triage`, `needs-info`, `ready
 
 ### Domain docs
 
-Single-context repo; domain context lives in `docs/architecture.md`, `docs/domain-model.md`, and `docs/tui-conventions.md` (no `CONTEXT.md` or `docs/adr/`). See `docs/agents/domain.md`.
+Single-context repo; domain context lives in `docs/architecture.md`, `docs/domain-model.md`, `docs/tui-conventions.md`, and `docs/adr/` (numbered ADRs; no `CONTEXT.md`). See `docs/agents/domain.md`.
+
+### Recording decisions
+
+Decisions and conclusions belong in **documents** (`docs/adr/`), not in beads (`br`) tickets and
+not in engram memory — both stay short, describe *what* something is, and *link* to the document
+that holds the actual content. This applies to a `/wayfinder` map ticket itself, not only its
+child tickets: the map's destination, context, and out-of-scope reasoning go in the ADR: a
+one-time epic and its children only ever state what a ticket is about and where to read the
+answer.
+
+A resolved architectural/design decision goes into `docs/adr/` as a numbered ADR (`**Status**` /
+`## Context` / `## Non-goals` / `## Decision` / `## Consequences`, see
+`docs/adr/0003-jira-remote-links.md`). One ADR per feature area, with `## Decision` subsections
+appended as sub-decisions resolve — not one ADR per ticket. Beads tickets close with a short
+`--reason`, nothing more; engram memory stays for session continuity, not decision content.
 
 <!-- end-bv-agent-instructions -->

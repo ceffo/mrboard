@@ -4,12 +4,15 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-This repo does not use a `CONTEXT.md` or `docs/adr/` convention. The canonical domain context lives in:
+This repo does not use a `CONTEXT.md` convention, but it does keep a numbered ADR log. The
+canonical domain context lives in:
 
 - **`docs/architecture.md`** — package boundaries, data flow, dependency rules
 - **`docs/domain-model.md`** — domain types, reviewer state machine, phase rules
 - **`docs/tui-conventions.md`** — TUI file structure, widget rules, keybinding conventions
 - **`docs/clean_architecture.md`** — ports-and-adapters principles used when redesigning significant architectural areas
+- **`docs/adr/`** — numbered Architecture Decision Records; one per feature area, recording why a
+  design was chosen, not just what it does. See "Recording decisions" below.
 
 Read the files relevant to the area you're working in before proposing changes.
 
@@ -23,10 +26,28 @@ Single-context repo:
 │   ├── architecture.md        ← package boundaries + dependency rules
 │   ├── domain-model.md        ← domain types + state machine
 │   ├── tui-conventions.md     ← TUI widget rules + keybinding conventions
-│   └── clean_architecture.md  ← ports-and-adapters reference
+│   ├── clean_architecture.md  ← ports-and-adapters reference
+│   └── adr/                   ← numbered ADRs, one per feature area
 └── internal/
     └── domain/                ← source of truth for Go domain types
 ```
+
+## Recording decisions
+
+Decisions and conclusions live in **documents**, not tickets. This is about *location*, not
+phrasing — a one-line gist in a ticket is still decision content in the wrong place. A beads (`br`)
+ticket, including a `/wayfinder` map's own epic issue, only ever states what it's about and links
+to the document that holds the real content; it never restates destination, context, out-of-scope
+reasoning, or a resolution's substance, however briefly.
+
+A resolved architectural or design decision is recorded in `docs/adr/` as a numbered ADR:
+`**Status**` line, `## Context`, `## Non-goals`, `## Decision`, `## Consequences` (see
+`docs/adr/0003-jira-remote-links.md` for the model). One ADR covers a whole feature area and
+accumulates `## Decision` subsections as sub-decisions resolve — it is not one ADR per ticket.
+
+Beads tickets close with a short `--reason` and nothing more. Engram memory is likewise not the
+place for a development decision — it's useful for session continuity, not for what a future
+contributor should find when asking "why is it built this way."
 
 ## Use the domain vocabulary
 
