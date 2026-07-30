@@ -152,6 +152,14 @@ type NotifyResultMsg struct {
 	Err error
 }
 
+// CommandResultMsg carries the outcome of a configured external command run via
+// tea.ExecProcess (docs/adr/0004-external-command-launcher.md). Err covers both
+// a missing binary (*exec.Error) and a non-zero exit (*exec.ExitError) uniformly.
+type CommandResultMsg struct {
+	CommandName string
+	Err         error
+}
+
 // TicketIssueTypeMsg carries the result of a background issue-type fetch.
 type TicketIssueTypeMsg struct {
 	IssueKey  string
@@ -227,6 +235,7 @@ type Model struct {
 	errors             []error
 	errMsg             string
 	cfg                *config.Config
+	customCommandsCtx  *Context // user-configured external commands, see docs/adr/0004
 	src                mrsvc.MergeRequestSource
 	store              domain.StateStore
 	allMRs             []domain.MergeRequest
@@ -343,6 +352,7 @@ func New(
 		themeMode:          themeMode,
 		hasDarkBg:          initialDark,
 		cfg:                cfg,
+		customCommandsCtx:  BuildCustomCommandsContext(cfg.Commands),
 		src:                src,
 		store:              store,
 		currentUser:        cfg.CurrentUser,
@@ -552,6 +562,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NotifyResultMsg:
 		return m.handleNotifyResult(msg)
 
+	case CommandResultMsg:
+		return m.handleCommandResult(msg)
+
 	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
 		return m.handleTicketResultMsg(msg)
 
@@ -598,7 +611,7 @@ func (m Model) baseStack() []*Context {
 	if m.showDetail {
 		return append(stack, DetailCtx)
 	}
-	return append(stack, BoardCtx)
+	return append(stack, BoardCtx, m.customCommandsCtx)
 }
 
 // contextStack is baseStack plus the help modal context when it is open.
@@ -694,6 +707,14 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleKeyBoard handles keys while the kanban board owns focus.
 func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Custom commands sit above BoardCtx in the stack (see baseStack), so a
+	// match here takes priority over the static board bindings below.
+	if cmd, ok := m.matchCustomCommand(msg); ok {
+		if mr := m.board.FocusedMR(); mr != nil {
+			return m, m.execCommandCmd(*mr, cmd)
+		}
+		return m, nil
+	}
 	switch {
 	case m.keys.Up.Match(msg):
 		m.board.MoveUp()
@@ -927,6 +948,44 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.logger.Info("tui: notification delivered")
 	return m, m.toast(toast.InfoAlert, "Teams notified ✓")
+}
+
+// matchCustomCommand returns the configured command bound to msg's key, if any.
+func (m Model) matchCustomCommand(msg tea.KeyPressMsg) (config.Command, bool) {
+	for i, a := range m.customCommandsCtx.actions {
+		if a.Match(msg) {
+			return m.cfg.Commands[i], true
+		}
+	}
+	return config.Command{}, false
+}
+
+// execCommandCmd resolves cmd's argv against mr and returns a Cmd that
+// suspends mrboard, runs cmd.Binary via tea.ExecProcess, and resumes mrboard
+// on exit (docs/adr/0004-external-command-launcher.md). Argv resolution
+// failure is reported through the same CommandResultMsg as a run failure,
+// keeping a single outcome handler for the whole invocation.
+func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cmd {
+	argv, err := BuildCommandArgv(mr, cmd)
+	if err != nil {
+		return func() tea.Msg { return CommandResultMsg{CommandName: cmd.Name, Err: err} }
+	}
+	//nolint:gosec // G204: cmd.Binary is an admin-configured mrboard.toml entry, not attacker input;
+	// no shell is involved, so there is no injection surface beyond running the configured binary itself.
+	execCmd := exec.Command(cmd.Binary, argv...)
+	return tea.ExecProcess(execCmd, func(err error) tea.Msg {
+		return CommandResultMsg{CommandName: cmd.Name, Err: err}
+	})
+}
+
+// handleCommandResult reports a configured command's outcome. Success shows no
+// toast — the resumed, redrawn board is itself the success signal.
+func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Error("tui: command failed", "command", msg.CommandName, "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, fmt.Sprintf("%s failed: %s", msg.CommandName, msg.Err))
+	}
+	return m, nil
 }
 
 // updateTicketKey enables or disables the ticket key based on whether the

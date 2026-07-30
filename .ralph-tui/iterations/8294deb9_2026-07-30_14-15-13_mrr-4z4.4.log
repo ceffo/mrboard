@@ -1,0 +1,116 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.4
+- **Task Title**: keymap: NewDynamicContext + configured-commands context
+- **Description**: ## Scope
+
+`internal/tui/keymap.go`: add `NewDynamicContext(name, title string, actions []*Action, opts ...ContextOpt) *Context`, a slice-based sibling to the existing reflection-based `NewContext`, bu...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-30T18:15:13.119Z
+- **Ended At**: 2026-07-30T18:19:33.394Z
+- **Duration**: 4m 20s
+- **Input Tokens**: 196
+- **Output Tokens**: 21629
+- **Total Tokens**: 21825
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by pulling recent memory context and checking the progress file, then look at the relevant source files.
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap.go /Users/moncefnaji/code/github...
+[94m[Bash][0m $ rg -n "Commands \[\]Command|type Command struct" /Users/moncefnaji/code/github.com/mrboard/internal/...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0004-external-command-launcher.md[0m
+[94m[Bash][0m $ rg -n "contextStack" /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go
+[94m[Bash][0m $ rg -n "TestBindingsDefinedOnlyInKeys" /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m
+[94m[Bash][0m $ rg -n "AllContexts\(\)" /Users/moncefnaji/code/github.com/mrboard --type go
+[94m[Bash][0m $ rg -n "func New\(|func NewModel|baseStack|Commands\b" /Users/moncefnaji/code/github.com/mrboard/inte...
+[94m[Bash][0m $ rg -n "\.Title\(\)|ctx\.Title" /Users/moncefnaji/code/github.com/mrboard/internal/tui/*.go | grep -v...
+[94m[Bash][0m $ br show mrr-4z4 --format toon 2>/dev/null | head -80
+[94m[Bash][0m $ br show mrr-4z4.6 --format toon 2>/dev/null
+[94m[Bash][0m $ ls /Users/moncefnaji/code/github.com/mrboard/internal/tui/ | rg -i "keys_test|keymap_test"
+Now implementing. First, `NewDynamicContext` in keymap.go, placed right after the existing reflection-based `NewContext`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap.go[0m edit: "// Name returns the context's slug identifier." → "// NewDynamicContext builds a context from an expl..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "package tui
+
+// This file is the single source of ..." → "package tui
+
+import "github.com/ceffo/mrboard/inte..."
+Now append `BuildCustomCommandsContext` at the end of keys.go:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go[0m edit: "// BatchPreviewCtx is the batch preview context.
+v..." → "// BatchPreviewCtx is the batch preview context.
+v..."
+[94m[Bash][0m $ rg -n "panic|recover" /Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m edit: "import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"string..." → "import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"string..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m edit: "		assert.False(t, strings.Contains(joined, "close"..." → "		assert.False(t, strings.Contains(joined, "close"..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: 		assert.False(t, strings.Contains(joined, "close") && strings.Contains(joined, "quit"),
+			"diff+base sections missing expected entries: %v", labels)
+
+	// Text capture on top: base's help/quit must disappear.
+	sections = helpSections([]*Context{BaseCtx, ReviewerSearchCtx})
+	for _, s := range sections {
+		for _, e := range s.entries {
+			assert.False(t, e.label == "help" || e.label == "quit",
+				"base action %q visible under text-capturing context", e.label)
+		}
+	}
+}</tool_use_error>][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m
+Just append the new tests at the end of the file instead.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap_test.go[0m edit: "	// Text capture on top: base's help/quit must dis..." → "	// Text capture on top: base's help/quit must dis..."
+Now let's run `just check` to verify everything compiles, lints, and passes tests.
+[94m[Bash][0m $ just check 2>&1 | tail -100
+All green. Let me confirm the new tests specifically pass and check for lint issues via the full output (scroll to check for failures earlier in output, and confirm no golangci-lint errors).
+[94m[Bash][0m $ go test ./internal/tui/... -run 'TestBuildCustomCommandsContext|TestNewDynamicContextPanicsOnDuplica...
+All four relevant tests pass, and `TestBindingsDefinedOnlyInKeys` still passes unmodified as required. Let me confirm `just check` completed cleanly overall (fmt/lint/build), not just the test portion I saw.
+[94m[Bash][0m $ echo "EXIT:$?"
+`just check` exits 0 — fmt, lint, build, and test all pass.
+[94m[Bash][0m $ just check 2>&1 | grep -iE "golangci|lint|fmt|build|FAIL|error" | head -30
+Confirmed — golangci-lint fmt/run, build, and full test suite all ran with no failures. Now let's close out the bead, sync, and document learnings.
+[94m[Bash][0m $ br close mrr-4z4.4 --reason "Added NewDynamicContext + BuildCustomCommandsContext for configured com...
+[94m[Bash][0m $ git status --short .beads/
+Good — the JSONL is already updated. Now documenting learnings in progress.md.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - **golangci-lint**'s `goconst` lint fires repo-..." → "  - **golangci-lint**'s `goconst` lint fires repo-..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String:   - **golangci-lint**'s `goconst` lint fires repo-wide, not per-file: reusing the literal `"alice"` in a new test file tripped it because `approver_editor_test.go` already defines `editorTestApprover = "alice"` — reuse that existing constant (or add a local one, as done here for `"review"`) instead of introducing a fresh string literal that pushes an existing string over the lint's repetition threshold.
+---
+(note: Edit also tried swapping \uXXXX escapes and their characters; neither form matched, so the mismatch is likely elsewhere in old_string. Re-read the file and copy the exact surrounding text.)</tool_use_error>][0m
+[94m[Bash][0m $ tail -20 /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md | cat -A | tail -5
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+The line matches exactly here — the earlier failure was likely a stray whitespace/encoding mismatch in my `old_string`. Retrying with exact content copied from this read.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `golangci-lint`'s `goconst` lint fires repo-wi..." → "  - `golangci-lint`'s `goconst` lint fires repo-wi..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Added `NewDynamicContext(name, title string, actions []*Action, opts ...ContextOpt) *Context` in internal/tui/keymap.go — slice-based sibling to the reflection-based `NewContext`, building t... (1611 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-4z4.4 (child of epic mrr-4z4, external-command-launcher): add `NewDynamicContext` + a `BuildCustomCommandsContext` wrapper so user-configured commands from mrboard.toml can becom... (3080 chars)"
+`★ Insight ─────────────────────────────────────`
+- This codebase enforces "single source of truth for keybindings" via a *text-based* lint (`TestBindingsDefinedOnlyInKeys` greps for `Act(` calls outside `keys.go`/`keymap.go`), not a type-system constraint. That's a deliberate, lightweight choice: it lets a wrapper like `BuildCustomCommandsContext` build `Act()` calls inside a runtime loop without special-casing the test, because the test only cares *where* the call textually appears, never whether its arguments are compile-time constants.
+- `NewDynamicContext` deliberately skips the global `allContexts` registration that `NewContext` does. That registry exists to let `TestNoKeyConflicts` walk every *statically declared* context exactly once at package init. A context rebuilt per config load (or per test) would otherwise silently accumulate duplicate entries in that shared slice across repeated construction — a subtle bug class worth flagging explicitly in a comment, since the asymmetry with `NewContext` isn't obvious from reading the two functions side by side.
+- Separation of duplicate-key handling across layers: a genuine code bug (two hardcoded `Act()` calls colliding in `keys.go`) panics at init via `NewContext`/`NewDynamicContext`; a user's config mistake (two commands sharing a key in `mrboard.toml`) is caught earlier and more gracefully as a load-time validation error in `internal/config` (already done in mrr-4z4.2). Same *shape* of problem, two different failure modes because the audiences differ — a developer vs. an end user.
+`─────────────────────────────────────────────────`
+
+Added `NewDynamicContext` (internal/tui/keymap.go) and `BuildCustomCommandsContext` (internal/tui/keys.go), plus two new tests verifying modal-only placement and Board-default shadowing. `just check` passes and `TestBindingsDefinedOnlyInKeys` is unmodified. Bead closed, JSONL synced, and progress.md/engram updated with the finding that stack-placement wiring belongs to the next ticket (mrr-4z4.5), not this one.
+
+<promise>COMPLETE</promise>
