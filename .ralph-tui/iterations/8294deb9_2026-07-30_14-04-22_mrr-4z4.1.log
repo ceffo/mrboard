@@ -1,0 +1,88 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-4z4.1
+- **Task Title**: domain: add SourceBranch/TargetBranch to MergeRequest
+- **Description**: ## Scope
+
+Add `SourceBranch`, `TargetBranch string` to `domain.MergeRequest` (internal/domain/mr.go) and populate them in the GitLab adapter from the MR API's `source_branch`/`target_branch` fields (s...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-30T18:04:22.031Z
+- **Ended At**: 2026-07-30T18:07:14.874Z
+- **Duration**: 2m 52s
+- **Input Tokens**: 152
+- **Output Tokens**: 10000
+- **Total Tokens**: 10152
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-4z4
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking recent memory context and the task's progress notes, then look at the relevant domain and adapter files.
+[94m[Bash][0m $ wc -l internal/domain/mr.go .ralph-tui/progress.md docs/adr/0004-external-command-launcher.md
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m $ rg -n "DetailedMergeStatus" internal/adapters/gitlabadpt/*.go pkg/gitlab/*.go 2>/dev/null
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+[94m[Bash][0m $ rg -n "source_branch|target_branch|SourceBranch|TargetBranch|sourceBranch|targetBranch" pkg/gitlab/*...
+[94m[Bash][0m $ rg -n "type GQLMergeRequest" -A 40 pkg/gitlab/graphql.go | head -60
+[94m[Bash][0m $ go doc github.com/xanzy/go-gitlab.MergeRequest 2>/dev/null | rg -i "branch" || find / -path /proc -p...
+[94m[Bash][0m $ rg -n "SourceBranch|TargetBranch" /Users/moncefnaji/go/pkg/mod/github.com/xanzy/go-gitlab@v0.115.0/m...
+[94m[Bash][0m $ rg -n "detailedMergeStatus|webUrl|query|gql`" pkg/gitlab/*.go | rg -v "_test.go"
+Good, so `gl.MergeRequest` (REST) already has `SourceBranch`/`TargetBranch` fields. Let me find the actual GraphQL query string that needs a `sourceBranch`/`targetBranch` field added.
+[94m[Bash][0m $ rg -n "detailedMergeStatus" pkg/gitlab/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+Now I have the full picture. Let me make the four changes: domain field, GraphQL struct + both queries, and both mapper functions.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m edit: "	Phase               MRPhase
+	DetailedMergeStatus ..." → "	Phase               MRPhase
+	DetailedMergeStatus ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "        webUrl
+        detailedMergeStatus
+       ..." → "        webUrl
+        detailedMergeStatus
+       ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "        webUrl
+        detailedMergeStatus
+       ..." → "        webUrl
+        detailedMergeStatus
+       ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "	DetailedMergeStatus string  `json:"detailedMergeS..." → "	DetailedMergeStatus string  `json:"detailedMergeS..."
+Now the two mapper functions in `mapper.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "		Title:          mr.Title,
+		WebURL:         mr.W..." → "		Title:          mr.Title,
+		WebURL:         mr.W..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "		Title:          mr.Title,
+		WebURL:         mr.W..." → "		Title:          mr.Title,
+		WebURL:         mr.W..."
+[94m[Bash][0m $ rg -n "func newTestMR|func makeMR|func buildMR|func testMR|func newMR\(" internal/adapters/gitlabadp...
+[94m[Bash][0m $ rg -n "func.*\*gl\.MergeRequest|func.*GQLMergeRequest|func validREST|func validGQL|func baseREST|fun...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m edit: "func TestMapMRFromGraphQL_DetailedMergeStatus_NonM..." → "func TestMapMRFromGraphQL_DetailedMergeStatus_NonM..."
+Now let's run the quality gate.
+[94m[Bash][0m $ just check 2>&1 | tail -80
+`just check` passed (fmt, lint, build, test all clean). Let's confirm no failures earlier in the output.
+[94m[Bash][0m $ just check 2>&1 | rg -i "FAIL|error|warn"
+All good — no real failures, just an expected WARN log from a test that intentionally hits a bad directory. `just check` is clean.
+[94m[Bash][0m $ br close mrr-4z4.1 --reason "Added SourceBranch/TargetBranch to domain.MergeRequest, wired through R...
+[94m[Bash][0m $ git status --short .beads/ && git diff --stat .beads/issues.jsonl
+Good, the bead close was already flushed. Now let's append the progress notes as required.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "*Add reusable patterns discovered during developme..."
+[94m[Bash][0m $ cat >> /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md << 'EOF' ## 2026-07-30 - mrr...
+Progress log updated correctly. Now saving the key discovery to engram memory per the mandatory protocol.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Added `SourceBranch`/`TargetBranch string` fields to `domain.MergeRequest`, wired through both REST (`MapMR`) and GraphQL (`MapMRFromGraphQL`) paths.
+**Why**: First child task of epic mrr-4z... (1037 chars)"
+`★ Insight ─────────────────────────────────────`
+This task is a small but instructive example of the "shotgun surgery" a single new field can trigger when a codebase talks to the same external API via two different transports. GitLab's REST and GraphQL APIs are semantically the same data, but this repo models them as two entirely separate wire-format structs (`gl.MergeRequest` from the vendored go-gitlab library vs. the hand-rolled `GQLMergeRequest` + raw query-string literals in `pkg/gitlab/graphql.go`) that only converge once they reach the mapper functions and produce a single `domain.MergeRequest`. That convergence point is exactly why `internal/domain` is stdlib-only per the repo's non-negotiable rules — it's the one place vendor differences disappear.
+
+Also worth noting: GraphQL query strings in Go are just string literals, so the compiler can't catch a missing field the way it would catch a missing struct field — `sourceBranch`/`targetBranch` had to be added to the query text in two separate places (`gqlUserMRsQuery` and `gqlReviewerMRsQuery`) or the server would silently omit that data from the response, leaving the corresponding Go struct field permanently zero-valued with no compile or runtime error.
+`─────────────────────────────────────────────────`
+
+Task complete: `SourceBranch`/`TargetBranch` added to `domain.MergeRequest` and wired through both the REST mapper (`MapMR`) and GraphQL mapper (`MapMRFromGraphQL`, including both query string literals), with tests added mirroring the existing `DetailedMergeStatus` pattern. `just check` passes, bead mrr-4z4.1 is closed and synced, progress.md and engram memory updated.
+
+<promise>COMPLETE</promise>

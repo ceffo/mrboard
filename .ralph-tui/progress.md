@@ -30,3 +30,15 @@ after each iteration and it's included in prompts for context.
   - See Codebase Patterns entry above re: the 5-touchpoint checklist for new passthrough MR fields.
   - No downstream TUI/domain consumers needed changes yet — these fields are new plumbing for a future feature (external command launcher template variables, per docs/adr/0004), not yet read anywhere.
 ---
+
+## 2026-07-30 - mrr-4z4.2
+- Added `config.Command` struct (`Name`, `Key`, `Binary`, `Args []string`, mapstructure tags `name`/`key`/`binary`/`args`) and `Commands []Command` field on `AppConfig` in internal/config/config.go.
+- `validate(cfg)` now returns `([]string, error)` instead of just `error` — warnings are data returned from validation, not a side effect, so they stay unit-testable without capturing log output. `Load()` is the only place that logs them, via `slog.Default().Warn(...)`.
+- `validateCommands`: duplicate `Key` across configured commands is a load-time `error` (config refuses to load); a `Binary` not found via `exec.LookPath` is appended as a warning string only — command stays in `cfg.Commands`, load still succeeds.
+- Added 4 tests in config_test.go: `TestLoadCommandsValid`, `TestValidationDuplicateCommandKey`, `TestValidationCommandMissingName`, `TestValidationCommandMissingBinaryIsWarningOnly`.
+- Files changed: internal/config/config.go, internal/config/config_test.go.
+- `just check` passes.
+- **Learnings:**
+  - **Why `validate()` can't log through the app's real `*slog.Logger`**: `config.Load()` runs in `internal/cmd/mrboard/root.go` *before* `core.New()` builds the real logger (which itself reads settings out of the just-loaded config) — a genuine bootstrap ordering constraint, not a style choice. Returning warnings as `[]string` from a pure `validate`/`validateCommands` and only calling `slog.Default().Warn(...)` inside `Load()` sidesteps needing to inject a logger before one exists, while keeping the validation logic itself trivially testable (assert on returned data, not captured log output).
+  - Template-placeholder syntax inside `Command.Args` (the `{{.Var}}` set) is deliberately NOT validated in this package — the ADR (docs/adr/0004-external-command-launcher.md, "Template variable set" decision) assigns the named-projection/resolution logic to a separate ticket (mrr-4z4.3); this bead only validates config-structural correctness (required fields, one duplicate-key check, one binary-presence check).
+---

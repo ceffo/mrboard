@@ -5,7 +5,9 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -60,6 +62,18 @@ type Jira struct {
 	RemoteLinkIconURL string `mapstructure:"remote_link_icon_url"`
 }
 
+// Command is a user-configured external command launched against a selected MR card
+// (see docs/adr/0004-external-command-launcher.md). Args is an argv template: each
+// element may contain Go template placeholders (e.g. "{{.ProjectPath}}") resolved
+// against MR metadata at invocation time — resolution itself is out of this package's
+// scope.
+type Command struct {
+	Name   string   `mapstructure:"name"`   // display name, shown in the help modal
+	Key    string   `mapstructure:"key"`    // keybinding, e.g. "d"
+	Binary string   `mapstructure:"binary"` // executable name or path, resolved via exec.LookPath
+	Args   []string `mapstructure:"args"`   // argv template, no shell interpretation
+}
+
 // AppConfig is the top-level application configuration.
 // Field access patterns (e.g. cfg.GitLab.URL, cfg.Sources) are intentionally
 // preserved from the previous Config type so existing call-sites keep working
@@ -74,6 +88,7 @@ type AppConfig struct {
 	LifetimeErrorAfter time.Duration `mapstructure:"lifetime_error_after"`
 	Notifications      Notifications `mapstructure:"notifications"`
 	Jira               Jira          `mapstructure:"jira"`
+	Commands           []Command     `mapstructure:"commands"`
 }
 
 // Config is a backward-compatible alias for AppConfig.
@@ -191,8 +206,12 @@ func Load(path string) (*AppConfig, error) {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
-	if err := validate(&cfg); err != nil {
+	warnings, err := validate(&cfg)
+	if err != nil {
 		return nil, err
+	}
+	for _, w := range warnings {
+		slog.Default().Warn(w)
 	}
 
 	return &cfg, nil
@@ -200,14 +219,20 @@ func Load(path string) (*AppConfig, error) {
 
 // --- Validation -------------------------------------------------------------
 
-func validate(cfg *AppConfig) error {
+// validate checks cfg for load-time errors and returns any non-fatal warnings
+// (e.g. a configured command's binary not found on PATH) for the caller to log.
+func validate(cfg *AppConfig) ([]string, error) {
 	if err := validateGitLab(&cfg.GitLab); err != nil {
-		return err
+		return nil, err
 	}
 	if err := validateSources(cfg.Sources); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	warnings, err := validateCommands(cfg.Commands)
+	if err != nil {
+		return nil, err
+	}
+	return warnings, nil
 }
 
 func validateGitLab(gl *GitLab) error {
@@ -234,6 +259,36 @@ func validateSource(src Source) error {
 		validation.Field(&src.Type, validation.Required, validation.In("group", "user")),
 		validation.Field(&src.IDs, validation.Required, validation.Length(1, 0).Error("ids must contain at least one entry")),
 	)
+}
+
+// validateCommands rejects duplicate keybindings across configured commands (a
+// user config mistake mrboard refuses to start with) and returns a warning — not
+// an error — for each command whose binary isn't found on PATH, per
+// docs/adr/0004-external-command-launcher.md's "UX for a failing or missing
+// configured command" decision: the command stays enabled either way.
+func validateCommands(commands []Command) ([]string, error) {
+	seenKeys := make(map[string]string, len(commands))
+	var warnings []string
+	for _, cmd := range commands {
+		if err := validation.ValidateStruct(&cmd,
+			validation.Field(&cmd.Name, validation.Required),
+			validation.Field(&cmd.Key, validation.Required),
+			validation.Field(&cmd.Binary, validation.Required),
+		); err != nil {
+			return nil, fmt.Errorf("config: commands: %q: %w", cmd.Name, err)
+		}
+
+		if other, dup := seenKeys[cmd.Key]; dup {
+			return nil, fmt.Errorf("config: commands: key %q is used by both %q and %q", cmd.Key, other, cmd.Name)
+		}
+		seenKeys[cmd.Key] = cmd.Name
+
+		if _, err := exec.LookPath(cmd.Binary); err != nil {
+			warnings = append(warnings,
+				fmt.Sprintf("config: command %q: binary %q not found on PATH", cmd.Name, cmd.Binary))
+		}
+	}
+	return warnings, nil
 }
 
 // --- XDG helpers ------------------------------------------------------------

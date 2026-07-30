@@ -171,6 +171,93 @@ sources:
 	assert.NotEmpty(t, cfg.GitLab.URL, "expected URL to be loaded")
 }
 
+func TestLoadCommandsValid(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+commands:
+  - name: Review in tuicr
+    key: d
+    binary: tuicr
+    args: ["{{.ProjectPath}}", "--mr", "{{.IID}}"]
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Commands, 1)
+	assert.Equal(t, "Review in tuicr", cfg.Commands[0].Name)
+	assert.Equal(t, "d", cfg.Commands[0].Key)
+	assert.Equal(t, "tuicr", cfg.Commands[0].Binary)
+	assert.Equal(t, []string{"{{.ProjectPath}}", "--mr", "{{.IID}}"}, cfg.Commands[0].Args)
+}
+
+func TestValidationDuplicateCommandKey(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+commands:
+  - name: Review in tuicr
+    key: d
+    binary: tuicr
+  - name: Review in hunk
+    key: d
+    binary: hunk
+`)
+	_, err := Load(path)
+	assert.Error(t, err, "expected error for duplicate command key")
+}
+
+func TestValidationCommandMissingName(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+commands:
+  - key: d
+    binary: tuicr
+`)
+	_, err := Load(path)
+	assert.Error(t, err, "expected error for command missing name")
+}
+
+func TestValidationCommandMissingBinaryIsWarningOnly(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+commands:
+  - name: Review in nonexistent-tool
+    key: d
+    binary: mrboard-nonexistent-binary-xyz
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err, "missing binary must not fail config load")
+	require.Len(t, cfg.Commands, 1)
+	assert.Equal(t, "mrboard-nonexistent-binary-xyz", cfg.Commands[0].Binary,
+		"command stays enabled despite missing binary")
+}
+
 func TestSubConfigAccessors(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:
