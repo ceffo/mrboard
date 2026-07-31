@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "sessionId": "90e91a36-eca6-4464-8cbf-786efba816d0",
+  "sessionId": "6d7c0431-ace4-4a63-a182-25eb3b9f2abc",
   "status": "running",
-  "startedAt": "2026-07-31T14:42:41.378Z",
-  "updatedAt": "2026-07-31T14:47:36.736Z",
-  "currentIteration": 0,
+  "startedAt": "2026-07-31T18:50:21.765Z",
+  "updatedAt": "2026-07-31T19:30:12.693Z",
+  "currentIteration": 1,
   "maxIterations": 10,
   "tasksCompleted": 0,
   "isPaused": false,
@@ -35,7 +35,7 @@
       {
         "id": "mrr-incremental-fetch-3sl.4",
         "title": "gitlab: phase-2 aliased discussions query + updatedAt diff and merge",
-        "status": "open",
+        "status": "completed",
         "completedInSession": false
       },
       {
@@ -70,9 +70,22 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "mrr-incremental-fetch-3sl.6",
+      "taskTitle": "tui: ungate the board, boot from cache, header snapshot age",
+      "taskCompleted": false,
+      "durationMs": 473117,
+      "startedAt": "2026-07-31T18:50:22.854Z",
+      "endedAt": "2026-07-31T18:58:15.971Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
-  "activeTaskIds": [],
+  "activeTaskIds": [
+    "mrr-incremental-fetch-3sl.6"
+  ],
   "subagentPanelVisible": false
 }

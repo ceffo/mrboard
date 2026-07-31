@@ -1,0 +1,65 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.6
+- **Task Title**: tui: ungate the board, boot from cache, header snapshot age
+- **Description**: ## Scope
+
+The responsiveness half of the epic. The board must be interactive at all times.
+
+- Remove the isRefreshing gates: baseStack() currently collapses to BaseCtx only (model.go ~595),
+  handleKe...
+- **Status**: failed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T14:47:38.009Z
+- **Ended At**: 2026-07-31T14:50:09.396Z
+- **Duration**: 2m 31s
+- **Input Tokens**: 140
+- **Output Tokens**: 8718
+- **Total Tokens**: 8858
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of this bead and the project's progress notes, since memory shows this task may have already been completed in a prior session.
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.6 --format toon 2>&1 | head -50
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m $ git log --oneline -15 && echo --- && git status --short && echo --- && git diff --stat HEAD
+[94m[Bash][0m $ grep -n "isRefreshing\|stateLoading\|baseStack\|snapshotStore\|snapStore" internal/tui/model.go | he...
+[94m[Bash][0m $ git show 9491963 --stat | head -30
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m
+[94m[Bash][0m $ rg -n "isRefreshing" internal/tui/refresh_test.go internal/tui/model_test.go 2>/dev/null | head -30
+[94m[Bash][0m $ just check 2>&1 | tail -60
+Tests already cover the `baseStack` un-gating explicitly. Let me confirm `just check` finished clean overall (that output was truncated to the last package).
+[94m[Bash][0m $ echo "EXIT:$?"
+[94m[Bash][0m $ echo "done"
+All clean — no FAILs, no lint errors (only expected warning-level test log lines). Now let's do the mandatory agent-tui gate: launch with a warm cache, confirm the board renders immediately with an age label (not a spinner overlay), navigate during a fetch, and confirm the label flips after the swap.
+[94m[Bash][0m $ which agent-tui
+A warm snapshot cache already exists from a prior run. Now let's launch the TUI and run through the gate.
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ agent-tui wait --stable && agent-tui screenshot
+The fetch already completed by the time it stabilized (this repo's warm fetch is sub-second per prior timing notes). Let me relaunch and capture the in-flight state before the swap lands, then test navigation during that window.
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+[94m[Bash][0m $ agent-tui screenshot --help 2>&1
+[94m[Bash][0m $ agent-tui screenshot --json 2>&1 | ~/.claude/.venv/bin/python -c " import json,sys d=json.load(sys.s...
+Following the established pattern from bead `.5` (using the detail panel to prove selection identity, since border-color focus doesn't show in plain text captures), let me open the detail panel to confirm which MR is focused now, then compare after another navigation.
+[94m[Bash][0m $ agent-tui screenshot --strip-ansi 2>&1 | head -20
+Selection moved to `!534` (second card) after the ArrowDown press, confirmed via the detail panel — proving navigation worked while the fetch was in flight. Now let's close the detail panel and wait for the fetch to land, confirming the age label flips.
+[94m[Bash][0m $ agent-tui screenshot --strip-ansi 2>&1 | head -3
+[94m[Bash][0m $ rg -n "cold|stateLoading" internal/tui/model_test.go internal/tui/refresh_test.go 2>/dev/null | head...
+[94m[Bash][0m $ agent-tui kill 2>&1
+All acceptance criteria are verified — the implementation was already fully done and committed (bundled into commit `9491963` in a prior session), but the bead's status in `.beads/` was never flushed as closed. Let me close it now.
+[94m[Bash][0m $ agent-tui gate confirms interactive-during-fetch and label flip" && br sync --flush-only
+You've hit your session limit · resets 2:10pm (America/Toronto)
+
+[91m[Error: rate_limit][0m
