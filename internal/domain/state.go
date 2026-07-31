@@ -40,3 +40,13 @@ type StateStore interface {
 	Load() (AppState, error)
 	Save(AppState) error
 }
+
+// SnapshotStore is the driven port for persisting the last-known set of MRs,
+// used to support incremental fetch (see docs/adr/0005). Load returning an
+// empty slice means there is nothing usable to diff against — a cold cache,
+// not an error — including when the adapter discards a snapshot written by
+// an older, incompatible schema version.
+type SnapshotStore interface {
+	Load() ([]MergeRequest, error)
+	Save([]MergeRequest) error
+}

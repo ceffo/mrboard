@@ -20,6 +20,7 @@ packages:
       structname: "Mock{{.InterfaceName}}"
     interfaces:
       Notifier:
+      SnapshotStore:
   github.com/ceffo/mrboard/internal/domain/service/mrsvc:
     config:
       dir: "{{.InterfaceDir}}/mocks"

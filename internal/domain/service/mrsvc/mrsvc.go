@@ -14,6 +14,11 @@ type FetchOptions struct {
 	// IncludeReviewerMRs, when true, also fetches MRs where the current user
 	// is a reviewer (in addition to MRs authored by configured sources).
 	IncludeReviewerMRs bool
+
+	// Previous is the last-known snapshot, keyed by domain.MRKey, that the
+	// adapter may diff against to avoid re-fetching unchanged data (see
+	// docs/adr/0005). Nil means an unconditional full fetch.
+	Previous []domain.MergeRequest
 }
 
 // MergeRequestSource is the driven port for fetching MR data.

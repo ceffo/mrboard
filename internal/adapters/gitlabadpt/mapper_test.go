@@ -340,6 +340,20 @@ func TestMapMRFromGraphQL_SourceTargetBranch_Stored(t *testing.T) {
 	assert.Equal(t, "main", result.TargetBranch, "want TargetBranch stored on domain MR")
 }
 
+func TestMapMR_UpdatedAt_Stored(t *testing.T) {
+	m := mr(basicUser("alice", "Alice"))
+	m.UpdatedAt = ptr(t1)
+	result := MapMR(m, nil, approvals(), nil)
+	assert.True(t, t1.Equal(result.UpdatedAt), "want UpdatedAt stored on domain MR")
+}
+
+func TestMapMRFromGraphQL_UpdatedAt_Stored(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.UpdatedAt = t1.Format(time.RFC3339)
+	result := MapMRFromGraphQL(mr)
+	assert.True(t, t1.Equal(result.UpdatedAt), "want UpdatedAt parsed and stored on domain MR")
+}
+
 func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
 	// alice is in the Approvers rule and has approved
 	m := mr(basicUser("alice", "Alice"))

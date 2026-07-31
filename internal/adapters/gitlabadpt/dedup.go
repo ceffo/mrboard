@@ -3,10 +3,7 @@ package gitlabadpt
 import "github.com/ceffo/mrboard/internal/domain"
 
 // mrKey uniquely identifies an MR across all sources.
-type mrKey struct {
-	projectID int
-	iid       int
-}
+type mrKey = domain.MRKey
 
 // MRDeduplicator deduplicates and excludes domain.MergeRequest slices by project+IID key.
 type MRDeduplicator struct {
@@ -26,7 +23,7 @@ func (d MRDeduplicator) Deduplicate(mrs []domain.MergeRequest) []domain.MergeReq
 		if excluded[mr.Author] {
 			continue
 		}
-		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		k := mrKey{ProjectID: mr.ProjectID, IID: mr.IID}
 		if seen[k] {
 			continue
 		}

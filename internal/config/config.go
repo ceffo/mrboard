@@ -321,6 +321,20 @@ func XDGDataDir() string {
 	return filepath.Join(base, "mrboard")
 }
 
+// XDGCacheDir returns the mrboard-specific XDG cache directory.
+// Returns "" on error.
+func XDGCacheDir() string {
+	base := os.Getenv("XDG_CACHE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".cache")
+	}
+	return filepath.Join(base, "mrboard")
+}
+
 func xdgSearchDirs() []string {
 	var dirs []string
 	if dir := XDGConfigDir(); dir != "" {

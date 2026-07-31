@@ -73,7 +73,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	// Mark MRs that came exclusively from the reviewer fetch.
 	if opts.IncludeReviewerMRs {
 		for i, mr := range finalMRs {
-			if !primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] {
+			if !primaryKeys[mrKey{ProjectID: mr.ProjectID, IID: mr.IID}] {
 				finalMRs[i].ReviewerSource = true
 			}
 		}
@@ -108,10 +108,10 @@ func (a *GitLabAdapter) listStage(
 	// Capture keys before appending reviewer MRs so we can distinguish them later.
 	primaryKeys = make(map[mrKey]bool, len(rawMRs)+len(mappedMRs))
 	for _, mr := range mappedMRs {
-		primaryKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
+		primaryKeys[mrKey{ProjectID: mr.ProjectID, IID: mr.IID}] = true
 	}
 	for _, mr := range rawMRs {
-		primaryKeys[mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}] = true
+		primaryKeys[mrKey{ProjectID: int(mr.ProjectID), IID: int(mr.IID)}] = true
 	}
 
 	if opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0 {
@@ -142,7 +142,7 @@ func dedupStage(
 	combined := make([]domain.MergeRequest, 0, len(mappedMRs)+len(rawMRs))
 	combined = append(combined, mappedMRs...)
 	for _, mr := range rawMRs {
-		k := mrKey{projectID: int(mr.ProjectID), iid: int(mr.IID)}
+		k := mrKey{ProjectID: int(mr.ProjectID), IID: int(mr.IID)}
 		rawByKey[k] = mr
 		authorUsername := ""
 		if mr.Author != nil {
@@ -160,11 +160,11 @@ func dedupStage(
 
 	mappedKeys := make(map[mrKey]bool, len(mappedMRs))
 	for _, mr := range mappedMRs {
-		mappedKeys[mrKey{projectID: mr.ProjectID, iid: mr.IID}] = true
+		mappedKeys[mrKey{ProjectID: mr.ProjectID, IID: mr.IID}] = true
 	}
 
 	for _, mr := range deduped {
-		k := mrKey{projectID: mr.ProjectID, iid: mr.IID}
+		k := mrKey{ProjectID: mr.ProjectID, IID: mr.IID}
 		if mappedKeys[k] {
 			finalMRs = append(finalMRs, mr)
 		} else if raw, ok := rawByKey[k]; ok {

@@ -240,6 +240,10 @@ func MapMR(
 	if mr.CreatedAt != nil {
 		mrCreatedAt = *mr.CreatedAt
 	}
+	var mrUpdatedAt time.Time
+	if mr.UpdatedAt != nil {
+		mrUpdatedAt = *mr.UpdatedAt
+	}
 	refs := make([]domain.ReviewerInfo, len(mr.Reviewers))
 	for i, r := range mr.Reviewers {
 		refs[i] = domain.ReviewerInfo{Username: r.Username, Name: r.Name}
@@ -260,6 +264,7 @@ func MapMR(
 		ProjectPath:    projectPathFromRef(mr.References),
 		Reviewers:      reviewers,
 		CreatedAt:      mrCreatedAt,
+		UpdatedAt:      mrUpdatedAt,
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}
@@ -343,6 +348,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		refs[i] = domain.ReviewerInfo{Username: r.Username, Name: r.Name}
 	}
 	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
+	updatedAt, _ := time.Parse(time.RFC3339, mr.UpdatedAt) //nolint:errcheck
 
 	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
 	reviewers := domain.DeriveReviewerInfos(refs, events, approvedBy, createdAt)
@@ -362,6 +368,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		ProjectPath:    mr.Project.FullPath,
 		Reviewers:      reviewers,
 		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}

@@ -127,6 +127,14 @@ type MRDiff struct {
 	Files   []FileDiff
 }
 
+// MRKey uniquely identifies a merge request across all sources, independent of
+// position in any slice or column. It is the single identity type for selection
+// tracking, dedup, and cache lookups — see docs/adr/0005.
+type MRKey struct {
+	ProjectID int
+	IID       int
+}
+
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
 	ID           int
@@ -148,6 +156,7 @@ type MergeRequest struct {
 	Reviewers           []ReviewerInfo
 
 	CreatedAt         time.Time
+	UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, approvals, reviewer changes, title/draft edits
 	NonDraftSince     time.Time
 	WaitingSince      time.Time
 	ReadyToMergeSince time.Time
