@@ -52,6 +52,6 @@ homebrew_casks:
         - zsh
         - fish
     hooks:
-      post:
+      pre:
         install: |
           system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mrboard"]
