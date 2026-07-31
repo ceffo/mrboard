@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,14 @@ type noopStore struct{}
 func (noopStore) Load() (domain.AppState, error) { return domain.DefaultAppState(), nil }
 func (noopStore) Save(domain.AppState) error     { return nil }
 
+// noopSnapshotStore is a SnapshotStore that always reports a cold cache and discards saves.
+type noopSnapshotStore struct{}
+
+func (noopSnapshotStore) Load() ([]domain.MergeRequest, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+func (noopSnapshotStore) Save([]domain.MergeRequest) error { return nil }
+
 // makeModel creates a Model wired to a mock source and transitions it to
 // stateBoard by delivering initialMRs via FetchResultMsg.
 func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser string) Model {
@@ -30,7 +39,7 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(initialMRs, nil).Maybe()
 
 	cfg := &config.Config{CurrentUser: currentUser}
-	m := New(context.Background(), cfg, src, noopStore{}, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), cfg, src, noopStore{}, noopSnapshotStore{}, nil, nil, nil, "dev", Options{})
 
 	// Deliver results directly without running the real fetch.
 	next, _ := m.Update(FetchResultMsg{MRs: initialMRs})
@@ -40,12 +49,12 @@ func makeModel(t *testing.T, initialMRs []domain.MergeRequest, currentUser strin
 func someMRs() []domain.MergeRequest {
 	return []domain.MergeRequest{
 		{
-			ID: 1, IID: 10, Author: "alice", ProjectPath: "org/alpha",
-			Reviewers: []domain.ReviewerInfo{{Username: "bob", State: domain.ReviewerNotStarted}},
+			ID: 1, IID: 10, Author: editorTestApprover, ProjectPath: "org/alpha",
+			Reviewers: []domain.ReviewerInfo{{Username: editorTestOther, State: domain.ReviewerNotStarted}},
 		},
 		{
-			ID: 2, IID: 20, Author: "bob", ProjectPath: "org/beta",
-			Reviewers: []domain.ReviewerInfo{{Username: "alice", State: domain.ReviewerNotStarted}},
+			ID: 2, IID: 20, Author: editorTestOther, ProjectPath: "org/beta",
+			Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover, State: domain.ReviewerNotStarted}},
 		},
 	}
 }
@@ -69,7 +78,8 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
+		nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchErrMsg{Err: errors.New("network down")})
 	m2 := next.(Model)
 
@@ -83,7 +93,8 @@ func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
+		nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{
 		MRs:    someMRs(),
 		Errors: []error{errors.New("source A failed")},

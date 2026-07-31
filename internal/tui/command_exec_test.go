@@ -21,7 +21,7 @@ func makeModelWithCommands(t *testing.T, cmds []config.Command) Model {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(someMRs(), nil).Maybe()
 	cfg := &config.Config{Commands: cmds}
-	m := New(context.Background(), cfg, src, noopStore{}, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), cfg, src, noopStore{}, noopSnapshotStore{}, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{MRs: someMRs()})
 	return next.(Model)
 }

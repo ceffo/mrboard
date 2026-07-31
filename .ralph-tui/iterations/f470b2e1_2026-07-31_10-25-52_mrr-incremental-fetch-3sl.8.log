@@ -1,0 +1,126 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.8
+- **Task Title**: config+tui: refresh_interval auto-refresh timer
+- **Description**: ## Scope
+
+Small ticket, but only viable once the fetch is cheap and the board is ungated.
+
+- New refresh_interval config key, default 60s, 0 disables. Follow the existing config validation
+  and defau...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T14:25:52.703Z
+- **Ended At**: 2026-07-31T14:31:46.141Z
+- **Duration**: 5m 53s
+- **Input Tokens**: 312
+- **Output Tokens**: 27048
+- **Total Tokens**: 27360
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by pulling memory context and reading the relevant files in parallel to understand the current state.
+[94m[Bash][0m Read tail of progress.md for recent learnings $ cat .ralph-tui/progress.md 2>/dev/null | tail -150
+[94m[Bash][0m Read ADR-0005 full text $ cat docs/adr/0005-incremental-fetch-and-selection-identity.md 2>/dev/null
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search,mcp__plugin_engram_engram__mem_context[0m
+[94m[Bash][0m Show bead details $ br show mrr-incremental-fetch-3sl.8 --format toon 2>/dev/null | toon 2>/dev/null || br show mrr-incr...
+[94m[Bash][0m Check file sizes $ wc -l internal/config/*.go internal/tui/model.go internal/tui/header.go
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mrefresh_interval auto-refresh timer tick[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Bash][0m Read example config $ \cat mrboard.yaml.example
+[94m[Bash][0m Locate relevant symbols in model.go $ rg -n "tickCmd|isRefreshing|fetchTimeout|startFetch|makeFetchCmd|dirty|FetchResultMsg|refreshInterva...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m
+[94m[Bash][0m Find test model helper functions $ rg -n "func newTestModel|func.*TestModel|noopSnapshotStore|noopStore\b" internal/tui/*.go | head -50
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m Find selectSecondMR helper and Refresh keybinding definition $ rg -n "func selectSecondMR|Refresh \s*Act|Refresh:|keys.Refresh|Refresh  *Act" internal/tui/model_te...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+Now I have everything needed. Let me implement the changes, starting with config.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "	Notifications      Notifications `mapstructure:"n..." → "	Notifications      Notifications `mapstructure:"n..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "	v.SetDefault("jira.cache_ttl", "24h")" → "	v.SetDefault("jira.cache_ttl", "24h")
+	v.SetDefau..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/mrboard.yaml.example[0m edit: "current_user: alice       # your GitLab username —..." → "current_user: alice       # your GitLab username —..."
+Now the TUI model changes. First, the struct field and message/cmd definitions.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// tickMsg is sent every minute to refresh display..." → "// tickMsg is sent every minute to refresh display..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	ticketDescLinked   map[ticketDescLinkKey]bool    ..." → "	ticketDescLinked   map[ticketDescLinkKey]bool    ..."
+Now wire `refreshInterval` into `New()` and `Init()`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		ticketDescLinked:   make(map[ticketDescLinkKey]b..." → "		ticketDescLinked:   make(map[ticketDescLinkKey]b..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		makeFetchCmd(m.baseCtx, m.src, m.includeReviewer..." → "		makeFetchCmd(m.baseCtx, m.src, m.includeReviewer..."
+Now add the `refreshTickMsg` dispatch case and handler. Let's add the case near `tickMsg`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case tickMsg:
+		return m, tickCmd()" → "	case tickMsg:
+		return m, tickCmd()
+
+	case refres..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// dirtyKeys returns the keys of dirty as a slice,..." → "// handleRefreshTick fires a background fetch on t..."
+Now the manual `R` key handler needs to bump `refreshGen` and reschedule:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Locate Refresh key handler after edits $ rg -n "keys.Refresh.Match" internal/tui/model.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case m.keys.Refresh.Match(msg):
+		if m.showDetail..." → "	case m.keys.Refresh.Match(msg):
+		if m.showDetail..."
+Now let's verify it builds and existing tests pass:
+[94m[Bash][0m Build the project $ go build ./... 2>&1 | head -50
+Build passes. Now let's write the tests for the acceptance criteria in `refresh_test.go`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m edit: "func TestModel_FetchResultMsg_SavesSnapshot(t *tes..." → "func TestModel_FetchResultMsg_SavesSnapshot(t *tes..."
+[94m[Bash][0m Check golangci-lint config for testifylint/nolintlint $ rg -n "testifylint|nolintlint" .golangci.yml 2>/dev/null
+testifylint isn't enabled, so that nolint comment is unnecessary and `nolintlint` would flag it as unused. Let me remove it.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m edit: "	assert.NotEqual(t, staleGen, m2.refreshGen, "manu..." → "	assert.NotEqual(t, staleGen, m2.refreshGen, "manu..."
+Now let's run the test suite and full quality gate.
+[94m[Bash][0m Run TUI and config tests $ go test ./internal/tui/... ./internal/config/... 2>&1 | tail -60
+All green. Now let's add a config test for the default/zero-disable behavior and run the full `just check`.
+[94m[Bash][0m Find existing default-duration test pattern in config_test.go $ rg -n "lifetime_warn_after|LifetimeWarnAfter|func TestLoad" internal/config/config_test.go | head -2...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m
+I'll add two focused tests: default value and explicit-zero-disables.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m edit: "func TestGitlabTokenEnvOverride(t *testing.T) {" → "func TestLoadRefreshIntervalDefault(t *testing.T) ..."
+Need to add the `time` import to config_test.go.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config_test.go[0m edit: "import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"gith..." → "import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"..."
+Now let's run `just check` for the full quality gate.
+[94m[Bash][0m Run full quality gate: fmt, lint, build, test $ just check 2>&1 | tail -100
+Fixing the line-length violation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	refreshInterval    time.Duration                 ..." → "	refreshInterval    time.Duration                 ..."
+[94m[Bash][0m Re-run full quality gate $ just check 2>&1 | tail -100
+`just check` passed fully (fmt + lint + build + test all green). Now let's verify with agent-tui per the mandatory TUI-testing rule, confirming the auto-refresh timer is invisible in normal use.
+[94m[Bash][0m Launch mrboard TUI via agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for TUI to stabilize and screenshot initial state $ agent-tui wait --stable && agent-tui screenshot
+[94m[Bash][0m Move selection and open detail panel to record identity $ agent-tui press ArrowDown && agent-tui press Enter && agent-tui screenshot
+[94m[Bash][0m Check whether real config overrides refresh_interval $ grep -i refresh_interval ~/.config/mrboard/mrboard.yaml 2>/dev/null || echo "not set - defaults to 6...
+Good — default 60s applies. Let's close the detail panel and wait for the auto-refresh tick to land, then verify nothing visibly disturbed.
+[94m[Bash][0m Close detail panel $ agent-tui press Escape
+[94m[Bash][0m Wait for the 60s auto-refresh tick to fire, then screenshot $ sleep 65 && agent-tui screenshot
+
+[91m[Error: <tool_use_error>Blocked: sleep 65 followed by: agent-tui screenshot. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Bash][0m Wait ~65s for the default 60s auto-refresh tick to fire, then capture a screenshot $ sleep 65 && agent-tui screenshot > /tmp/mrboard_refresh_screenshot.txt 2>&1
+I'll wait for that background check to complete before continuing — it'll take about a minute. In the meantime, here's what we've built so far.
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Implemented mrr-incremental-fetch-3sl.8 (epic mrr-incremental-fetch-3sl, docs/adr/0005 "Refresh cadence"). Added `AppConfig.RefreshInterval time.Duration` (`internal/config/config.go`, `maps... (2663 chars)"
+I've kicked off a 65-second background wait to catch the auto-refresh tick firing on the live TUI session; I'll verify the board stays undisturbed once that completes.
+[94m[Bash][0m Check existing Codebase Patterns section format for progress.md $ rg -n "^## Codebase Patterns" -A 40 .ralph-tui/progress.md | head -60
+[94m[ScheduleWakeup][0m
+I'm waiting on the background 65-second check of the auto-refresh timer against the live TUI session before wrapping up. Once that lands I'll confirm the board stayed undisturbed, clean up the agent-tui session, and close out the bead.
+[94m[Bash][0m Check contents of background screenshot capture $ \cat /tmp/mrboard_refresh_screenshot.txt 2>/dev/null | tail -60
+[94m[Bash][0m Check file existence/timestamp and current time $ date
+The background wait is still running. I'll hold off until it completes or the scheduled check-in fires — no further action needed right now.

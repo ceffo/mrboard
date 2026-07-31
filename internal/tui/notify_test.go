@@ -33,7 +33,8 @@ func modelWithNotifier(t *testing.T, notifier domain.Notifier) Model {
 	t.Helper()
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, notifier, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
+		notifier, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{MRs: nil})
 	return next.(Model)
 }

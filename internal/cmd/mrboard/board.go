@@ -11,7 +11,8 @@ import (
 
 func execBoard(ctx context.Context, c *core.Core, version string, opts tui.Options) error {
 	_, err := tea.NewProgram(
-		tui.New(ctx, c.Config, c.MRSource, c.StateStore, c.Notifier, c.TicketEnricher, c.TicketLinker, version, opts),
+		tui.New(ctx, c.Config, c.MRSource, c.StateStore, c.SnapshotStore,
+			c.Notifier, c.TicketEnricher, c.TicketLinker, version, opts),
 		tea.WithContext(ctx),
 	).Run()
 	return err

@@ -89,6 +89,9 @@ type AppConfig struct {
 	Notifications      Notifications `mapstructure:"notifications"`
 	Jira               Jira          `mapstructure:"jira"`
 	Commands           []Command     `mapstructure:"commands"`
+	// RefreshInterval is the auto-refresh cadence (docs/adr/0005, "Refresh
+	// cadence"); default 60s, 0 disables the timer entirely.
+	RefreshInterval time.Duration `mapstructure:"refresh_interval"`
 }
 
 // Config is a backward-compatible alias for AppConfig.
@@ -176,6 +179,7 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("lifetime_warn_after", "72h")
 	v.SetDefault("lifetime_error_after", "120h")
 	v.SetDefault("jira.cache_ttl", "24h")
+	v.SetDefault("refresh_interval", "60s")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {

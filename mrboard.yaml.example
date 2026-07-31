@@ -17,6 +17,10 @@ excluded_authors:
 
 current_user: alice       # your GitLab username — highlights your MRs in the board
 
+# How often the board auto-refreshes in the background, in addition to manual
+# refresh ('r', which also resets this timer). 0 disables auto-refresh.
+refresh_interval: 60s     # default: 60s
+
 log:
   path: /tmp/mrboard.log  # optional; omit to disable file logging
   level: info             # debug | info | warn | error

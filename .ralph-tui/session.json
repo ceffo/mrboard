@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "sessionId": "f470b2e1-fe5d-4639-a400-7a846f2b2406",
+  "sessionId": "90e91a36-eca6-4464-8cbf-786efba816d0",
   "status": "running",
-  "startedAt": "2026-07-31T13:14:30.362Z",
-  "updatedAt": "2026-07-31T14:01:27.618Z",
-  "currentIteration": 4,
+  "startedAt": "2026-07-31T14:42:41.378Z",
+  "updatedAt": "2026-07-31T14:47:36.736Z",
+  "currentIteration": 0,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 0,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -24,13 +24,13 @@
         "id": "mrr-incremental-fetch-3sl.2",
         "title": "snapshotstore: versioned JSON cache in XDG_CACHE_HOME + core wiring",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-incremental-fetch-3sl.3",
         "title": "gitlab: phase-1 thin listing query (no discussions) + early dedup",
         "status": "completed",
-        "completedInSession": true
+        "completedInSession": false
       },
       {
         "id": "mrr-incremental-fetch-3sl.4",
@@ -41,7 +41,7 @@
       {
         "id": "mrr-incremental-fetch-3sl.5",
         "title": "tui: selection keyed by MRKey, not row+column",
-        "status": "open",
+        "status": "completed",
         "completedInSession": false
       },
       {
@@ -70,52 +70,9 @@
       }
     ]
   },
-  "iterations": [
-    {
-      "iteration": 1,
-      "status": "completed",
-      "taskId": "mrr-incremental-fetch-3sl.2",
-      "taskTitle": "snapshotstore: versioned JSON cache in XDG_CACHE_HOME + core wiring",
-      "taskCompleted": true,
-      "durationMs": 130550,
-      "startedAt": "2026-07-31T13:14:33.539Z",
-      "endedAt": "2026-07-31T13:16:44.089Z"
-    },
-    {
-      "iteration": 2,
-      "status": "completed",
-      "taskId": "mrr-incremental-fetch-3sl.3",
-      "taskTitle": "gitlab: phase-1 thin listing query (no discussions) + early dedup",
-      "taskCompleted": true,
-      "durationMs": 151326,
-      "startedAt": "2026-07-31T13:16:45.385Z",
-      "endedAt": "2026-07-31T13:19:16.711Z"
-    },
-    {
-      "iteration": 3,
-      "status": "failed",
-      "taskId": "mrr-incremental-fetch-3sl.4",
-      "taskTitle": "gitlab: phase-2 aliased discussions query + updatedAt diff and merge",
-      "taskCompleted": false,
-      "durationMs": 1449828,
-      "startedAt": "2026-07-31T13:19:17.960Z",
-      "endedAt": "2026-07-31T13:43:27.788Z"
-    },
-    {
-      "iteration": 4,
-      "status": "completed",
-      "taskId": "mrr-incremental-fetch-3sl.4",
-      "taskTitle": "gitlab: phase-2 aliased discussions query + updatedAt diff and merge",
-      "taskCompleted": false,
-      "durationMs": 690456,
-      "startedAt": "2026-07-31T13:43:32.805Z",
-      "endedAt": "2026-07-31T13:55:03.261Z"
-    }
-  ],
+  "iterations": [],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
-  "activeTaskIds": [
-    "mrr-incremental-fetch-3sl.4"
-  ],
+  "activeTaskIds": [],
   "subagentPanelVisible": false
 }

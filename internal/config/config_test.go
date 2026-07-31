@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,38 @@ sources:
 	cfg, err := Load(path)
 	require.NoError(t, err)
 	assert.Equal(t, "https://gitlab.example.com", cfg.GitLab.URL)
+}
+
+func TestLoadRefreshIntervalDefault(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, 60*time.Second, cfg.RefreshInterval)
+}
+
+func TestLoadRefreshIntervalZeroDisables(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+refresh_interval: 0
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Zero(t, cfg.RefreshInterval, "an explicit 0 must override the default and disable auto-refresh")
 }
 
 func TestGitlabTokenEnvOverride(t *testing.T) {

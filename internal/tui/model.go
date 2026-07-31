@@ -129,10 +129,34 @@ func tickCmd() tea.Cmd {
 	})
 }
 
+// refreshTickMsg fires the recurring background auto-refresh (docs/adr/0005,
+// "Refresh cadence") — distinct from tickMsg above, which only re-renders
+// duration strings and never triggers a fetch.
+type refreshTickMsg struct{ gen int }
+
+// refreshTickCmd schedules the next auto-refresh tick. gen ties the tick to
+// the schedule that produced it: resetRefreshTimer bumps Model.refreshGen on
+// a manual refresh, so a tick from a schedule that predates it arrives with a
+// stale gen and is dropped instead of firing early (see handleRefreshTick).
+// interval <= 0 disables auto-refresh entirely.
+func refreshTickCmd(interval time.Duration, gen int) tea.Cmd {
+	if interval <= 0 {
+		return nil
+	}
+	return tea.Tick(interval, func(time.Time) tea.Msg {
+		return refreshTickMsg{gen: gen}
+	})
+}
+
 // FetchResultMsg carries the result of a successful (or partial) fetch.
+// FetchStartedAt is stamped when the fetch was dispatched (not when it
+// returned); the dirty-set guard compares it against each entry in
+// Model.dirty to tell a stale landing snapshot from a confirming one
+// (docs/adr/0005, "The write race that ungating creates").
 type FetchResultMsg struct {
-	MRs    []domain.MergeRequest
-	Errors []error
+	MRs            []domain.MergeRequest
+	Errors         []error
+	FetchStartedAt time.Time
 }
 
 // FetchErrMsg carries a fatal fetch error (e.g. network down, bad token).
@@ -251,6 +275,8 @@ type Model struct {
 	baseCtx            context.Context
 	logger             *slog.Logger
 	isRefreshing       bool
+	snapshotStore      domain.SnapshotStore
+	snapshotWrittenAt  time.Time    // when the displayed data was captured; zero until a snapshot exists
 	selected           domain.MRKey // single source of truth for board selection, see docs/adr/0005
 	notifier           domain.Notifier
 	alerts             toast.Model
@@ -263,6 +289,9 @@ type Model struct {
 	sprintFilterActive bool                             // true when S-key sprint filter is toggled on
 	ticketIndex        map[string][]domain.MergeRequest // MRs by extracted issue key; rebuilt on every allMRs change
 	ticketDescLinked   map[ticketDescLinkKey]bool       // description back-link dedup, this session only
+	dirty              map[domain.MRKey]time.Time       // locally-written MRs unconfirmed by a fetch, see docs/adr/0005
+	refreshInterval    time.Duration                    // auto-refresh cadence; <= 0 disables it, see docs/adr/0005
+	refreshGen         int                              // bumped on manual refresh to invalidate pending ticks
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -272,6 +301,7 @@ func New(
 	cfg *config.Config,
 	src mrsvc.MergeRequestSource,
 	store domain.StateStore,
+	snapStore domain.SnapshotStore,
 	notifier domain.Notifier,
 	ticketEnricher ticketsvc.TicketEnricher,
 	ticketLinker ticketsvc.TicketLinker,
@@ -363,11 +393,14 @@ func New(
 		includeReviewerMRs: st.IncludeReviewerMRs,
 		baseCtx:            ctx,
 		logger:             logger,
+		snapshotStore:      snapStore,
 		notifier:           notifier,
 		ticketBaseURL:      cfg.Jira.InstanceURL,
 		ticketEnricher:     ticketEnricher,
 		ticketLinker:       ticketLinker,
 		ticketDescLinked:   make(map[ticketDescLinkKey]bool),
+		dirty:              make(map[domain.MRKey]time.Time),
+		refreshInterval:    cfg.RefreshInterval,
 		iconResolver:       ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
@@ -378,6 +411,24 @@ func New(
 		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
 	}
 	m.header.SetSort(sortLabel(sf, st.SortDesc))
+
+	// Boot from the cached snapshot, at any age, so the board is interactive
+	// immediately instead of showing stateLoading while the first fetch runs
+	// (docs/adr/0005, "Non-blocking refresh"). A cold cache (nothing to draw)
+	// leaves state at stateLoading, set above.
+	if cachedMRs, writtenAt, err := snapStore.Load(); err != nil {
+		logger.Error("snapshotstore: load failed, booting cold", "err", err)
+	} else if len(cachedMRs) > 0 {
+		m.state = stateBoard
+		m.allMRs = cachedMRs
+		m.snapshotWrittenAt = writtenAt
+		m.isRefreshing = true // Init() always starts the first fetch
+		m.reviewerMRsInStore = hasReviewerSourceMR(cachedMRs)
+		m.applyTheme()
+		m.applyMRFilter()
+		m.updateTicketKey()
+	}
+
 	logger.Info("tui: starting", "version", version, "theme", themeName, "mode", themeMode, "view", int(viewMode))
 	return m
 }
@@ -391,8 +442,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	return tea.Batch(
 		m.sp.Init(),
-		makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs),
+		makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs, m.allMRs),
 		tickCmd(),
+		refreshTickCmd(m.refreshInterval, m.refreshGen),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
 		sprintCmd,
 	)
@@ -400,12 +452,17 @@ func (m Model) Init() tea.Cmd {
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
 // The cancel is also called via defer inside the goroutine once the fetch finishes.
-func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource, includeReviewerMRs bool) tea.Cmd {
+// previous is the last-known snapshot (nil on a cold boot), passed through so the
+// adapter can skip re-fetching unchanged MRs (docs/adr/0005, "Two-phase conditional fetch").
+func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource, includeReviewerMRs bool,
+	previous []domain.MergeRequest,
+) tea.Cmd {
 	ctx, cancel := context.WithTimeout(base, fetchTimeout)
+	fetchStartedAt := time.Now()
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs})
-		return FetchResultMsg{MRs: mrs, Errors: errs}
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs, Previous: previous})
+		return FetchResultMsg{MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt}
 	}
 }
 
@@ -441,7 +498,11 @@ func makeResolveTeamCmd(base context.Context, src mrsvc.MergeRequestSource, cfg 
 }
 
 // startFetch builds a fetch Cmd and stores its cancel func in the model so
-// that a subsequent 'q' press can abort an in-flight request.
+// that a subsequent 'q' press can abort an in-flight request. Any currently
+// dirty MR (a local write not yet confirmed by a landed fetch) is forced
+// stale so this fetch's phase-2 pass re-fetches it fresh rather than trusting
+// a phase-1 updatedAt match (docs/adr/0005, "The write race that ungating
+// creates").
 func (m *Model) startFetch() tea.Cmd {
 	ctx, cancel := context.WithTimeout(m.baseCtx, fetchTimeout)
 	if m.fetchCancel != nil {
@@ -450,10 +511,104 @@ func (m *Model) startFetch() tea.Cmd {
 	m.fetchCancel = cancel
 	src := m.src
 	includeReviewerMRs := m.includeReviewerMRs
+	previous := m.allMRs
+	forceStale := dirtyKeys(m.dirty)
+	fetchStartedAt := time.Now()
 	return func() tea.Msg {
 		defer cancel()
-		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{IncludeReviewerMRs: includeReviewerMRs})
-		return FetchResultMsg{MRs: mrs, Errors: errs}
+		mrs, errs := src.FetchAll(ctx, mrsvc.FetchOptions{
+			IncludeReviewerMRs: includeReviewerMRs,
+			Previous:           previous,
+			ForceStale:         forceStale,
+		})
+		return FetchResultMsg{MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt}
+	}
+}
+
+// handleRefreshTick fires a background fetch on the refresh_interval cadence
+// (docs/adr/0005, "Refresh cadence"). A tick whose gen no longer matches
+// Model.refreshGen belongs to a schedule a manual refresh has since
+// superseded; it is dropped without rescheduling, since the newer schedule
+// installed by the manual refresh is already driving the cadence. Otherwise
+// the next tick is always scheduled, but this tick's own fetch is skipped —
+// not queued — when one is already in flight: fetchTimeout and the default
+// interval are both 60s, so overlap is otherwise reachable.
+func (m Model) handleRefreshTick(msg refreshTickMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.refreshGen {
+		return m, nil
+	}
+	next := refreshTickCmd(m.refreshInterval, m.refreshGen)
+	if m.isRefreshing {
+		return m, next
+	}
+	m.isRefreshing = true
+	return m, tea.Batch(next, m.startFetch())
+}
+
+// dirtyKeys returns the keys of dirty as a slice, for passing to FetchOptions.ForceStale.
+func dirtyKeys(dirty map[domain.MRKey]time.Time) []domain.MRKey {
+	if len(dirty) == 0 {
+		return nil
+	}
+	keys := make([]domain.MRKey, 0, len(dirty))
+	for k := range dirty {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// applyFetchResult merges a landing FetchResultMsg into m.allMRs. For every
+// dirty key whose write happened after this fetch started, the landing entry
+// is stale relative to that write: the current local entry is kept in place
+// instead (docs/adr/0005, "The write race that ungating creates"). Every
+// other key — clean, or dirty but confirmed by this fetch — takes the
+// landing snapshot's value, matching the pre-dirty-set behavior of a
+// wholesale replace.
+func (m Model) applyFetchResult(msg FetchResultMsg) []domain.MergeRequest {
+	if len(m.dirty) == 0 {
+		return msg.MRs
+	}
+
+	oldByKey := make(map[domain.MRKey]domain.MergeRequest, len(m.allMRs))
+	for _, mr := range m.allMRs {
+		oldByKey[mr.Key()] = mr
+	}
+
+	seen := make(map[domain.MRKey]bool, len(msg.MRs))
+	result := make([]domain.MergeRequest, 0, len(msg.MRs))
+	for _, mr := range msg.MRs {
+		key := mr.Key()
+		seen[key] = true
+		if writeAt, dirty := m.dirty[key]; dirty && msg.FetchStartedAt.Before(writeAt) {
+			if old, ok := oldByKey[key]; ok {
+				result = append(result, old)
+				continue
+			}
+		}
+		result = append(result, mr)
+	}
+	// A dirty-and-stale key can be absent from the landing snapshot entirely
+	// (e.g. a concurrent phase-1 hiccup) — keep the local entry rather than
+	// silently dropping it.
+	for key, writeAt := range m.dirty {
+		if seen[key] || !msg.FetchStartedAt.Before(writeAt) {
+			continue
+		}
+		if old, ok := oldByKey[key]; ok {
+			result = append(result, old)
+		}
+	}
+	return result
+}
+
+// clearResolvedDirty drops every dirty entry confirmed by msg — one whose
+// fetch started at or after the write landed, so its value in msg.MRs (or
+// its absence, if the MR left the listing) reflects that write.
+func (m *Model) clearResolvedDirty(msg FetchResultMsg) {
+	for key, writeAt := range m.dirty {
+		if !msg.FetchStartedAt.Before(writeAt) {
+			delete(m.dirty, key)
+		}
 	}
 }
 
@@ -495,9 +650,11 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FetchResultMsg:
 		m.state = stateBoard
 		m.isRefreshing = false
-		m.allMRs = msg.MRs
+		m.allMRs = m.applyFetchResult(msg)
+		m.clearResolvedDirty(msg)
 		m.errors = msg.Errors
-		m.reviewerMRsInStore = hasReviewerSourceMR(msg.MRs)
+		m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
+		m.saveSnapshot()
 		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
 		for _, e := range msg.Errors {
 			m.logger.Warn("tui: fetch partial error", "error", e)
@@ -505,7 +662,15 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyTheme()
 		m.applyMRFilter()
 		m.updateTicketKey()
-		return m, tea.Batch(m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds())
+		cmds := []tea.Cmd{m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds()}
+		if len(m.dirty) > 0 {
+			// Landing snapshot was stale relative to one or more local writes;
+			// issue an immediate targeted refetch instead of waiting for the
+			// next refresh tick (docs/adr/0005).
+			m.isRefreshing = true
+			cmds = append(cmds, m.startFetch())
+		}
+		return m, tea.Batch(cmds...)
 
 	case FetchErrMsg:
 		m.isRefreshing = false
@@ -570,6 +735,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tickCmd()
 
+	case refreshTickMsg:
+		return m.handleRefreshTick(msg)
+
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
@@ -588,7 +756,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 // help modal can never drift out of sync with the actual focus.
 func (m Model) baseStack() []*Context {
 	stack := []*Context{BaseCtx}
-	if m.state != stateBoard || m.isRefreshing {
+	if m.state != stateBoard {
 		return stack
 	}
 	switch m.overlay.active() {
@@ -646,7 +814,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.state != stateBoard || m.isRefreshing {
+	if m.state != stateBoard {
 		return m, nil
 	}
 
@@ -728,12 +896,18 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showDetail {
 			m.closeDetail()
 		}
+		// Bump refreshGen so any auto-refresh tick already scheduled under the
+		// old generation is dropped on arrival instead of firing early, then
+		// install a fresh schedule — this is what "manual refresh resets the
+		// timer" means (docs/adr/0005, "Refresh cadence").
+		m.refreshGen++
+		resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
-			return m, tea.Batch(m.sp.Init(), m.startFetch())
+			return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch())
 		}
 		m.state = stateLoading
-		return m, tea.Batch(m.sp.Init(), m.startFetch())
+		return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch())
 	case m.keys.Sort.Match(msg):
 		m.sortField, m.sortDesc = advanceSort(m.sortField, m.sortDesc)
 		m.header.SetSort(sortLabel(m.sortField, m.sortDesc))
@@ -1027,10 +1201,6 @@ func (m Model) renderScreen() string {
 			return m.renderDiffScreen()
 		}
 		board := m.renderBoard()
-		if m.isRefreshing {
-			spinner := m.styles.PopupBorder.Render(m.sp.spinner.View() + " Loading…")
-			return m.renderWithOverlay(board, spinner)
-		}
 		switch m.overlay.active() {
 		case overlayKindSettings:
 			return m.renderWithOverlay(board, m.settings.render())
@@ -1049,6 +1219,7 @@ func (m Model) renderScreen() string {
 }
 
 func (m Model) renderBoard() string {
+	m.header.SetSnapshotAge(m.snapshotWrittenAt, m.isRefreshing, m.sp.spinner.View())
 	headerStr := m.header.render()
 	footerStr := m.footer.render(m.contextStack())
 	boardH := m.height - chromeHeight
@@ -1130,6 +1301,7 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 			break
 		}
 	}
+	m.dirty[updatedMR.Key()] = time.Now()
 	m.applyMRFilter()
 	m.updateTicketKey()
 
@@ -1429,9 +1601,14 @@ func makeTicketDescriptionLinkCmd(
 
 // handleTicketDescriptionLinkResult surfaces write failures as toast alerts;
 // successes are silent. On error the dedup claim is released so the next
-// refresh retries.
+// refresh retries. A successful write marks the MR dirty so a landing
+// snapshot started before this write completed doesn't undo it — mostly
+// moot today since the write only touches GitLab's stored description (not
+// a field allMRs carries), but it keeps the guard's write-path coverage
+// complete per docs/adr/0005 and forces a fresh phase-2 fetch for the MR.
 func (m Model) handleTicketDescriptionLinkResult(msg TicketDescriptionLinkResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err == nil {
+		m.dirty[domain.MRKey{ProjectID: msg.ProjectID, IID: msg.MRIID}] = time.Now()
 		return m, nil
 	}
 	delete(m.ticketDescLinked, ticketDescLinkKey{projectID: msg.ProjectID, mrIID: msg.MRIID})
@@ -1550,6 +1727,16 @@ func (m *Model) saveState() {
 		IncludeReviewerMRs: m.includeReviewerMRs,
 	}); err != nil {
 		m.logger.Error("statestore: save failed", "err", err)
+	}
+}
+
+// saveSnapshot persists the current board data and stamps the age shown in the
+// header (docs/adr/0005, "Non-blocking refresh"). Called on every successful
+// fetch swap, not just at boot.
+func (m *Model) saveSnapshot() {
+	m.snapshotWrittenAt = time.Now()
+	if err := m.snapshotStore.Save(m.allMRs); err != nil {
+		m.logger.Error("snapshotstore: save failed", "err", err)
 	}
 }
 

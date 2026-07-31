@@ -1,0 +1,294 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.6
+- **Task Title**: tui: ungate the board, boot from cache, header snapshot age
+- **Description**: ## Scope
+
+The responsiveness half of the epic. The board must be interactive at all times.
+
+- Remove the isRefreshing gates: baseStack() currently collapses to BaseCtx only (model.go ~595),
+  handleKe...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T14:01:28.904Z
+- **Ended At**: 2026-07-31T14:14:53.070Z
+- **Duration**: 13m 24s
+- **Input Tokens**: 688
+- **Output Tokens**: 57804
+- **Total Tokens**: 58492
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context from memory and checking the current state of the bead and relevant code.
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.6 --format toon 2>&1 | head -50
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary,mcp__plugin_engram_engram__mem_current_project[0m
+[94m[Bash][0m $ git status --short && echo "---DIFF STAT---" && git diff --stat
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mmrr-incremental-fetch-3sl.6 ungate board header snapshot age[0m
+[94m[Bash][0m $ wc -l internal/tui/model.go
+No prior work found on this specific bead. Let me look at the actual code around the areas the bead description points to.
+[94m[Bash][0m $ rg -n "isRefreshing|stateLoading|baseStack|snapshot" internal/tui/model.go | head -80
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ rg -n "SnapshotStore" -g'*.go' /Users/moncefnaji/code/github.com/mrboard --no-heading | grep -v _tes...
+Good — SnapshotStore exists in core but isn't wired into the TUI Model yet. Let me look at the rest: View function, headerWidget, core.go, and cmd wiring that constructs the Model.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Bash][0m $ \fd -e go header /Users/moncefnaji/code/github.com/mrboard/internal/tui | grep -v _test
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Core is fully wired. Now let's see the header widget and where `tui.New(...)` is called (CLI wiring) so I know the full signature to change.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m
+[94m[Bash][0m $ rg -n "tui.New\(" -g'*.go' /Users/moncefnaji/code/github.com/mrboard
+[94m[Bash][0m $ rg -n "func.*[Aa]ge|humaniz|ago\"" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui |...
+[94m[Bash][0m $ rg -n "time.Since|Duration|Hours\(\)|Minutes\(\)" -g'*.go' /Users/moncefnaji/code/github.com/mrboard...
+[94m[Bash][0m $ rg -n "func FormatDuration" -A 25 /Users/moncefnaji/code/github.com/mrboard/internal/domain/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m $ rg -n "Header|Spinner" /Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go
+[94m[Bash][0m $ rg -n "spinnerWidget|newSpinnerWidget" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/internal/t...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/spinner.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go[0m
+[94m[Bash][0m $ rg -n "isRefreshing|tui\.New\(|newTestModel|func New\(" -g'*_test.go' /Users/moncefnaji/code/github....
+[94m[Bash][0m $ rg -n "Model{" -g'*_test.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui | head -20
+[94m[Bash][0m $ rg -n 'Model\{' -g'*_test.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui | head -20
+[94m[Bash][0m $ rg -n "func newTestModel|func testModel|func buildModel" -g'*.go' /Users/moncefnaji/code/github.com/...
+[94m[Bash][0m $ \fd -e go '_test.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui | \fd .
+[94m[Bash][0m $ rg -n "^func Test.*[Bb]ase[Ss]tack|^func Test.*[Hh]andle[Kk]ey|^func Test.*[Rr]efresh" -g'*_test.go'...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m $ rg -n "Non-blocking refresh|## " /Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[Bash][0m $ rg -n "type FetchOptions" -A 15 /Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mr...
+[94m[Bash][0m $ br list --status=open --format toon 2>&1 | rg -i "mrr-incremental"
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.9 --format toon 2>&1 | head -30
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.8 --format toon 2>&1 | head -20
+[94m[Bash][0m $ rg -n "func (m \*Model) applyMRFilter|func (m \*Model) applyTheme|func (m \*Model) resizeBoard|func ...
+[94m[Bash][0m $ rg -rn "func (m \*Model) applyMRFilter|func (m \*Model) applyTheme|func (m \*Model) resizeBoard" /Us...
+[94m[Bash][0m $ rg -n "applyMRFilter|applyTheme|resizeBoard" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/inte...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ rg -n "func (m Model) renderBoard|header.View\(\)|m.header\." -g'*.go' /Users/moncefnaji/code/github...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ rg -n "time.Now\(\)|func.*render\(" /Users/moncefnaji/code/github.com/mrboard/internal/tui/card.go /...
+[94m[Bash][0m $ rg -n "func (m \*Model) saveState|m.store.Save|m.saveState()" -g'*.go' /Users/moncefnaji/code/github...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m $ rg -n "func.*Load\(\)" -A 25 /Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotsto...
+[94m[Bash][0m $ rg -n "= New\(context" -g'*_test.go' /Users/moncefnaji/code/github.com/mrboard
+[94m[Bash][0m $ rg -n "= New\(" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui /Users/moncefnaji/co...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+Now let's check `board_test.go` for `boardWidget.SetMRs` test coverage conventions, and look at `header_test.go` if it exists (it doesn't per the file listing) — I'll need to create tests for header age logic. Let's check styles.go around Header area fully and check `config.Config` for cfg used by New (unrelated). Let's now begin implementation.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now I have enough context. Let's implement. Starting with `internal/domain/state.go` doc (no change needed), then `core.go`/`board.go` wiring, then `model.go`, then `header.go`, then tests.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "		tui.New(ctx, c.Config, c.MRSource, c.StateStore,..." → "		tui.New(ctx, c.Config, c.MRSource, c.StateStore,..."
+Now let's update the Model struct and `New()` function.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	fetchCancel        context.CancelFunc
+	baseCtx   ..." → "	fetchCancel        context.CancelFunc
+	baseCtx   ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func New(
+	ctx context.Context,
+	cfg *config.Confi..." → "func New(
+	ctx context.Context,
+	cfg *config.Confi..."
+Now update the struct literal and add the boot-from-cache logic at the end of `New()`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		baseCtx:            ctx,
+		logger:             l..." → "		baseCtx:            ctx,
+		logger:             l..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	m.header.SetSort(sortLabel(sf, st.SortDesc))
+	log..." → "	m.header.SetSort(sortLabel(sf, st.SortDesc))
+
+	//..."
+Now update `Init()`, `makeFetchCmd`, and `startFetch` to wire `Previous` into fetch options:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	return tea.Batch(
+		m.sp.Init(),
+		makeFetchCmd(m..." → "	return tea.Batch(
+		m.sp.Init(),
+		makeFetchCmd(m..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	m.fetchCancel = cancel
+	src := m.src
+	includeRevi..." → "	m.fetchCancel = cancel
+	src := m.src
+	includeRevi..."
+Now update `FetchResultMsg` handling to save the snapshot and stamp the age:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FetchResultMsg:
+		m.state = stateBoard
+		m.i..." → "	case FetchResultMsg:
+		m.state = stateBoard
+		m.i..."
+Now add the `saveSnapshot` helper next to `saveState`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		IncludeReviewerMRs: m.includeReviewerMRs,
+	}); e..." → "		IncludeReviewerMRs: m.includeReviewerMRs,
+	}); e..."
+Now remove the `isRefreshing` gates from `baseStack()`, `handleKey()`, and the full-board spinner overlay in `renderScreen()`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m Model) baseStack() []*Context {
+	stack := ..." → "func (m Model) baseStack() []*Context {
+	stack := ..."
+[94m[Bash][0m $ rg -n "isRefreshing" /Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	if m.state != stateBoard || m.isRefreshing {
+		re..." → "	if m.state != stateBoard {
+		return m, nil
+	}"
+Now remove the full-board spinner overlay in `renderScreen()` (around line 1058) and wire in the header's age/spinner display in `renderBoard()`.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		board := m.renderBoard()
+		if m.isRefreshing {
+	..." → "		board := m.renderBoard()
+		switch m.overlay.acti..."
+[94m[Bash][0m $ rg -n "PopupBorder" -g'*.go' /Users/moncefnaji/code/github.com/mrboard
+Good, still used elsewhere. Now let's check `renderWithOverlay` is still used elsewhere (it is, for Settings/ReviewerEditor/BatchPreview/help modal overlays), so no dead code there. Now update `renderBoard()` to feed the header the age/spinner state.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func (m Model) renderBoard() string {
+	headerStr :..." → "func (m Model) renderBoard() string {
+	m.header.Se..."
+Now let's update `header.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m edit: "import (
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbl..." → "import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.la..."
+Now let's wire `ageLabel()` into `render()`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header.go[0m edit: "	statsStr := fmt.Sprintf("Total:%d", len(h.mrs))
+	..." → "	statsStr := fmt.Sprintf("Total:%d", len(h.mrs))
+	..."
+Now update the test files to add `noopSnapshotStore` and adjust `New()` call sites.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "import (
+	"context"
+	"errors"
+	"testing"
+
+	tea "ch..." → "import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+..."
+Now update the `New(...)` call sites (5 across model_test.go, command_exec_test.go, notify_test.go):
+[94m[Bash][0m $ \   sed -i '' 's/New(context.Background(), cfg, src, noopStore{}, nil, nil, nil, "dev", Options{})/N...
+All 5 call sites updated correctly. Now let's check for other `New(` call sites I may have missed (e.g., board_test.go, approver_editor_test.go) and grep broadly across the whole repo for safety.
+[94m[Bash][0m $ rg -n "tui\.New\(|(?<![a-zA-Z])New\(context\.Background" -g'*.go' /Users/moncefnaji/code/github.com/...
+All call sites updated. Now let's build to catch any compile errors.
+[94m[Bash][0m $ go build ./... 2>&1 | head -80
+Build passes. Let's run the tests for the `tui` package specifically.
+[94m[Bash][0m $ go test ./internal/tui/... 2>&1 | tail -100
+[94m[Bash][0m $ rg -n "var BaseCtx|var BoardCtx|var DetailCtx|type Context struct|func .*binds\(" -g'*.go' /Users/mo...
+[94m[Bash][0m $ rg -n "type Context struct" -A 15 /Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go
+[94m[Bash][0m $ rg -n "type Context struct" -A 20 -g'*.go' /Users/moncefnaji/code/github.com/mrboard/internal/tui
+[94m[Bash][0m $ rg -n "func (c \*Context)|func (c Context)" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/inter...
+[94m[Bash][0m $ rg -n "baseStack\(\)|contextStack\(\)|\.name\b" -g'*_test.go' /Users/moncefnaji/code/github.com/mrbo...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m edit: "// export_test.go exposes internal Model state for..." → "// export_test.go exposes internal Model state for..."
+Now let's write tests for the ungating behavior and boot-from-cache logic in a new file:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m "package tui
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	mock "github.com/stretchr/testify/mock... (3817 chars)"
+[94m[Bash][0m $ rg -n "Down:|Up:|NewBinding" -A 3 /Users/moncefnaji/code/github.com/mrboard/internal/tui/keys.go | r...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m edit: "	tea "charm.land/bubbletea/v2"
+	"github.com/stretc..." → "	tea "charm.land/bubbletea/v2"
+	"github.com/stretc..."
+Now let's write a `header_test.go` for the age-label logic:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/header_test.go[0m "package tui
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestHeaderWidget_AgeLabel_ZeroWrittenAt_IsEmpty(t *testing.T) {
+	h := newHeaderWidget(NewStyles(LoadThemeByName(... (1647 chars)"
+[94m[Bash][0m $ rg -n "func LoadThemeByName|func NewStyles" -g'*.go' /Users/moncefnaji/code/github.com/mrboard/inter...
+Good, signatures match. Now let's format and run the full test suite plus `just check`.
+[94m[Bash][0m $ gofmt -l -w internal/tui/export_test.go internal/tui/refresh_test.go internal/tui/header_test.go int...
+Now let's run the full test suite and vet/lint.
+[94m[Bash][0m $ go build ./... 2>&1 | head -60
+[94m[Bash][0m $ go test ./internal/tui/... -run 'TestModel_BaseStack|TestModel_HandleKey_Moves|TestNew_|TestModel_Fe...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m edit: "	stack := m.BaseStack()
+
+	require.NotEmpty(t, stac..." → "	stack := m.BaseStack()
+
+	require.Len(t, stack, 3,..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m edit: "	stack := m.BaseStack()
+	require.NotEmpty(t, stack..." → "	stack := m.BaseStack()
+	require.Len(t, stack, 3, ..."
+[94m[Bash][0m $ go test ./internal/tui/... -run 'TestModel_BaseStack|TestModel_HandleKey_Moves|TestNew_|TestModel_Fe...
+All new tests pass. Now let's run the full `just check`.
+[94m[Bash][0m $ just check 2>&1 | tail -150
+Line-length lint failures — let's wrap these across two lines.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m edit: "	_, err := tea.NewProgram(
+		tui.New(ctx, c.Config..." → "	_, err := tea.NewProgram(
+		tui.New(ctx, c.Config..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	m := New(context.Background(), &config.Config{}, ..." → "	m := New(context.Background(), &config.Config{}, ..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/notify_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/notify_test.go[0m edit: "	m := New(context.Background(), &config.Config{}, ..." → "	m := New(context.Background(), &config.Config{}, ..."
+Now let's re-run `just check`.
+[94m[Bash][0m $ just check 2>&1 | tail -150
+`just check` passed fully. Let's confirm the exit code and full summary at the top to make sure there wasn't a build/lint failure earlier in the pipeline that got scrolled past.
+[94m[Bash][0m $ rg -n "^---|FAIL|error:|issues:" /tmp/check.log | head -40
+Exit code 0, all green. Now let's do the mandatory agent-tui verification gate. Let's check for existing warm cache/config to test against.
+[94m[Bash][0m $ ls ~/.config/mrboard/ 2>&1
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+Cold start correctly shows the loading spinner (no cache exists yet). Let's wait for the first fetch to land.
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+The board recovered from cold state and the header shows "just now" — cold-boot gate passed. Let's kill this session and relaunch to test the warm-cache boot path.
+[94m[Bash][0m $ ls -la ~/.cache/mrboard/ 2>&1
+Snapshot was saved. Now let's relaunch immediately and screenshot instantly to confirm the warm-boot path shows the board with an age label instead of a spinner.
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+[94m[Bash][0m $ agent-tui kill 2>&1
+[94m[Bash][0m $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1 && agent-tui press A...
+Excellent — this proves it: the header shows the spinner (`⣽`) alongside `< 1m ago` while the fetch is in flight, arrow-key navigation moved the selection, and Enter opened the detail panel — all while `isRefreshing` was true. Let's close the detail panel and wait for the swap to confirm the label flips.
+[94m[Bash][0m $ agent-tui screenshot 2>&1
+The label flipped from `⣽ < 1m ago` to `just now` — the swap landed and the spinner disappeared. All acceptance criteria are verified. Let's clean up the session.
+[94m[Bash][0m $ agent-tui kill 2>&1
+[94m[Bash][0m $ br close mrr-incremental-fetch-3sl.6 --reason "Ungated the board (baseStack/handleKey/View no longer...
+[94m[Bash][0m $ git status --short .beads/
+Good, the JSONL was already flushed (the "nothing to export" just meant it happened automatically on close). Now let's update `progress.md`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "- New JSON/YAML-backed persistence adapters (state..." → "- A ralph-tui bead can also be the FIRST one in a ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "    an agent-tui gate needs to prove "the same ite..." → "    an agent-tui gate needs to prove "the same ite..."
+Now let's save the engram memory decision and session summary as required by the project's protocol.
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-incremental-fetch-3sl.6 (epic mrr-incremental-fetch-3sl, docs/adr/0005 "Non-blocking refresh"). Unlike .3/.4/.5, this had no prior uncommitted work — full implementation this sess... (2323 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.6 (child of epic mrr-incremental-fetch-3sl, docs/adr/0005): ungate the TUI board so every keybinding works during a refresh, boot instantly from the cached ... (4927 chars)"
+[94m[Bash][0m $ git status --short
+Everything is in order — implementation, tests, and untracked files are all as expected (per-task auto-commit, not mine to commit). The bead is closed and synced.
+
+## Summary
+
+**mrr-incremental-fetch-3sl.6** is implemented and closed. Unlike the previous tickets in this chain, this one had no prior work sitting in the tree — it required building the whole feature:
+
+- **Ungated the board**: removed `isRefreshing` from `baseStack()`/`handleKey()` guards and deleted the full-board spinner overlay from `View`. Every keybinding now works during a refresh.
+- **Boot from cache**: `tui.New()` now loads the snapshot via a new `snapStore domain.SnapshotStore` parameter — a warm cache renders the board immediately (any age), a cold cache still shows `stateLoading`.
+- **Header age indicator**: spinner + `"14m ago"` collapsing to `"just now"`, backed by a new `headerWidget.SetSnapshotAge`/`ageLabel()`.
+- **Closed a real gap**: neither fetch call site was ever passing `Previous` into `mrsvc.FetchOptions`, so the two-phase adapter built in earlier tickets was dead code from the TUI's side — now wired through `Init` and manual refresh, which is what actually makes refreshes fast enough for this feature to matter.
+- **Snapshot save-on-swap**: `saveSnapshot()` persists on every successful fetch.
+
+`just check` passes, new unit tests cover the ungating and boot logic, and the mandatory agent-tui gate confirmed all three required scenarios live against the real GitLab-backed binary: cold boot, warm boot with visible spinner+age during an in-flight fetch, arrow-key navigation working mid-fetch, and the label flipping after the swap.
+
+Next up in the epic: `.7` (dirty-set guard) and `.8` (auto-refresh timer), both now unblocked.

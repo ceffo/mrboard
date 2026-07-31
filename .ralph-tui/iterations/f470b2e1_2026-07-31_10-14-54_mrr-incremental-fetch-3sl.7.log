@@ -1,0 +1,151 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.7
+- **Task Title**: tui: dirty-set guard so a stale snapshot cannot revert a local write
+- **Description**: ## Scope
+
+Closes a race that ungating the board creates. Not reachable today only because the keyboard is dead
+during a refresh: press R at T+0, save reviewers at T+2, and the snapshot that started at...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T14:14:54.215Z
+- **Ended At**: 2026-07-31T14:25:51.544Z
+- **Duration**: 10m 57s
+- **Input Tokens**: 378
+- **Output Tokens**: 53669
+- **Total Tokens**: 54047
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking memory context and the current progress file to understand where this epic stands.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search,mcp__plugin_engram_engram__mem_context[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_search][0m query: [93mdirty set guard stale snapshot write race[0m
+[94m[Bash][0m Check working tree status and diff stats $ git status --short && echo --- && git diff --stat
+[94m[Bash][0m Show ADR section on the write race $ rg -n "write race that ungating creates" -A 60 docs/adr/0005-incremental-fetch-and-selection-identit...
+[94m[Bash][0m Check file sizes $ wc -l internal/tui/model.go internal/tui/header.go internal/tui/refresh_test.go
+[94m[Bash][0m Find key symbols in model.go $ rg -n "handleReviewersSaved|SaveApprovers|ForceStale|fetchStartedAt|FetchResultMsg|makeFetchCmd|star...
+[94m[Bash][0m Find SaveApprovers definition and full handler $ rg -n "SaveApprovers|func.*handleTicketDescriptionLinkResult" internal/tui/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/approver_editor.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Trace batch reviewer editor write path $ rg -n "BatchReviewerEditorPreviewMsg|handleBatchEditorPreview|BatchSaved|batchReviewer|ApplyReviewer...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Show MergeRequest struct fields $ rg -n "type MergeRequest struct" -A 60 internal/domain/*.go | head -80
+[94m[Bash][0m Find where Description field is set $ rg -n "\.Description" internal/adapters/gitlabadpt/*.go internal/tui/model.go | grep -v _test
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Find ForceStale field and usage $ rg -n "ForceStale" internal -g '*.go' | grep -v _test
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Bash][0m Check MRKey type and Key() method existence $ rg -n "func.*MergeRequest.*Key\(\)|type MRKey struct" internal/domain/*.go
+Good, `domain.MergeRequest.Key()` already exists. Now let me look at the rest of `coreUpdate`'s `FetchResultMsg` case in full, plus `saveSnapshot`, `startFetch` call sites, and how `dirtyKeys` would be derived, to write a coherent diff.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me check the three other `startFetch()` call sites and `saveSnapshot`/lines near 1580-1613 end of file.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+Good, that confirms the field names. Now let's implement all the edits.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// FetchResultMsg carries the result of a successf..." → "// FetchResultMsg carries the result of a successf..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	ticketIndex        map[string][]domain.MergeReque..." → "	ticketIndex        map[string][]domain.MergeReque..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		ticketDescLinked:   make(map[ticketDescLinkKey]b..." → "		ticketDescLinked:   make(map[ticketDescLinkKey]b..."
+Now let's update `makeFetchCmd` and `startFetch`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "func makeFetchCmd(base context.Context, src mrsvc...." → "func makeFetchCmd(base context.Context, src mrsvc...."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// startFetch builds a fetch Cmd and stores its ca..." → "// startFetch builds a fetch Cmd and stores its ca..."
+Now the `FetchResultMsg` case in `coreUpdate`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	case FetchResultMsg:
+		m.state = stateBoard
+		m.i..." → "	case FetchResultMsg:
+		m.state = stateBoard
+		m.i..."
+Now add the `applyFetchResult` and `clearResolvedDirty` methods, near the fetch helpers. Let's place them right after `dirtyKeys`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// dirtyKeys returns the keys of dirty as a slice,..." → "// dirtyKeys returns the keys of dirty as a slice,..."
+Now let's mark dirty in `handleReviewersSaved` and `handleTicketDescriptionLinkResult`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	updatedMR := msg.MR
+	for i, mr := range m.allMRs ..." → "	updatedMR := msg.MR
+	for i, mr := range m.allMRs ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// handleTicketDescriptionLinkResult surfaces writ..." → "// handleTicketDescriptionLinkResult surfaces writ..."
+[94m[Bash][0m Build the project to check for compile errors $ go build ./... 2>&1 | head -100
+Build passes. Now let's check existing test files that construct `FetchResultMsg` or rely on `Model.dirty`/`applyFetchResult`, and check `refresh_test.go` for anything I need to be consistent with.
+[94m[Bash][0m Find test call sites constructing FetchResultMsg $ rg -n "FetchResultMsg{" internal/tui/*_test.go
+
+[91m[Error: Exit code 2
+rg: regex parse error:
+    (?:FetchResultMsg{)
+                      ^
+error: repetition quantifier expects a valid decimal][0m
+[94m[Bash][0m Find test call sites constructing FetchResultMsg $ rg -n "FetchResultMsg\{" internal/tui/*_test.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m
+[94m[Bash][0m Find test helpers makeModel/someMRs/noop stores $ rg -n "func makeModel|func someMRs|func noopStore|func noopSnapshotStore|type noopStore|type noopSna...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Bash][0m Look for existing patterns of executing batched tea.Cmd in tests $ rg -n "tea.Batch|BatchMsg|func flattenCmd|execCmd" internal/tui/*_test.go | head -40
+There's already a `runCmd` helper for exactly this. Let's view it.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/notify_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m Check mock FetchAll signature $ rg -n "func.*FetchAll" internal/domain/service/mrsvc/mocks/*.go | head -5
+Now let's add the `Dirty()` accessor and write the dirty-set guard test file.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m edit: "func (m Model) SnapshotWrittenAt() time.Time  { re..." → "func (m Model) SnapshotWrittenAt() time.Time  { re..."
+[94m[Bash][0m Check ReviewerState constants $ grep -n "ReviewerApproved\|ReviewerNotStarted\|type ReviewerState" internal/domain/mr.go | head -10
+Now let's write the test file.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m "package tui
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/i... (4408 chars)"
+[94m[Bash][0m Locate bubbletea v2 commands.go source $ find / -path "*/charm.land/bubbletea*/commands.go" 2>/dev/null | head -5
+[94m[Bash][0m Show Batch implementation $ grep -n "func Batch" -A 20 /Users/moncefnaji/go/pkg/mod/charm.land/bubbletea/v2@v2.0.7/commands.go
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "func TestFetchResultMsg_DirtyGuard_PreservesLocalW..." → "func TestFetchResultMsg_DirtyGuard_PreservesLocalW..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "func TestFetchResultMsg_DirtyGuard_ClearsWhenConfi..." → "func TestFetchResultMsg_DirtyGuard_ClearsWhenConfi..."
+Now let's build and run these tests.
+[94m[Bash][0m Build and run the new dirty-guard tests $ go build ./... && go test ./internal/tui/... -run TestFetchResultMsg_DirtyGuard -v 2>&1 | tail -80
+Both new tests pass. Now let's run the full test suite for the `tui` package and then the full `just check`.
+[94m[Bash][0m Run full test suite $ go test ./... 2>&1 | tail -60
+All tests pass. Now let's run `just check` for the full quality gate (fmt, lint, build, test).
+[94m[Bash][0m Run project quality gate: fmt, lint, build, test $ just check 2>&1 | tail -150
+[94m[Bash][0m Find existing goconst-avoidance constants for alice/bob $ rg -n "editorTestApprover|editorTestOther" internal/tui/*.go
+Let's use these existing constants in `dirty_test.go` and also fix `model_test.go`'s `someMRs()` since it's now flagged too (per the documented package-wide goconst pattern).
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "func someMRs() []domain.MergeRequest {
+	return []d..." → "func someMRs() []domain.MergeRequest {
+	return []d..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "func dirtyGuardMR() domain.MergeRequest {
+	return ..." → "func dirtyGuardMR() domain.MergeRequest {
+	return ..."
+Now fix the two `bob`/`Reviewers` update lines using `editorTestOther`, and the `lll` line-length issues.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "	updated.Reviewers = []domain.ReviewerInfo{{Userna..." → "	updated.Reviewers = []domain.ReviewerInfo{{Userna..."
+Now let's fix the two `New(...)` lines exceeding 120 chars, and the `dirty` struct field comment line in `model.go`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "	m := New(context.Background(), &config.Config{}, ..." → "	m := New(context.Background(), &config.Config{}, ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	dirty              map[domain.MRKey]time.Time    ..." → "	dirty              map[domain.MRKey]time.Time    ..."
+[94m[Bash][0m Re-run full quality gate $ just check 2>&1 | tail -150
+Almost there. Let's wrap those two lines.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/dirty_test.go[0m edit: "	updated.Reviewers = []domain.ReviewerInfo{{Userna..." → "	updated.Reviewers = []domain.ReviewerInfo{
+		{Use..."
+[94m[Bash][0m Re-run full quality gate $ just check 2>&1 | tail -150
+`just check` passes fully — fmt, lint, build, and every test package green. Now the mandatory agent-tui gate: press R, immediately open the reviewer editor and save, and confirm no revert flicker.
+[94m[Bash][0m Confirm run-tui script exists and rebuild binary $ ls scripts/run-tui.sh 2>&1 && just build 2>&1 | tail -20
+[94m[Bash][0m Launch mrboard TUI via agent-tui $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for TUI to stabilize and take initial screenshot $ agent-tui wait --stable 2>&1 && agent-tui screenshot 2>&1
+[94m[Bash][0m Find the keybinding to open the reviewer editor $ rg -n "ReviewerEditor|OpenReviewer|EditReviewers" internal/tui/keys.go | head -20
+[94m[Bash][0m Find board-context key that opens reviewer editor overlay $ rg -n "^\s*Reviewers\b|Reviewers:.*NewBinding\|Act\(" internal/tui/keys.go | head -20
+I've got the board loaded against what appears to be the real `gl.nsesi.io` GitLab instance (same as previous sessions' gates). Before I proceed with this gate, I want to flag something: the acceptance criteria calls for actually opening the reviewer editor and pressing save, which would fire a real `SetReviewers`/`SaveApprovers` write against a live MR — and if it changes the approver set, it could also trigger a Teams notification. That's a real, visible side effect on shared infrastructure, not something reversible by me.
+
+Before I do that against a live MR, can you confirm:
+1. It's OK to toggle-and-revert an approver flag on one of your own MRs (e.g. `!534 boris-od-workflow`, one of yours) as a save round-trip for this test, and
+2. You're OK with the resulting `SetReviewers` API call (a same-value write, idempotent) actually hitting `gl.nsesi.io`.
+
+If you'd rather I not touch real MR data, let me know and I'll verify the race purely via the unit tests I already wrote (which reproduce the exact scenario deterministically) and skip the live-write portion of the agent-tui gate, noting that limitation.
