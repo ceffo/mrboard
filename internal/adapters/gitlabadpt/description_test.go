@@ -98,9 +98,9 @@ func (f *fakeDescriptionClient) GetMRDiffRefs(_ context.Context, _, _ int64) (st
 	panic("not implemented")
 }
 
-func (f *fakeDescriptionClient) FetchMRDiscussionsGraphQL(
-	_ context.Context, _, _ string,
-) ([]pkggitlab.GQLDiscussion, bool, error) {
+func (f *fakeDescriptionClient) FetchMRsDiscussionsGraphQL(
+	_ context.Context, _ []pkggitlab.MRDiscussionsRequest,
+) ([]pkggitlab.MRDiscussionsResult, error) {
 	panic("not implemented")
 }
 

@@ -31,9 +31,10 @@ type MREnricher interface {
 	GetMRDiffs(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestDiff, error)
 	GetMRDiffRefs(ctx context.Context, projectID, mrIID int64) (baseSHA, headSHA string, err error)
 	GetRawFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error)
-	// FetchMRDiscussionsGraphQL completes a phase-1 thin MR with its discussions,
-	// the one field the thin listing query omits.
-	FetchMRDiscussionsGraphQL(ctx context.Context, projectFullPath, iid string) ([]GQLDiscussion, bool, error)
+	// FetchMRsDiscussionsGraphQL completes N phase-1 thin MRs with their
+	// discussions — the one field the thin listing query omits — in a single
+	// aliased GraphQL request (phase 2, docs/adr/0005).
+	FetchMRsDiscussionsGraphQL(ctx context.Context, reqs []MRDiscussionsRequest) ([]MRDiscussionsResult, error)
 }
 
 // MRWriter covers mutations: writing approval rules, reviewer lists, and fetching editable project members.

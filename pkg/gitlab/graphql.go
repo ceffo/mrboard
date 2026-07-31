@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	ilog "github.com/ceffo/mrboard/internal/log"
@@ -449,15 +450,22 @@ func (c *Client) doGQLRequest(ctx context.Context, query, username, label string
 	return respBody, nil
 }
 
-// gqlMRDiscussionsQuery fetches only the discussions block for a single MR,
-// identified by project full path and IID. Used to enrich a phase-1 thin result
-// after early dedup, one MR at a time (see docs/adr/0005, "Two-phase conditional
-// fetch" — phase 2's aliased multi-MR variant of this query is a separate ticket).
-const gqlMRDiscussionsQuery = `
-query($fullPath: ID!, $iid: String!) {
-  project(fullPath: $fullPath) {
-    mergeRequest(iid: $iid) {
-      discussions(first: 100) {
+// MRDiscussionsRequest identifies one MR within an aliased batch discussions query.
+type MRDiscussionsRequest struct {
+	ProjectFullPath string
+	IID             string
+}
+
+// MRDiscussionsResult is one MR's discussions payload from an aliased batch
+// query. A zero value means GitLab reported the MR as not found at that index.
+type MRDiscussionsResult struct {
+	Discussions []GQLDiscussion
+	HasNextPage bool
+}
+
+// mrDiscussionsFields is the discussions selection set shared by every aliased
+// entry in buildAliasedMRDiscussionsQuery.
+const mrDiscussionsFields = `discussions(first: 100) {
         pageInfo { hasNextPage }
         nodes {
           notes(first: 100) {
@@ -471,82 +479,131 @@ query($fullPath: ID!, $iid: String!) {
             }
           }
         }
-      }
-    }
-  }
-}`
+      }`
 
-type gqlMRDiscussionsResponse struct {
-	Data struct {
-		Project *struct {
-			MergeRequest *struct {
-				Discussions struct {
-					PageInfo struct {
-						HasNextPage bool `json:"hasNextPage"`
-					} `json:"pageInfo"`
-					Nodes []GQLDiscussion `json:"nodes"`
-				} `json:"discussions"`
-			} `json:"mergeRequest"`
-		} `json:"project"`
-	} `json:"data"`
-	Errors []gqlError `json:"errors"`
+// buildAliasedMRDiscussionsQuery builds a single GraphQL document fetching
+// discussions for n MRs in one round trip: mr0: project(fullPath: $p0) {
+// mergeRequest(iid: $i0) { discussions {...} } } mr1: ... — phase 2 of the
+// two-phase fetch (docs/adr/0005, "Two-phase conditional fetch"). Each MR gets
+// its own variable pair so project/IID values never need string-escaping into
+// the query text.
+func buildAliasedMRDiscussionsQuery(n int) string {
+	params := make([]string, n)
+	aliases := make([]string, n)
+	for i := 0; i < n; i++ {
+		params[i] = fmt.Sprintf("$p%d: ID!, $i%d: String!", i, i)
+		aliases[i] = fmt.Sprintf("  mr%d: project(fullPath: $p%d) {\n    mergeRequest(iid: $i%d) {\n      %s\n    }\n  }",
+			i, i, i, mrDiscussionsFields)
+	}
+	return fmt.Sprintf("query(%s) {\n%s\n}", strings.Join(params, ", "), strings.Join(aliases, "\n"))
 }
 
-// FetchMRDiscussionsGraphQL fetches the discussion threads for a single MR,
-// identified by project full path and IID. The bool return reports whether the
-// discussions connection has more pages (thread count may be incomplete).
-func (c *Client) FetchMRDiscussionsGraphQL(
-	ctx context.Context, projectFullPath, iid string,
-) ([]GQLDiscussion, bool, error) {
-	start := time.Now()
-	c.logger.Debug("gitlab: graphql MR discussions", "project", projectFullPath, "iid", iid)
+// gqlAliasedMRProject is the per-alias response shape for the aliased
+// discussions batch query — one project(fullPath:){mergeRequest(iid:){...}}.
+type gqlAliasedMRProject struct {
+	MergeRequest *struct {
+		Discussions struct {
+			PageInfo struct {
+				HasNextPage bool `json:"hasNextPage"`
+			} `json:"pageInfo"`
+			Nodes []GQLDiscussion `json:"nodes"`
+		} `json:"discussions"`
+	} `json:"mergeRequest"`
+}
 
+type gqlAliasedMRsResponse struct {
+	Data   map[string]*gqlAliasedMRProject `json:"data"`
+	Errors []gqlError                      `json:"errors"`
+}
+
+// FetchMRsDiscussionsGraphQL fetches discussions for len(reqs) MRs in a single
+// aliased GraphQL request instead of one request per MR (docs/adr/0005,
+// "Two-phase conditional fetch"). Results are aligned by index with reqs; an MR
+// GitLab reports as not found (deleted, moved, or access revoked since phase 1)
+// yields a zero-value result at its index rather than an error.
+func (c *Client) FetchMRsDiscussionsGraphQL(
+	ctx context.Context, reqs []MRDiscussionsRequest,
+) ([]MRDiscussionsResult, error) {
+	if len(reqs) == 0 {
+		return nil, nil
+	}
+	start := time.Now()
+	c.logger.Debug("gitlab: graphql aliased MR discussions", "count", len(reqs))
+
+	const varsPerMR = 2 // one project-path variable and one IID variable per aliased MR
+	query := buildAliasedMRDiscussionsQuery(len(reqs))
+	variables := make(map[string]interface{}, len(reqs)*varsPerMR)
+	for i, r := range reqs {
+		variables[fmt.Sprintf("p%d", i)] = r.ProjectFullPath
+		variables[fmt.Sprintf("i%d", i)] = r.IID
+	}
+
+	raw, err := c.doGQLGenericRequest(ctx, query, variables, "aliased MR discussions")
+	if err != nil {
+		return nil, err
+	}
+
+	var result gqlAliasedMRsResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("gitlab: graphql decode aliased MR discussions response: %w", err)
+	}
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("gitlab: graphql aliased MR discussions errors: %s", result.Errors[0].Message)
+	}
+
+	results := make([]MRDiscussionsResult, len(reqs))
+	for i, r := range reqs {
+		entry := result.Data[fmt.Sprintf("mr%d", i)]
+		if entry == nil || entry.MergeRequest == nil {
+			c.logger.Warn("gitlab: graphql aliased MR discussions: MR not found",
+				"project", r.ProjectFullPath, "iid", r.IID)
+			continue
+		}
+		results[i] = MRDiscussionsResult{
+			Discussions: entry.MergeRequest.Discussions.Nodes,
+			HasNextPage: entry.MergeRequest.Discussions.PageInfo.HasNextPage,
+		}
+	}
+	c.logger.Debug("gitlab: graphql aliased MR discussions done",
+		"count", len(reqs), "duration", ilog.FmtDur(time.Since(start)))
+	return results, nil
+}
+
+// doGQLGenericRequest posts an arbitrary GraphQL query+variables payload and
+// returns the raw response body. Unlike doGQLRequest, which always sends a
+// single "username" variable, this accepts any variable set — needed for the
+// aliased multi-MR discussions query, which has one variable pair per MR.
+func (c *Client) doGQLGenericRequest(
+	ctx context.Context, query string, variables map[string]interface{}, label string,
+) ([]byte, error) {
 	payload := struct {
 		Query     string                 `json:"query"`
 		Variables map[string]interface{} `json:"variables"`
-	}{
-		Query:     gqlMRDiscussionsQuery,
-		Variables: map[string]interface{}{"fullPath": projectFullPath, "iid": iid},
-	}
+	}{Query: query, Variables: variables}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, false, fmt.Errorf("gitlab: graphql marshal MR discussions request: %w", err)
+		return nil, fmt.Errorf("gitlab: graphql marshal %s: %w", label, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/api/graphql", bytes.NewReader(body))
 	if err != nil {
-		return nil, false, fmt.Errorf("gitlab: graphql build MR discussions request: %w", err)
+		return nil, fmt.Errorf("gitlab: graphql build %s: %w", label, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("PRIVATE-TOKEN", c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, false, fmt.Errorf("gitlab: graphql MR discussions request: %w", err)
+		return nil, fmt.Errorf("gitlab: graphql %s: %w", label, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, false, fmt.Errorf("gitlab: graphql MR discussions HTTP %d for project %q iid %q",
-			resp.StatusCode, projectFullPath, iid)
+		return nil, fmt.Errorf("gitlab: graphql %s HTTP %d", label, resp.StatusCode)
 	}
-
-	var result gqlMRDiscussionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, false, fmt.Errorf("gitlab: graphql decode MR discussions response: %w", err)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: graphql read %s response: %w", label, err)
 	}
-	if len(result.Errors) > 0 {
-		return nil, false, fmt.Errorf("gitlab: graphql MR discussions errors for project %q iid %q: %s",
-			projectFullPath, iid, result.Errors[0].Message)
-	}
-	if result.Data.Project == nil || result.Data.Project.MergeRequest == nil {
-		c.logger.Warn("gitlab: graphql MR discussions: MR not found", "project", projectFullPath, "iid", iid)
-		return nil, false, nil
-	}
-
-	discussions := result.Data.Project.MergeRequest.Discussions.Nodes
-	hasNextPage := result.Data.Project.MergeRequest.Discussions.PageInfo.HasNextPage
-	c.logger.Debug("gitlab: graphql MR discussions done", "project", projectFullPath, "iid", iid,
-		"discussions", len(discussions), "duration", ilog.FmtDur(time.Since(start)))
-	return discussions, hasNextPage, nil
+	return respBody, nil
 }

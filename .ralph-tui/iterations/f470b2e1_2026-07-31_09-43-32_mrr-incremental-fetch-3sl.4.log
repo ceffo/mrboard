@@ -1,0 +1,191 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.4
+- **Task Title**: gitlab: phase-2 aliased discussions query + updatedAt diff and merge
+- **Description**: ## Scope
+
+The conditional half. This is where the 2-9s becomes roughly 0.6s.
+
+- Aliased multi-MR GraphQL query fetching discussions only:
+  mr0: project(fullPath:){mergeRequest(iid:){discussions{...}}...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T13:43:32.805Z
+- **Ended At**: 2026-07-31T13:55:03.261Z
+- **Duration**: 11m 30s
+- **Input Tokens**: 484
+- **Output Tokens**: 44437
+- **Total Tokens**: 44921
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and checking the current state of the work, since git status shows several files already modified for this bead.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context[0m
+[94m[Bash][0m Show bead details $ br show mrr-incremental-fetch-3sl.4 --format toon 2>&1 | head -100
+[94m[Bash][0m Check size of progress.md and ADR $ wc -l .ralph-tui/progress.md docs/adr/0005*.md
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+Now let me check what's already been done in the working tree — several files are already modified.
+[94m[Bash][0m Show diff stat of all modified files $ git diff --stat HEAD
+[94m[Bash][0m Check line counts of relevant files $ wc -l internal/adapters/gitlabadpt/*.go pkg/gitlab/*.go internal/domain/service/mrsvc/mrsvc.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/phase2.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/merge_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m
+[94m[Bash][0m Show diff for mrsvc.go and interfaces.go $ git diff HEAD -- internal/domain/service/mrsvc/mrsvc.go pkg/gitlab/interfaces.go
+[94m[Bash][0m Show diff for gitlabadpt.go $ git diff HEAD -- internal/adapters/gitlabadpt/gitlabadpt.go
+[94m[Bash][0m Show diff for mapper.go $ git diff HEAD -- internal/adapters/gitlabadpt/mapper.go
+[94m[Bash][0m Find helper functions used in mapper.go merge logic $ rg -n "applyApproverFlag|approverSetFromGQLRules|func.*Key\(\)" internal/adapters/gitlabadpt/mapper....
+[94m[Bash][0m Show diff for graphql.go $ git diff HEAD -- pkg/gitlab/graphql.go | head -250
+[94m[Bash][0m Find remaining references to old method name and mock files $ fd -t f mock_MREnricher 2>/dev/null
+[94m[Bash][0m Show diff for test files $ git diff HEAD -- internal/adapters/gitlabadpt/gitlabadpt_test.go internal/adapters/gitlabadpt/descri...
+[94m[Bash][0m Run project quality gates $ just check 2>&1 | tail -100
+[94m[Bash][0m Inspect justfile check recipe structure $ rg -n "^check:|^lint:|^build:|^test:|^fmt:" justfile
+Now let me fix the lint issues. Most are `goconst` (repeated string literals) and a couple of minor ones.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Bash][0m Check existing constant patterns for test usernames $ rg -n '"alice"|"bob"|"priya"|const \(|testUsername|^const' internal/adapters/gitlabadpt/mapper_test....
+[94m[Bash][0m Check goconst linter config $ rg -n "goconst" -A 10 .golangci.yml
+[94m[Bash][0m Find all call sites of gqlMR helper $ rg -n "gqlMR\(" internal/adapters/gitlabadpt/gitlabadpt_test.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+Now let's fix each lint issue. Starting with graphql.go's magic number:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "	query := buildAliasedMRDiscussionsQuery(len(reqs)..." → "	const varsPerMR = 2 // one project-path variable ..."
+Now the two unused `r` parameters in graphql_aliased_test.go:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m edit: "	srv := httptest.NewServer(http.HandlerFunc(func(w..." → "	srv := httptest.NewServer(http.HandlerFunc(func(w..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m edit: "	srv := httptest.NewServer(http.HandlerFunc(func(w..." → "	srv := httptest.NewServer(http.HandlerFunc(func(w..."
+[94m[Bash][0m Check for existing username constants in non-test files $ rg -n '"priya"|"bob"|"alice"' internal/adapters/gitlabadpt/*.go | rg -v _test.go
+[94m[Bash][0m Count occurrences of each flagged string literal across test files $ rg -o '"mergeable"' *_test.go | wc -l
+[94m[Bash][0m Check if lint already failed on HEAD before this session's changes $ git stash pop
+[94m[Bash][0m Stash changes and lint the clean HEAD state from repo root $ cd /Users/moncefnaji/code/github.com/mrboard && git status --short | head -5 && git stash && golangc...
+[94m[Bash][0m Move untracked new files aside and lint clean HEAD $ mkdir -p /tmp/untracked_stash && mv pkg/gitlab/graphql_aliased_test.go internal/adapters/gitlabadpt/...
+[94m[Bash][0m Restore untracked files and pop the stash $ mv /tmp/untracked_stash/graphql_aliased_test.go pkg/gitlab/ mv /tmp/untracked_stash/merge_test.go /t...
+[94m[Bash][0m Check for any composite literals containing these substrings to avoid unsafe replace $ cd /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt rg -n '"alice[^"]|"[^"]*al...
+[94m[Bash][0m Check the existing mergeable constant and its usages $ rg -n "detailedMergeStatusMergeable" internal/adapters/gitlabadpt/*.go | grep -v _test echo "---" rg...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m edit: "var (
+	t0 = time.Date(2024, 1, 1, 10, 0, 0, 0, tim..." → "var (
+	t0 = time.Date(2024, 1, 1, 10, 0, 0, 0, tim..."
+[94m[Bash][0m Replace repeated string literals with shared constants across test files $ do   sed -i '' \     -e 's/"alice"/testUserAlice/g' \     -e 's/"Alice"/testUserAliceName/g' \     -...
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m edit: "const (
+	testUserAlice     = testUserAlice
+	testUs..." → "const (
+	testUserAlice     = "alice"
+	testUserAlic..."
+[94m[Bash][0m Verify build compiles after sed replacements $ go build ./... 2>&1 | head -50
+[94m[Bash][0m Run go vet across the repo $ go vet ./... 2>&1 | head -50
+Now let's fix the `unparam` issue for `gqlMR`'s `author` parameter, which every call site passes as `"priya"`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m edit: "// gqlMR builds a minimal thin GQLMergeRequest for..." → "// gqlMR builds a minimal thin GQLMergeRequest for..."
+[94m[Bash][0m Drop the now-hardcoded author argument from all gqlMR call sites $ cd /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt sed -i '' -E 's/gqlMR\((("...
+Let me clean up the trailing commas left by the sed replacement.
+[94m[Bash][0m Remove trailing comma before closing paren and check formatting $ cd /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt sed -i '' -E 's/, \)/)/g' ...
+Good, no formatting issues. Now let's re-run `just check`:
+[94m[Bash][0m Re-run full quality gate $ cd /Users/moncefnaji/code/github.com/mrboard && just check 2>&1 | tail -120
+`just check` passes fully now — fmt, lint, build, and the full test suite all green.
+[94m[Bash][0m Confirm final exit code of just check $ tail -5 /tmp/check_full.log
+[94m[Bash][0m Check for local config/credentials to run a real timing measurement $ rg -n "XDGCacheDir\(\)" internal/config/*.go | head -5
+[94m[Bash][0m Check for a real mrboard config outside the repo $ ls -la ~/.cache/mrboard 2>&1
+[94m[Bash][0m Check whether the TUI/CLI wiring actually threads Previous/SnapshotStore through a real fetch yet $ rg -n "SnapshotStore|opts.Previous|FetchOptions{" internal/core/*.go internal/tui/*.go internal/cmd/...
+
+[91m[Error: Exit code 2][0m
+[94m[Bash][0m Search recursively for snapshot store wiring in TUI/core/cmd $ rg -rn "SnapshotStore|opts\.Previous|FetchOptions\{" internal/core internal/tui internal/cmd 2>&1 | ...
+[94m[Bash][0m Search recursively (rg is already recursive by default) for snapshot store wiring $ rg -n "SnapshotStore|opts\.Previous|FetchOptions\{" internal/core internal/tui internal/cmd 2>&1 | h...
+[94m[Read][0m [95m/Users/moncefnaji/.config/mrboard/mrboard.yaml[0m
+[94m[Bash][0m Find config loader and gitlab client constructor signatures $ rg -n "func NewClient|func Load\b|type Config struct" internal/config/config.go pkg/gitlab/client.go...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/config.go[0m
+[94m[Bash][0m Check gitlabadpt.New and Config struct shape $ rg -n "type Config struct" -A 15 internal/adapters/gitlabadpt/gitlabadpt.go
+Now I have everything needed to write a temporary timing test using the real config and token.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/zz_manual_timing_test.go[0m "package gitlabadpt
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	pkggitlab "g... (2025 chars)"
+[94m[Bash][0m Check AppConfig struct field names for correctness $ rg -n "type AppConfig struct" -A 30 internal/config/config.go | head -40
+[94m[Bash][0m Check typed accessor methods and Source/GitLab struct definitions $ rg -n "func.*GitLabClientConfig\(\)|func.*GitLabAdapterConfig\(\)|type GitLab struct|type Source str...
+[94m[Bash][0m See how core.go wires config into gitlabadpt.New $ rg -n "gitlabadpt.New|GitLabAdapterConfig|ReviewerUsernames|mrsvc.Source{" internal/core/core.go
+
+[91m[Error: Exit code 2
+rg: regex parse error:
+    (?:gitlabadpt.New|GitLabAdapterConfig|ReviewerUsernames|mrsvc.Source{)
+                                                                         ^
+error: repetition quantifier expects a valid decimal][0m
+[94m[Bash][0m See how core.go wires config into gitlabadpt.New (escaped braces) $ rg -n "gitlabadpt\.New|GitLabAdapterConfig|ReviewerUsernames|mrsvc\.Source" internal/core/core.go
+[94m[Bash][0m Check core.New signature and Core struct fields $ rg -n "^func New|type Core struct" -A 20 internal/core/core.go | head -60
+[94m[Bash][0m Check deriveReviewerUsernames logic to replicate correctly $ rg -n "func deriveReviewerUsernames" -A 15 internal/core/core.go
+Let me update my test to replicate this correctly instead of hardcoding a single reviewer username.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/zz_manual_timing_test.go[0m edit: "	sources := make([]mrsvc.Source, len(cfg.Sources))..." → "	sources := make([]mrsvc.Source, len(cfg.Sources))..."
+Now let's build and run this manual timing test against the real GitLab instance.
+[94m[Bash][0m Confirm the manual timing test file compiles $ go build ./... 2>&1 | head -50
+[94m[Bash][0m go vet the package with the new manual timing test $ go vet ./internal/adapters/gitlabadpt/... 2>&1
+This is about to hit the real GitLab instance with credentials — I want to flag that before running it.
+[94m[Bash][0m Run the manual cold/warm timing measurement against the real gl.nsesi.io GitLab instance using the local mrboard config $ go test ./internal/adapters/gitlabadpt/... -run TestManualTiming_Phase2WarmVsCold -v 2>&1 | tail -60
+Let me run it once more for confidence in the numbers before recording them.
+[94m[Bash][0m Run the timing measurement a second time to check consistency $ go test ./internal/adapters/gitlabadpt/... -run TestManualTiming_Phase2WarmVsCold -v 2>&1 | tail -10
+[94m[Bash][0m Force a fresh run of the timing measurement (bypass test cache) $ go test ./internal/adapters/gitlabadpt/... -run TestManualTiming_Phase2WarmVsCold -v -count=1 2>&1 |...
+[94m[Bash][0m Inspect ClassifyPhase logic to design a phase-transition test $ rg -n "func ClassifyPhase" -A 30 internal/domain/*.go | head -50
+[94m[Bash][0m Find all usages of isMergeable in mapper.go $ rg -n "isMergeable" internal/adapters/gitlabadpt/mapper.go
+[94m[Bash][0m Check MRPhase constants and domain-model docs for conflict/ready-to-merge semantics $ rg -n "PhaseReadyToMerge|PhaseConflict|MRPhase =|type MRPhase" internal/domain/mr.go | head -20 echo...
+[94m[Bash][0m Check git history of ClassifyPhase signature evolution $ git log --oneline -- internal/domain/mr.go | head -10 echo "---" git log -p --follow -- internal/dom...
+Now let's record these measurements in the ADR, following the same pattern used for the phase-1 findings.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m edit: "Phase-1 wall-clock for this same 5-user authored+r..." → "Phase-1 wall-clock for this same 5-user authored+r..."
+Now remove the scratch timing test file — the measurement is recorded, and a live-credentials test shouldn't live in the repo permanently.
+[94m[Bash][0m Delete the scratch manual-timing test file now that results are recorded in the ADR $ rm /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/zz_manual_timing_test.go
+Now let's check whether the "nil Previous → byte-identical" acceptance criterion needs a more rigorous test, and check the `.mockery.yml`/mock situation for the changed `MREnricher` interface method.
+[94m[Bash][0m Check mockery config and confirm no stale references to the old interface method remain $ cd /Users/moncefnaji/code/github.com/mrboard rg -n "MREnricher|mockery" .mockery.yml 2>&1 echo "---f...
+[94m[Bash][0m Confirm mrKey type alignment with domain.MRKey $ rg -n "type mrKey" -A 3 internal/adapters/gitlabadpt/*.go
+Good — `mrKey` is a type alias for `domain.MRKey`, so `opts.ForceStale []domain.MRKey` maps cleanly. Now let's do a final full `just check` run to confirm everything is clean after all edits (including the ADR text change and the removed scratch file):
+[94m[Bash][0m Final full quality-gate run $ tail -30 /tmp/check_final.log
+`just check` passes cleanly (exit 0). All acceptance criteria are now satisfied. Let me do one final review of the full diff to make sure everything is coherent before closing the bead.
+[94m[Bash][0m Final review of all changed/untracked files relevant to this bead $ git status --short && echo "---" && git diff --stat HEAD -- internal pkg docs
+Everything checks out. Let me close the bead and flush the tracker state.
+[94m[Bash][0m Close the bead and flush beads state to JSONL $ measured 4.1s cold / 0.65s warm vs 2-9s baseline" br sync --flush-only
+[94m[Bash][0m Verify the bead is actually closed and JSONL reflects it $ br show mrr-incremental-fetch-3sl.4 --format toon 2>&1 | head -10 echo "---" git diff --stat -- .bea...
+Bead confirmed closed and JSONL already up to date (the earlier `--flush-only` had nothing pending because the close already wrote through). Now let me append the progress log entry as required by the workflow.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+*Add reu..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+That reads fine — the `---` divider still correctly separates the "Codebase Patterns" section from the chronological log below. Now let's append the session's entry at the end of the file.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  discussion-count scalars exist and are non-depre..." → "  discussion-count scalars exist and are non-depre..."
+Now let me save this to engram memory per the project's mandatory protocol.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-incremental-fetch-3sl.4 (epic mrr-incremental-fetch-3sl, docs/adr/0005 "Two-phase conditional fetch"). Found the core implementation already present uncommitted in the working tre... (2230 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement/verify mrr-incremental-fetch-3sl.4 (epic mrr-incremental-fetch-3sl, docs/adr/0005): phase-2 aliased GraphQL discussions query + updatedAt diff and merge logic — the conditional half ... (4576 chars)"
+`★ Insight ─────────────────────────────────────`
+Three things worth understanding from this session:
+
+1. **`goconst` is package-scoped, not file-scoped.** golangci-lint's `goconst` linter counts how many times a literal string appears across an *entire Go package* — every file, including `_test.go` files. That means adding one new test file that happens to reuse an existing fixture value (like `"alice"`) can push the total count over the threshold and cause a lint failure to appear on a line in a completely different, untouched file. This is a subtle trap: the fix isn't local to your change — you have to hoist the literal into a shared `const` and update *every* file using it, not just the one you're editing.
+
+2. **A discarded parameter can mean a design already evolved past its own docs.** `domain.ClassifyPhase(draft bool, _ bool, reviewers []ReviewerInfo)` explicitly discards its second parameter — a leftover from when `mergeable` used to gate the "ready to merge" phase directly. Git history (commit `ceacc9e`) showed this was a deliberate rename: merge status now drives the card's *title color*, not its *column*. The ADR's prose hadn't caught up to that nuance. Recognizing "this parameter is intentionally unused, not a bug" required reading blame history rather than trusting a written design doc at face value.
+
+3. **Measuring against production safely.** For a live-credentials timing measurement, an env-var-gated throwaway test (`if os.Getenv("X") == "" { t.Skip() }`) living in the same package gives you access to unexported internals without needing a separate module, while the gate keeps it from ever running unintentionally in CI. The pattern: write it, run it once, record the numbers in durable documentation (the ADR), then delete the file — the record is the deliverable, not a permanently-committed live-network test.
+`─────────────────────────────────────────────────`
+
+## Summary
+
+The core two-phase fetch implementation for mrr-incremental-fetch-3sl.4 was already present in the working tree from a prior session — `phase2.go`'s `diffGQLStage`/`enrichGQLMRsBatch`, `mapper.go`'s `MergeMRFromGraphQL`, the aliased `FetchMRsDiscussionsGraphQL` GraphQL query, and `FetchOptions.ForceStale`, all with solid test coverage. What was missing:
+
+- **`just check` was failing** on `golangci-lint` (goconst, a magic number, two unused params) — fixed by hoisting shared test-identity strings into package-level constants and naming the magic number.
+- **The "measured end-to-end timing" acceptance item had never been done** — measured against the real `gl.nsesi.io` config: **cold 3.80s/4.10s** (within the 2–9s baseline) vs **warm 651ms/667ms** (matching the ADR's predicted ~0.6s steady state almost exactly, with phase 2 issuing zero requests). Recorded in `docs/adr/0005`.
+
+`just check` now passes clean. Bead closed, progress log and engram memory updated. Dependent bead `.7` (dirty-set guard) is now unblocked.

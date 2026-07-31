@@ -21,6 +21,16 @@ var (
 	t3 = t0.Add(3 * time.Hour)
 )
 
+// Shared test reviewer/author identities, reused across mapper_test.go,
+// merge_test.go, and gitlabadpt_test.go.
+const (
+	testUserAlice     = "alice"
+	testUserAliceName = "Alice"
+	testUserBob       = "bob"
+	testUserBobName   = "Bob"
+	testUserPriya     = "priya"
+)
+
 func basicUser(username, name string) *gl.BasicUser {
 	return &gl.BasicUser{Username: username, Name: name}
 }
@@ -83,7 +93,7 @@ func mr(reviewers ...*gl.BasicUser) *gl.BasicMergeRequest {
 }
 
 func TestDeriveReviewerStates_NotStarted(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	result := DeriveReviewerStates(m, nil, approvals())
 
 	require.Len(t, result, 1, "want 1 reviewer (not-started included)")
@@ -91,10 +101,10 @@ func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 }
 
 func TestDeriveReviewerStates_Commented(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
 		discussion(systemNote("requested review from @alice", t1)),
-		discussion(userNote("alice", t2)),
+		discussion(userNote(testUserAlice, t2)),
 	}
 
 	result := DeriveReviewerStates(m, discussions, approvals())
@@ -103,9 +113,9 @@ func TestDeriveReviewerStates_Commented(t *testing.T) {
 }
 
 func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
-		discussion(userNote("alice", t1)),
+		discussion(userNote(testUserAlice, t1)),
 		discussion(systemNote("requested review from @alice", t2)),
 	}
 
@@ -115,22 +125,22 @@ func TestDeriveReviewerStates_ReReviewRequested(t *testing.T) {
 }
 
 func TestDeriveReviewerStates_Approved(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
-		discussion(userNote("alice", t1)),
+		discussion(userNote(testUserAlice, t1)),
 	}
 
-	result := DeriveReviewerStates(m, discussions, approvals("alice"))
+	result := DeriveReviewerStates(m, discussions, approvals(testUserAlice))
 
 	assert.Equal(t, domain.ReviewerApproved, result[0].State)
 }
 
 func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"), basicUser("bob", "Bob"))
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName))
 	discussions := []*gl.Discussion{
 		discussion(systemNote("requested review from @alice", t1)),
-		discussion(userNote("alice", t2)),
-		discussion(userNote("bob", t1)),
+		discussion(userNote(testUserAlice, t2)),
+		discussion(userNote(testUserBob, t1)),
 		discussion(systemNote("requested review from @bob", t3)),
 	}
 
@@ -146,12 +156,12 @@ func TestDeriveReviewerStates_MultipleReviewers(t *testing.T) {
 		return domain.ReviewerNotStarted
 	}
 
-	assert.Equal(t, domain.ReviewerCommented, stateFor("alice"), "alice")
-	assert.Equal(t, domain.ReviewerReReviewRequested, stateFor("bob"), "bob")
+	assert.Equal(t, domain.ReviewerCommented, stateFor(testUserAlice), testUserAlice)
+	assert.Equal(t, domain.ReviewerReReviewRequested, stateFor(testUserBob), testUserBob)
 }
 
 func TestDeriveReviewerStates_NonReviewerNotesIgnored(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
 		discussion(userNote("not-a-reviewer", t1)),
 	}
@@ -166,9 +176,9 @@ func TestDeriveReviewerStates_ResolvedThreadNotCommented(t *testing.T) {
 	// Reviewer left a comment, but the thread was resolved by the author.
 	// Should NOT stay in ReviewerCommented — that would wrongly put the MR
 	// in NeedsAuthorAction even though there's nothing left to address.
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
-		resolvedDiscussion(userNote("alice", t1)),
+		resolvedDiscussion(userNote(testUserAlice, t1)),
 	}
 
 	result := DeriveReviewerStates(m, discussions, approvals())
@@ -178,10 +188,10 @@ func TestDeriveReviewerStates_ResolvedThreadNotCommented(t *testing.T) {
 
 func TestDeriveReviewerStates_UnresolvedThreadStillCommented(t *testing.T) {
 	// Reviewer has one resolved thread and one open thread — still Commented.
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
-		resolvedDiscussion(userNote("alice", t1)),
-		discussion(userNote("alice", t2)), // unresolved
+		resolvedDiscussion(userNote(testUserAlice, t1)),
+		discussion(userNote(testUserAlice, t2)), // unresolved
 	}
 
 	result := DeriveReviewerStates(m, discussions, approvals())
@@ -209,7 +219,7 @@ func TestCountRoundTripsFromEvents(t *testing.T) {
 		{
 			name: "no re-review notes",
 			discussions: []*gl.Discussion{
-				discussion(userNote("alice", t1)),
+				discussion(userNote(testUserAlice, t1)),
 				discussion(systemNote("assigned to @alice", t1)),
 			},
 			want: 0,
@@ -237,7 +247,7 @@ func TestCountRoundTripsFromEvents(t *testing.T) {
 					systemNote("requested review from @alice", t1),
 					systemNote("requested review from @bob", t2),
 				),
-				discussion(userNote("alice", t3)),
+				discussion(userNote(testUserAlice, t3)),
 				discussion(systemNote("requested review from @alice", t3)),
 			},
 			want: 3,
@@ -252,10 +262,10 @@ func TestCountRoundTripsFromEvents(t *testing.T) {
 }
 
 func TestMapMR_RoundTripCount(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{
 		discussion(systemNote("requested review from @alice", t1)),
-		discussion(userNote("alice", t2)),
+		discussion(userNote(testUserAlice, t2)),
 		discussion(systemNote("requested review from @alice", t3)),
 	}
 	result := MapMR(m, discussions, approvals(), nil)
@@ -271,21 +281,21 @@ func approvalRule(name string, usernames ...string) *gl.MergeRequestApprovalRule
 }
 
 func TestMapMR_IsApprover_InApproversRule(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"), basicUser("bob", "Bob"))
-	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName))
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice)}
 	result := MapMR(m, nil, approvals(), rules)
 	for _, r := range result.Reviewers {
-		if r.Username == "alice" {
+		if r.Username == testUserAlice {
 			assert.True(t, r.IsApprover, "alice should be IsApprover=true")
 		}
-		if r.Username == "bob" {
+		if r.Username == testUserBob {
 			assert.False(t, r.IsApprover, "bob should be IsApprover=false")
 		}
 	}
 }
 
 func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	result := MapMR(m, nil, approvals(), nil)
 	for _, r := range result.Reviewers {
 		assert.False(t, r.IsApprover, "want IsApprover=false when no Approvers rule, got true for %s", r.Username)
@@ -293,7 +303,7 @@ func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
 }
 
 func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	m.DetailedMergeStatus = detailedMergeStatusMergeable
 	result := MapMR(m, nil, approvals(), nil)
 	assert.Equal(t, detailedMergeStatusMergeable, result.DetailedMergeStatus,
@@ -301,7 +311,7 @@ func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
 }
 
 func TestMapMR_DetailedMergeStatus_Stored_NonMergeable(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	m.DetailedMergeStatus = "ci_must_pass"
 	result := MapMR(m, nil, approvals(), nil)
 	assert.Equal(t, "ci_must_pass", result.DetailedMergeStatus, "want DetailedMergeStatus=ci_must_pass stored")
@@ -311,7 +321,7 @@ func TestMapMRFromGraphQL_DetailedMergeStatus_NormalizedToLowercase(t *testing.T
 	mr := pkggitlab.GQLMergeRequest{}
 	mr.DetailedMergeStatus = "MERGEABLE"
 	result := MapMRFromGraphQL(mr)
-	assert.Equal(t, "mergeable", result.DetailedMergeStatus, "want DetailedMergeStatus normalized")
+	assert.Equal(t, detailedMergeStatusMergeable, result.DetailedMergeStatus, "want DetailedMergeStatus normalized")
 }
 
 func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing.T) {
@@ -323,7 +333,7 @@ func TestMapMRFromGraphQL_DetailedMergeStatus_NonMergeable_Normalized(t *testing
 }
 
 func TestMapMR_SourceTargetBranch_Stored(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	m.SourceBranch = "feature/foo"
 	m.TargetBranch = "main"
 	result := MapMR(m, nil, approvals(), nil)
@@ -341,7 +351,7 @@ func TestMapMRFromGraphQL_SourceTargetBranch_Stored(t *testing.T) {
 }
 
 func TestMapMR_UpdatedAt_Stored(t *testing.T) {
-	m := mr(basicUser("alice", "Alice"))
+	m := mr(basicUser(testUserAlice, testUserAliceName))
 	m.UpdatedAt = ptr(t1)
 	result := MapMR(m, nil, approvals(), nil)
 	assert.True(t, t1.Equal(result.UpdatedAt), "want UpdatedAt stored on domain MR")
@@ -356,9 +366,9 @@ func TestMapMRFromGraphQL_UpdatedAt_Stored(t *testing.T) {
 
 func TestMapMR_PhaseReadyToMerge_WhenAllApproversApproved(t *testing.T) {
 	// alice is in the Approvers rule and has approved
-	m := mr(basicUser("alice", "Alice"))
-	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", "alice")}
-	result := MapMR(m, nil, approvals("alice"), rules)
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice)}
+	result := MapMR(m, nil, approvals(testUserAlice), rules)
 	assert.Equal(t, domain.PhaseReadyToMerge, result.Phase, "want PhaseReadyToMerge when all approvers approved")
 }
 
@@ -367,7 +377,7 @@ func TestExtractReReviewUsername(t *testing.T) {
 		body string
 		want string
 	}{
-		{"requested review from @alice", "alice"},
+		{"requested review from @alice", testUserAlice},
 		{"requested review from @bob.smith", "bob.smith"},
 		{"assigned to @alice", ""},
 		{"", ""},

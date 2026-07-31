@@ -131,6 +131,23 @@ entirely on a cache hit. The remaining phase-1 cost is now dominated by network 
 (10 parallel requests) rather than payload size, since `discussions` was the only field requesting
 note bodies.
 
+### Phase-2 aliased query: measured timing (resolved 2026-07-31)
+
+End-to-end `GitLabAdapter.FetchAll` against the live `gl.nsesi.io` config (5 user sources, 11 MRs,
+`IncludeReviewerMRs: true`), measured twice back-to-back — cold with a nil `Previous` (full fetch,
+phase 2 runs for every MR), then warm with `Previous` set to the cold result (steady state, nothing
+changed between the two calls so every MR's `updatedAt` matches):
+
+- **Cold**: 3.80s and 4.10s across two runs — inside the pre-epic 2–9s baseline, since a cold fetch
+  still pays for phase 1 plus a phase-2 discussions fetch for every MR (no cache to skip against).
+- **Warm**: 667ms and 651ms — matches the ADR's predicted ~0.6s steady state almost exactly. Phase 2
+  issued zero requests in both warm runs (all 11 MRs unchanged), so this is effectively phase-1's
+  wall-clock alone, consistent with the ~0.6–1.3s phase-1 measurement above.
+
+This confirms the epic's central claim end-to-end, not just per-phase: a warm cache turns a 2–9s fetch
+into ~0.6s, a 6–14x improvement, with the two-phase split fetching every MR's discussions exactly once
+per real change rather than once per fetch.
+
 ### Cache ownership: passed in, not held (resolved 2026-07-30)
 
 `GitLabAdapter` is stateless today — `New(client, cfg)`, with every method a pure function of its

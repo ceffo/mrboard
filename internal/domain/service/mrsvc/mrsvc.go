@@ -19,6 +19,12 @@ type FetchOptions struct {
 	// adapter may diff against to avoid re-fetching unchanged data (see
 	// docs/adr/0005). Nil means an unconditional full fetch.
 	Previous []domain.MergeRequest
+
+	// ForceStale lists MR keys that must be treated as changed for this fetch
+	// even if their phase-1 updatedAt matches Previous. Used by the write-race
+	// dirty-set guard (docs/adr/0005, "The write race that ungating creates")
+	// to force a fresh phase-2 fetch for MRs with an unconfirmed local write.
+	ForceStale []domain.MRKey
 }
 
 // MergeRequestSource is the driven port for fetching MR data.

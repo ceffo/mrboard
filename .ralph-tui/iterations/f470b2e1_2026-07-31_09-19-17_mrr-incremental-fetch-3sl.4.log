@@ -1,0 +1,186 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.4
+- **Task Title**: gitlab: phase-2 aliased discussions query + updatedAt diff and merge
+- **Description**: ## Scope
+
+The conditional half. This is where the 2-9s becomes roughly 0.6s.
+
+- Aliased multi-MR GraphQL query fetching discussions only:
+  mr0: project(fullPath:){mergeRequest(iid:){discussions{...}}...
+- **Status**: failed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T13:19:17.960Z
+- **Ended At**: 2026-07-31T13:43:27.788Z
+- **Duration**: 24m 9s
+- **Input Tokens**: 336
+- **Output Tokens**: 86251
+- **Total Tokens**: 86587
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by orienting myself: checking engram memory for this project, reading the progress file, and looking at the code from the previous phase-1 ticket (3sl.3) that this one builds on.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Bash][0m Show bead details for 3sl.4 $ br show mrr-incremental-fetch-3sl.4 --format toon 2>&1 | \toon 2>/dev/null || br show mrr-incrementa...
+[94m[Bash][0m Check sizes of relevant Go files $ wc -l /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/*.go /Users/moncefnaji/...
+Bead is already `in_progress`. Let's read the actual implementation files to understand current phase-1 state before building phase-2.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/interfaces.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/discussion.go[0m
+[94m[Bash][0m Show mockery config $ cat /Users/moncefnaji/code/github.com/mrboard/.mockery.yml
+[94m[Bash][0m Find mrKey type definition and usage in dedup.go $ rg -n "type mrKey" /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/ && echo -...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup.go[0m
+[94m[Bash][0m Find all files referencing SnapshotStore/Previous/MRKey $ rg -n "SnapshotStore|Previous|MRKey|ForceStale" /Users/moncefnaji/code/github.com/mrboard --type go ...
+[94m[Bash][0m Check how Previous/SnapshotStore are currently wired in core and tui $ rg -n "Previous|SnapshotStore|FetchAll" /Users/moncefnaji/code/github.com/mrboard/internal/core/core...
+[94m[Bash][0m List all children of the incremental-fetch epic to confirm scope boundaries $ br list --parent mrr-incremental-fetch-3sl --format toon 2>&1 | \toon 2>/dev/null || br list --paren...
+
+[91m[Error: Exit code 2
+error: unexpected argument '--parent' found
+
+  tip: a similar argument exists: '--pretty'
+
+Usage: br list --pretty
+
+For more information, try '--help'.][0m
+[94m[Bash][0m Show epic details including children list $ br show mrr-incremental-fetch-3sl --format toon 2>&1 | head -100
+[94m[Bash][0m Check for local config and GitLab token availability $ \cat justfile 2>&1 | head -30
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Bash][0m Find existing test patterns for GraphQL client tests $ rg -n "func Test|httptest" /Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/*_test.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m
+[94m[Bash][0m Find all references to enrichGQLMR $ rg -n "enrichGQLMR\b" /Users/moncefnaji/code/github.com/mrboard --type go
+[94m[Bash][0m Check other usages of single-MR FetchMRDiscussionsGraphQL $ rg -n "FetchMRDiscussionsGraphQL\b" /Users/moncefnaji/code/github.com/mrboard --type go
+Now I have a clear picture. Let me check the domain mr_test.go and dedup_test.go quickly for test conventions, then start implementing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup_test.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/description_test.go[0m
+Now I have all the context needed. Let me implement in order: domain/service types first, then the GraphQL client layer, then the adapter merge logic.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m edit: "	// Previous is the last-known snapshot, keyed by ..." → "	// Previous is the last-known snapshot, keyed by ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fm..." → "import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fm..."
+Now let's replace the single-MR discussions query section with the aliased batch version:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m edit: "// gqlMRDiscussionsQuery fetches only the discussi..." → "// MRDiscussionsRequest identifies one MR within a..."
+Now update the `MREnricher` interface in `interfaces.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/interfaces.go[0m edit: "	GetRawFileContent(ctx context.Context, projectID ..." → "	GetRawFileContent(ctx context.Context, projectID ..."
+Now the mapper — add `MergeMRFromGraphQL` and a small key helper:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "// deriveReadyToMergeSince returns the latest appr..." → "// MergeMRFromGraphQL builds the domain.MergeReque..."
+Now let's create the new `phase2.go` file with the diff/batch logic:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/phase2.go[0m "package gitlabadpt
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	ilog "github.com/ceffo/mrboard/internal/log"
+	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
+)
+
+//... (2526 chars)"
+Now update `gitlabadpt.go`: thread `opts` into `enrichStage`, rewire the GQL enrichment path, and remove the now-dead `enrichGQLMR`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "	// Stage 3: enrich — fetch discussions (REST or G..." → "	// Stage 3: enrich — fetch discussions (REST or G..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// enrichStage fetches discussions for each dedupe..." → "// enrichStage completes every deduped survivor in..."
+Now remove the now-dead `enrichGQLMR` method:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m edit: "// enrichGQLMR completes a phase-1 thin GraphQL MR..." → "// GetDiff implements mrsvc.MergeRequestSource."
+Now let's update the two test fakes that implement the old `FetchMRDiscussionsGraphQL` interface method:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/description_test.go[0m edit: "func (f *fakeDescriptionClient) FetchMRDiscussions..." → "func (f *fakeDescriptionClient) FetchMRsDiscussion..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m edit: "// fakeFetchClient implements gitLabClient for Fet..." → "// fakeFetchClient implements gitLabClient for Fet..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m edit: "	client.mu.Lock()
+	defer client.mu.Unlock()
+	asser..." → "	client.mu.Lock()
+	defer client.mu.Unlock()
+	asser..."
+Now let's build to catch compile errors before writing more tests:
+[94m[Bash][0m Build the project to catch compile errors $ go build ./... 2>&1 | head -80
+Builds clean. Now let's run existing tests and check for mockery regeneration needs (I didn't touch any `internal/domain/service/*svc` interface, just `mrsvc.FetchOptions` struct, so mocks shouldn't need regen — but let's verify).
+[94m[Bash][0m Run go vet across the project $ go vet ./... 2>&1 | head -50
+[94m[Bash][0m Run tests for affected packages $ go test ./internal/adapters/gitlabadpt/... ./pkg/gitlab/... ./internal/domain/... ./internal/domain/...
+Let's add the GraphQL client test using an httptest server:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m "package gitlab
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// newTestClient build... (4318 chars)"
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql_aliased_test.go[0m edit: "func TestFetchMRsDiscussionsGraphQL_Empty(t *testi..." → "func TestFetchMRsDiscussionsGraphQL_Empty(t *testi..."
+[94m[Bash][0m Run new GraphQL client tests $ go test ./pkg/gitlab/... -run TestFetchMRsDiscussionsGraphQL -v 2>&1 | tail -80
+[94m[Bash][0m Find existing GQL-related test helpers in mapper_test.go $ rg -n "func Test|GQLMergeRequest|ApprovalState|MapMRFromGraphQL" /Users/moncefnaji/code/github.com/m...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Bash][0m Check domain-model.md for how DetailedMergeStatus/mergeable should influence phase $ rg -n "detailed_merge_status|DetailedMergeStatus|mergeable|Ready to Merge|ReadyToMerge" /Users/monce...
+[94m[Bash][0m Check git history of ClassifyPhase for mergeable param evolution $ git log -p --follow -- internal/domain/mr.go | rg -n "func ClassifyPhase" -A 20 | head -80
+[94m[Bash][0m Find all usages of DetailedMergeStatus across the codebase $ rg -n "DetailedMergeStatus" /Users/moncefnaji/code/github.com/mrboard --type go
+Now let's write the merge-logic unit tests for `MergeMRFromGraphQL`:
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/merge_test.go[0m "package gitlabadpt
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/domain"
+	pkggitlab "github.com/ceffo/mrboard/... (4739 chars)"
+Now let's add the FetchAll pipeline-level tests to `gitlabadpt_test.go`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+Now let's append the new pipeline-level phase-2 tests:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m edit: "	client.mu.Lock()
+	defer client.mu.Unlock()
+	asser..." → "	client.mu.Lock()
+	defer client.mu.Unlock()
+	asser..."
+Now add the missing imports (`time`, `errors`, `domain`) to `gitlabadpt_test.go`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m edit: "import (
+	"context"
+	"sync"
+	"testing"
+
+	"github.c..." → "import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	..."
+Now let's run the full test suite and `just check`:
+[94m[Bash][0m Build after adding all new tests $ go build ./... 2>&1 | head -100
+[94m[Bash][0m Run gitlabadpt and pkg/gitlab tests verbosely $ go test ./internal/adapters/gitlabadpt/... ./pkg/gitlab/... -v 2>&1 | tail -150
+All new tests pass. Now let's run `just check` (fmt + lint + build + full test suite):
+[94m[Bash][0m Run full quality gate: fmt, lint, build, test $ just check 2>&1 | tail -150
+[94m[Bash][0m Find all call sites of the gqlMR test helper $ rg -n 'gqlMR\(' /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_te...
+[94m[Bash][0m Check goconst linter settings $ rg -n "goconst" -A 5 /Users/moncefnaji/code/github.com/mrboard/.golangci.yml
+[94m[Bash][0m Check if lint issues pre-existed before this session's changes $ git stash pop
+[94m[Bash][0m Check for pre-existing goconst lint issues in mapper_test.go on clean tree $ git stash pop
+[94m[Bash][0m Count string literal occurrences across gitlabadpt package files $ rg -o '"alice"' /Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.g...
+[94m[Bash][0m View full golangci-lint config $ \cat /Users/moncefnaji/code/github.com/mrboard/.golangci.yml
+API Error: Connection closed mid-response. The response above may be incomplete.
+
+[91m[Error: server_error][0m

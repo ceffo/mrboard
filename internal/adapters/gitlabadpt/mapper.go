@@ -388,6 +388,66 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 	return domainMR
 }
 
+// MergeMRFromGraphQL builds the domain.MergeRequest for a phase-1 GraphQL MR
+// whose updatedAt matched the previous snapshot, per docs/adr/0005 "What the
+// cache is allowed to answer for": the cached MR answers only for the
+// discussion-derived fields (Reviewers, OpenThreads, RoundTripCount) — no
+// discussions were fetched, so there is no fresher data for them. Every other
+// field is phase-1's freshly-fetched value, including DetailedMergeStatus,
+// which is not covered by updatedAt and can silently change (mergeable ->
+// conflict) without a discussions fetch. IsApprover is recomputed from phase-1's
+// always-fresh approvalState.rules — that resolver deliberately isn't cached
+// (see the ADR) — but reviewer State/WaitingSince/ApprovedAt come from cached,
+// since GitLab bumps updatedAt on every note, approval, and reviewer change, so
+// a real updatedAt match means those can't have moved. Phase, WaitingSince, and
+// ReadyToMergeSince are re-derived from the merged result so a changed
+// DetailedMergeStatus still moves the MR between board columns.
+func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest) domain.MergeRequest {
+	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
+	updatedAt, _ := time.Parse(time.RFC3339, mr.UpdatedAt) //nolint:errcheck
+
+	reviewers := append([]domain.ReviewerInfo(nil), cached.Reviewers...)
+	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalState.Rules))
+
+	domainMR := domain.MergeRequest{
+		ID:             parseGIDNumericSafe(mr.ID),
+		IID:            parseIIDSafe(mr.IID),
+		ProjectID:      parseGIDNumericSafe(mr.Project.ID),
+		Title:          mr.Title,
+		WebURL:         mr.WebURL,
+		SourceBranch:   mr.SourceBranch,
+		TargetBranch:   mr.TargetBranch,
+		Author:         mr.Author.Username,
+		AuthorName:     mr.Author.Name,
+		ProjectPath:    mr.Project.FullPath,
+		Reviewers:      reviewers,
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+		OpenThreads:    cached.OpenThreads,
+		RoundTripCount: cached.RoundTripCount,
+	}
+	if len(mr.Assignees.Nodes) > 0 {
+		domainMR.Assignee = mr.Assignees.Nodes[0].Username
+		domainMR.AssigneeName = mr.Assignees.Nodes[0].Name
+	}
+
+	domainMR.DetailedMergeStatus = strings.ToLower(mr.DetailedMergeStatus)
+	isMergeable := domainMR.DetailedMergeStatus == detailedMergeStatusMergeable
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, isMergeable, domainMR.Reviewers)
+	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, domainMR.Reviewers, createdAt)
+	if domainMR.Phase == domain.PhaseReadyToMerge {
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(domainMR.Reviewers)
+	}
+
+	return domainMR
+}
+
+// gqlMRKey extracts the domain.MRKey (via the mrKey alias) identifying a
+// phase-1 GraphQL MR, for diffing against a previous snapshot.
+func gqlMRKey(mr pkggitlab.GQLMergeRequest) mrKey {
+	return mrKey{ProjectID: parseGIDNumericSafe(mr.Project.ID), IID: parseIIDSafe(mr.IID)}
+}
+
 // deriveReadyToMergeSince returns the latest approval timestamp, used as a
 // proxy for when the MR became ready to merge.
 func deriveReadyToMergeSince(reviewers []domain.ReviewerInfo) time.Time {

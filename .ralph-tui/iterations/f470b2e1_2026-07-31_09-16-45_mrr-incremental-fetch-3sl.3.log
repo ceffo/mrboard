@@ -1,0 +1,69 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.3
+- **Task Title**: gitlab: phase-1 thin listing query (no discussions) + early dedup
+- **Description**: ## Scope
+
+Add the cheap half of the two-phase fetch. Phase 2 is a separate ticket -- after this one the
+adapter still enriches everything, just via a different route, so the board must stay correct.
+
+...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-31T13:16:45.385Z
+- **Ended At**: 2026-07-31T13:19:16.711Z
+- **Duration**: 2m 31s
+- **Input Tokens**: 124
+- **Output Tokens**: 11415
+- **Total Tokens**: 11539
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking memory context and the current bead status, since a prior session's memory suggests this exact ticket may already be complete.
+[94m[Bash][0m Show bead details and status $ br show mrr-incremental-fetch-3sl.3 --format toon 2>&1 | \toon 2>&1 || br show mrr-incremental-fetch...
+[94m[Bash][0m Show tail of progress.md $ tail -n 100 .ralph-tui/progress.md 2>&1
+[94m[Bash][0m Check git status and recent commits $ git status --short && echo "---LOG---" && git log --oneline -5
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_search,mcp__plugin_engram_engram__mem_context[0m
+[94m[Bash][0m Search for thin query and dedup implementation evidence $ rg -n "ThinQuery|gqlUserMRsThin|gqlReviewerMRsThin" pkg/gitlab/ 2>&1 echo "---" rg -n "resolvedDiscu...
+[94m[Bash][0m Check commit history for the relevant files $ git log --oneline -3 -- pkg/gitlab/graphql.go internal/adapters/gitlabadpt/gitlabadpt.go internal/ad...
+[94m[Bash][0m Show file list changed in the .2 commit $ git show --stat c256149 | \cat
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Bash][0m Check size of ADR file $ wc -l docs/adr/0005-incremental-fetch-and-selection-identity.md
+[94m[Bash][0m Search ADR for measurement and schema-verification notes $ rg -n "resolvedDiscussionsCount|resolvableDiscussionsCount|phase-1|approvalState|wall-clock|timing|m...
+[94m[Bash][0m List test function names in gitlabadpt_test.go $ rg -n "func Test" internal/adapters/gitlabadpt/gitlabadpt_test.go
+All acceptance criteria appear satisfied in already-committed code: thin query with no discussions block, `approvalState.rules` retained, `resolvedDiscussionsCount`/`resolvableDiscussionsCount` added, dedup-before-enrichment test present, and the ADR documents both the schema verification and the phase-1 timing measurement. Let me confirm the dedup test's actual assertions and run `just check`.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt_test.go[0m
+[94m[Bash][0m Run project quality gates: fmt, lint, build, test $ just check 2>&1 | tail -80
+[94m[Bash][0m Re-run just check capturing exit code and scan for failures $ rg -n "FAIL|error|Error|golangci" /tmp/just_check.log | head -30
+`just check` passes clean (exit 0, no lint or test failures). All acceptance criteria are already implemented and committed — this was done in a prior session whose `br close` step never ran (same pattern as `.2`). I'll close the bead now and sync.
+[94m[Bash][0m Close bead and flush beads state to JSONL $ just check passes." && br sync --flush-only
+[94m[Bash][0m Confirm beads JSONL reflects the closed status $ rg -n "mrr-incremental-fetch-3sl.3" .beads/issues.jsonl | \head -1
+Confirmed closed. Now documenting in progress.md as required, then saving to engram memory per the mandatory protocol.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - When a ralph-tui bead shows up `in_progress` b..." → "  - When a ralph-tui bead shows up `in_progress` b..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - When a ralph-tui bead shows up `in_progress` b..." → "  - When a ralph-tui bead shows up `in_progress` b..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Bead mrr-incremental-fetch-3sl.3 (phase-1 thin GraphQL query + dedup-before-enrichment) showed `in_progress` via `br show` at session start, despite a prior-session engram memory recording i... (2329 chars)"
+These candidate matches are unrelated (jiraadpt dedup, goconst lint pattern, agent-tui testing pattern) with low relevance scores, so I'll resolve them silently rather than interrupt the user.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_judge[0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+Now saving the mandatory end-of-session summary.
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.3 (child of epic mrr-incremental-fetch-3sl, docs/adr/0005): phase-1 thin GraphQL listing query (no discussions) + move dedup to run before enrichment instea... (3425 chars)"
+`★ Insight ─────────────────────────────────────`
+The tell here wasn't "files are missing" — it was "`git status` is clean but the tracker disagrees." A dirty working tree would have meant "implemented but not committed" (the `.2` bead's situation last session). A *clean* tree plus a claimed implementation means the code must already be committed somewhere; the only question is which commit. `git log --oneline -- <path>` answers that directly by walking history filtered to specific files, sidestepping any need to trust a commit's own message.
+
+This is also why `dedupStage` moving earlier in the pipeline matters architecturally: GitLab's GraphQL API doesn't offer a "list minus discussions but still dedup-aware" primitive — the fan-out across sources (author, reviewer) is inherently going to surface the same MR multiple times before the adapter can know that. Doing the expensive discussions fetch (`enrichStage`) *after* collapsing duplicates, rather than before, is the whole latency win: it's O(unique MRs) instead of O(MR × sources-that-reference-it).
+`─────────────────────────────────────────────────`
+
+Bead **mrr-incremental-fetch-3sl.3** is closed. The implementation (thin GraphQL queries, dedup-before-enrichment, `resolvedDiscussionsCount`/`resolvableDiscussionsCount` scalars, ADR-0005 timing notes) was already committed under `c256149` from a prior session — that commit's message named ticket `.2` but its diff also carried `.3`'s and `.5`'s files. I verified every acceptance criterion against the actual code, confirmed `just check` passes clean, and closed the bead with a reason citing the findings. No code changes were needed this session.
+
+<promise>COMPLETE</promise>

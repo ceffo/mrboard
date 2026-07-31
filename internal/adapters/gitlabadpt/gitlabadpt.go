@@ -65,7 +65,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	// Stage 3: enrich — fetch discussions (REST or GraphQL, matching each MR's
 	// source) for every deduped survivor in parallel, exactly once per MR.
 	enrichStart := time.Now()
-	finalMRs, enrichErrs := a.enrichStage(ctx, toEnrichREST, toEnrichGQL)
+	finalMRs, enrichErrs := a.enrichStage(ctx, toEnrichREST, toEnrichGQL, opts)
 	errs = append(errs, enrichErrs...)
 	logger.Info("gitlab: enrichment done",
 		"enriched", len(finalMRs), "enrich_errors", len(enrichErrs),
@@ -177,22 +177,35 @@ func dedupStage(
 	return toEnrichREST, toEnrichGQL
 }
 
-// enrichStage fetches discussions for each deduped survivor in parallel, bounded
-// by enrichConcurrency across both REST stubs and GraphQL-thin stubs combined.
-// Errors are collected and returned alongside successful results.
+// enrichStage completes every deduped survivor into a domain.MergeRequest.
+// REST stubs are always fetched fresh, one MR at a time, bounded by
+// enrichConcurrency — the REST group-source path is untouched by the two-phase
+// split (docs/adr/0005, Consequences). GraphQL-thin stubs are first split by
+// diffGQLStage: those whose updatedAt matches opts.Previous are merged with the
+// cached MR with no network call at all; the rest are fetched in a single
+// aliased multi-MR request (phase 2, docs/adr/0005 "Two-phase conditional
+// fetch"). Errors are collected and returned alongside successful results.
 func (a *GitLabAdapter) enrichStage(
 	ctx context.Context,
 	toEnrichREST []*gl.BasicMergeRequest,
 	toEnrichGQL []pkggitlab.GQLMergeRequest,
+	opts mrsvc.FetchOptions,
 ) ([]domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
+
+	forceStale := make(map[mrKey]bool, len(opts.ForceStale))
+	for _, k := range opts.ForceStale {
+		forceStale[k] = true
+	}
+	unchangedGQL, changedGQL, cachedByKey := diffGQLStage(toEnrichGQL, opts.Previous, forceStale)
+	logger.Info("gitlab: phase-2 diff", "unchanged", len(unchangedGQL), "changed", len(changedGQL))
 
 	type result struct {
 		mr  domain.MergeRequest
 		err error
 	}
 
-	results := make([]result, len(toEnrichREST)+len(toEnrichGQL))
+	results := make([]result, len(toEnrichREST)+len(unchangedGQL)+len(changedGQL))
 	sem := make(chan struct{}, enrichConcurrency)
 	var wg sync.WaitGroup
 
@@ -208,15 +221,29 @@ func (a *GitLabAdapter) enrichStage(
 		}()
 	}
 	offset := len(toEnrichREST)
-	for i, mr := range toEnrichGQL {
-		i, mr := i, mr
-		sem <- struct{}{}
+
+	for i, mr := range unchangedGQL {
+		results[offset+i] = result{mr: MergeMRFromGraphQL(mr, cachedByKey[gqlMRKey(mr)])}
+	}
+	offset += len(unchangedGQL)
+
+	if len(changedGQL) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { <-sem }()
-			domainMR, err := a.enrichGQLMR(ctx, mr)
-			results[offset+i] = result{mr: domainMR, err: err}
+			batchStart := time.Now()
+			enriched, err := a.enrichGQLMRsBatch(ctx, changedGQL)
+			logger.Info("gitlab: phase-2 batch discussions done",
+				"changed", len(changedGQL), "duration", ilog.FmtDur(time.Since(batchStart)))
+			if err != nil {
+				for i := range changedGQL {
+					results[offset+i] = result{err: err}
+				}
+				return
+			}
+			for i, domainMR := range enriched {
+				results[offset+i] = result{mr: domainMR}
+			}
 		}()
 	}
 	wg.Wait()
@@ -532,25 +559,6 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 	}
 
 	return MapMR(mr, dr.discussions, ar.approvals, rr.rules), nil
-}
-
-// enrichGQLMR completes a phase-1 thin GraphQL MR by fetching its discussions —
-// the one field the thin listing query omits — via a single-MR GraphQL query,
-// then maps the result exactly as the old fat query's response would have been.
-func (a *GitLabAdapter) enrichGQLMR(ctx context.Context, mr pkggitlab.GQLMergeRequest) (domain.MergeRequest, error) {
-	logger := ilog.FromContext(ctx)
-	discussions, hasNextPage, err := a.client.FetchMRDiscussionsGraphQL(ctx, mr.Project.FullPath, mr.IID)
-	if err != nil {
-		return domain.MergeRequest{}, fmt.Errorf(
-			"enrichGQLMR project=%q MR=%s discussions: %w", mr.Project.FullPath, mr.IID, err)
-	}
-	if hasNextPage {
-		logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
-			"project", mr.Project.FullPath, "mr_iid", mr.IID)
-	}
-	mr.Discussions.Nodes = discussions
-	mr.Discussions.PageInfo.HasNextPage = hasNextPage
-	return MapMRFromGraphQL(mr), nil
 }
 
 // GetDiff implements mrsvc.MergeRequestSource.
