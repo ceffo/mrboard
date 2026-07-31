@@ -10,6 +10,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
 	"github.com/ceffo/mrboard/internal/adapters/jiraadpt"
+	"github.com/ceffo/mrboard/internal/adapters/snapshotstore"
 	"github.com/ceffo/mrboard/internal/adapters/statestore"
 	"github.com/ceffo/mrboard/internal/adapters/teamsnotify"
 	"github.com/ceffo/mrboard/internal/config"
@@ -25,6 +26,7 @@ import (
 type Core struct {
 	MRSource       mrsvc.MergeRequestSource
 	StateStore     domain.StateStore
+	SnapshotStore  domain.SnapshotStore
 	Notifier       domain.Notifier
 	TicketEnricher ticketsvc.TicketEnricher // nil when the issue tracker is not configured
 	TicketLinker   ticketsvc.TicketLinker   // nil when not configured; same adapter instance as TicketEnricher
@@ -76,6 +78,13 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		return nil, err
 	}
 
+	// 4b. Snapshot store (incremental-fetch cache, see docs/adr/0005)
+	snapStore, err := snapshotstore.New(snapshotstore.Config{Dir: config.XDGCacheDir()})
+	if err != nil {
+		closer.Close()
+		return nil, err
+	}
+
 	var notifier domain.Notifier
 	if teamsCfg := cfg.Notifications.Teams; teamsCfg.WebhookURL != "" {
 		notifier = teamsnotify.New(teamsnotify.Config{
@@ -106,6 +115,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 	return &Core{
 		MRSource:       adapter,
 		StateStore:     store,
+		SnapshotStore:  snapStore,
 		Notifier:       notifier,
 		TicketEnricher: ticketEnricher,
 		TicketLinker:   ticketLinker,

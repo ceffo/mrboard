@@ -15,6 +15,10 @@ type MRLister interface {
 	IsProjectArchived(ctx context.Context, projectID int64) (bool, error)
 	FetchUserMRsGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
 	FetchReviewerMRsGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
+	// FetchUserMRsThinGraphQL and FetchReviewerMRsThinGraphQL are the phase-1 listing
+	// queries: same fields as their fat counterparts minus discussions.
+	FetchUserMRsThinGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
+	FetchReviewerMRsThinGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
 }
 
 // MREnricher covers enrichment: fetching full details for a single MR.
@@ -27,6 +31,9 @@ type MREnricher interface {
 	GetMRDiffs(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestDiff, error)
 	GetMRDiffRefs(ctx context.Context, projectID, mrIID int64) (baseSHA, headSHA string, err error)
 	GetRawFileContent(ctx context.Context, projectID int64, path, ref string) ([]byte, error)
+	// FetchMRDiscussionsGraphQL completes a phase-1 thin MR with its discussions,
+	// the one field the thin listing query omits.
+	FetchMRDiscussionsGraphQL(ctx context.Context, projectFullPath, iid string) ([]GQLDiscussion, bool, error)
 }
 
 // MRWriter covers mutations: writing approval rules, reviewer lists, and fetching editable project members.

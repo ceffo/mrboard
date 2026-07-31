@@ -7,44 +7,28 @@ after each iteration and it's included in prompts for context.
 
 *Add reusable patterns discovered during development here.*
 
-- **Promoting a private key type to an exported domain type**: when a package-private
-  identity struct (e.g. `mrKey{projectID, iid int}`) needs to become the canonical
-  exported type (`domain.MRKey{ProjectID, IID int}`), use a type alias
-  (`type mrKey = domain.MRKey`) rather than a distinct type — it lets every existing
-  `mrKey{...}` construction site keep compiling with only field-name casing fixes
-  (map keys, composite literals), instead of a full rewrite to `domain.MRKey`.
+- New JSON/YAML-backed persistence adapters (statestore, snapshotstore) share one shape:
+  `Config{Dir string}` -> `New(cfg)` does `os.MkdirAll(cfg.Dir, 0o700)` and stores just the
+  file path -> `Load()`/`Save()` use `dirMode 0o700`/`fileMode 0o600`. For caches (as opposed
+  to durable state), make `Load()` swallow every failure mode (absent file, corrupt JSON,
+  version mismatch) into a zero-value/empty result with a nil error — the port's doc comment
+  should say why (losing the cache costs one slow fetch, not a user-visible error).
 
 ---
 
-## [2026-07-31] - mrr-incremental-fetch-3sl.1
-- Implemented the pure type/port foundation for the incremental-fetch epic (docs/adr/0005):
-  `domain.MRKey{ProjectID, IID int}` (internal/domain/mr.go), `MergeRequest.UpdatedAt time.Time`,
-  `domain.SnapshotStore` port (internal/domain/state.go, sibling to `StateStore`),
-  `mrsvc.FetchOptions.Previous []domain.MergeRequest`, `config.XDGCacheDir()` (mirrors
-  `XDGConfigDir`/`XDGDataDir`, backed by `$XDG_CACHE_HOME` else `~/.cache/mrboard`).
-- Promoted the private `mrKey` in `internal/adapters/gitlabadpt` to a type alias of
-  `domain.MRKey` (`type mrKey = domain.MRKey`) so dedup.go/gitlabadpt.go keep compiling
-  with only field-name casing fixes (`projectID`→`ProjectID`, `iid`→`IID`) at every
-  `mrKey{...}` construction site — no behavior change.
-- `UpdatedAt` now populated in both mapper paths: `MapMR` reads `mr.UpdatedAt *time.Time`
-  (REST, same nil-guard pattern as `CreatedAt`); `MapMRFromGraphQL` parses
-  `mr.UpdatedAt string` via `time.Parse(time.RFC3339, ...)` (same pattern as `CreatedAt`).
-  Added `TestMapMR_UpdatedAt_Stored` / `TestMapMRFromGraphQL_UpdatedAt_Stored` in
-  mapper_test.go, following the existing `SourceTargetBranch_Stored` test pair style.
-- Added `SnapshotStore:` entry to `.mockery.yml` under the `internal/domain` package
-  (same package block as `Notifier`, since `SnapshotStore` lives in `internal/domain/state.go`).
-  `just generate` produced `internal/domain/mocks/mock_SnapshotStore.go` cleanly and is a
-  no-op diff on a second run.
-- Files changed: internal/domain/mr.go, internal/domain/state.go,
-  internal/domain/service/mrsvc/mrsvc.go, internal/config/config.go,
-  internal/adapters/gitlabadpt/{dedup.go,gitlabadpt.go,mapper.go,mapper_test.go},
-  .mockery.yml, internal/domain/mocks/mock_SnapshotStore.go (new).
+## [2026-07-31] - mrr-incremental-fetch-3sl.2
+- Verified `internal/adapters/snapshotstore.JSONStore` (already implemented, likely by a prior
+  session whose `br close` never landed — the bead was found `in_progress` despite engram memory
+  recording it as closed). Confirmed it satisfies every acceptance criterion: absent/corrupt/
+  version-mismatch files all yield `(nil, time.Time{}, nil)`; round-trip test asserts equality
+  including `UpdatedAt`; `WrittenAt` is exposed to callers. Wiring into `internal/core/core.go`
+  (`Core.SnapshotStore`, built via `snapshotstore.New(snapshotstore.Config{Dir: config.XDGCacheDir()})`
+  alongside the existing `StateStore`) was also already present.
+- Files touched this session: none (verification only) — closed the bead and flushed beads state.
 - **Learnings:**
-  - `just check` passed clean: fmt + lint + build + 185 tests, no changes needed beyond
-    the scoped additions.
-  - No behavior change: `mrsvc.FetchOptions.Previous` is added but unused by any adapter
-    yet — that's phase 2 (two-phase conditional fetch), a separate ticket in this epic.
-  - `internal/domain/state.go` has zero imports at all (not even stdlib) — adding
-    `SnapshotStore` referencing only `[]MergeRequest` (same package) kept it that way.
+  - When a ralph-tui bead shows up `in_progress` but engram memory says it was already closed in a
+    prior session, check the actual files first — the implementation may be complete and only the
+    `br close`/`git commit` step got lost (e.g. session ended before the automatic commit ran).
+    Re-verify against the acceptance criteria and `just check` rather than re-implementing.
 ---
 

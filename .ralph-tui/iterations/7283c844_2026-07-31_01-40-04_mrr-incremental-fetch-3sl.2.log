@@ -1,0 +1,30 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.2
+- **Task Title**: snapshotstore: versioned JSON cache in XDG_CACHE_HOME + core wiring
+- **Description**: ## Scope
+
+Concrete `domain.SnapshotStore` implementation and its composition-root wiring.
+
+- New `internal/adapters/snapshotstore` writing `{XDGCacheDir()}/mrboard/snapshot.json`, mode 0600.
+  Model i...
+- **Status**: failed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T05:40:04.067Z
+- **Ended At**: 2026-07-31T05:40:05.990Z
+- **Duration**: 1s
+- **Input Tokens**: 0
+- **Output Tokens**: 0
+- **Total Tokens**: 0
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+You've hit your session limit · resets 3am (America/Toronto)
+
+[91m[Error: rate_limit][0m

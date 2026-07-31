@@ -59,6 +59,18 @@ func (f *fakeDescriptionClient) FetchReviewerMRsGraphQL(
 	panic("not implemented")
 }
 
+func (f *fakeDescriptionClient) FetchUserMRsThinGraphQL(
+	_ context.Context, _ string,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) FetchReviewerMRsThinGraphQL(
+	_ context.Context, _ string,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	panic("not implemented")
+}
+
 // --- MREnricher stubs ---
 func (f *fakeDescriptionClient) GetMR(_ context.Context, _, _ int64) (*gl.BasicMergeRequest, error) {
 	panic("not implemented")
@@ -83,6 +95,12 @@ func (f *fakeDescriptionClient) GetMRDiffs(_ context.Context, _, _ int64) ([]*gl
 }
 
 func (f *fakeDescriptionClient) GetMRDiffRefs(_ context.Context, _, _ int64) (string, string, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) FetchMRDiscussionsGraphQL(
+	_ context.Context, _, _ string,
+) ([]pkggitlab.GQLDiscussion, bool, error) {
 	panic("not implemented")
 }
 

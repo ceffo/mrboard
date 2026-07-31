@@ -5,6 +5,8 @@
 package mocks
 
 import (
+	"time"
+
 	"github.com/ceffo/mrboard/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -37,7 +39,7 @@ func (_m *MockSnapshotStore) EXPECT() *MockSnapshotStore_Expecter {
 }
 
 // Load provides a mock function for the type MockSnapshotStore
-func (_mock *MockSnapshotStore) Load() ([]domain.MergeRequest, error) {
+func (_mock *MockSnapshotStore) Load() ([]domain.MergeRequest, time.Time, error) {
 	ret := _mock.Called()
 
 	if len(ret) == 0 {
@@ -45,8 +47,9 @@ func (_mock *MockSnapshotStore) Load() ([]domain.MergeRequest, error) {
 	}
 
 	var r0 []domain.MergeRequest
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func() ([]domain.MergeRequest, error)); ok {
+	var r1 time.Time
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func() ([]domain.MergeRequest, time.Time, error)); ok {
 		return returnFunc()
 	}
 	if returnFunc, ok := ret.Get(0).(func() []domain.MergeRequest); ok {
@@ -56,12 +59,17 @@ func (_mock *MockSnapshotStore) Load() ([]domain.MergeRequest, error) {
 			r0 = ret.Get(0).([]domain.MergeRequest)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func() error); ok {
+	if returnFunc, ok := ret.Get(1).(func() time.Time); ok {
 		r1 = returnFunc()
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(time.Time)
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func() error); ok {
+		r2 = returnFunc()
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
 }
 
 // MockSnapshotStore_Load_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Load'
@@ -81,12 +89,12 @@ func (_c *MockSnapshotStore_Load_Call) Run(run func()) *MockSnapshotStore_Load_C
 	return _c
 }
 
-func (_c *MockSnapshotStore_Load_Call) Return(mergeRequests []domain.MergeRequest, err error) *MockSnapshotStore_Load_Call {
-	_c.Call.Return(mergeRequests, err)
+func (_c *MockSnapshotStore_Load_Call) Return(mergeRequests []domain.MergeRequest, time1 time.Time, err error) *MockSnapshotStore_Load_Call {
+	_c.Call.Return(mergeRequests, time1, err)
 	return _c
 }
 
-func (_c *MockSnapshotStore_Load_Call) RunAndReturn(run func() ([]domain.MergeRequest, error)) *MockSnapshotStore_Load_Call {
+func (_c *MockSnapshotStore_Load_Call) RunAndReturn(run func() ([]domain.MergeRequest, time.Time, error)) *MockSnapshotStore_Load_Call {
 	_c.Call.Return(run)
 	return _c
 }

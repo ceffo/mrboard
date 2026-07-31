@@ -12,6 +12,7 @@ func (m Model) ShowDetail() bool              { return m.showDetail }
 func (m Model) State() appState               { return m.state }
 func (m Model) ErrMsg() string                { return m.errMsg }
 func (m Model) Errors() []error               { return m.errors }
+func (m Model) Selected() domain.MRKey        { return m.selected }
 
 // StateLoading / StateBoard / StateError are exported sentinels for test assertions.
 const (

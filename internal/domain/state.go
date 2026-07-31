@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // FilterCriteria is the persisted filter state. Zero value means no filtering.
 type FilterCriteria struct {
 	// Phases is nil/empty = show all phases; otherwise only listed phases are shown.
@@ -43,10 +45,11 @@ type StateStore interface {
 
 // SnapshotStore is the driven port for persisting the last-known set of MRs,
 // used to support incremental fetch (see docs/adr/0005). Load returning an
-// empty slice means there is nothing usable to diff against — a cold cache,
-// not an error — including when the adapter discards a snapshot written by
-// an older, incompatible schema version.
+// empty slice and a zero time.Time means there is nothing usable to diff
+// against — a cold cache, not an error — including when the adapter discards
+// a snapshot written by an older, incompatible schema version. The returned
+// time is when the snapshot was written, for the header's age indicator.
 type SnapshotStore interface {
-	Load() ([]MergeRequest, error)
+	Load() ([]MergeRequest, time.Time, error)
 	Save([]MergeRequest) error
 }

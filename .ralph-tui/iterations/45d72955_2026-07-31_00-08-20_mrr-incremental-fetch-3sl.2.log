@@ -1,0 +1,150 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.2
+- **Task Title**: snapshotstore: versioned JSON cache in XDG_CACHE_HOME + core wiring
+- **Description**: ## Scope
+
+Concrete `domain.SnapshotStore` implementation and its composition-root wiring.
+
+- New `internal/adapters/snapshotstore` writing `{XDGCacheDir()}/mrboard/snapshot.json`, mode 0600.
+  Model i...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T04:08:20.264Z
+- **Ended At**: 2026-07-31T04:13:12.446Z
+- **Duration**: 4m 52s
+- **Input Tokens**: 250
+- **Output Tokens**: 23435
+- **Total Tokens**: 23685
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading context: prior session memory, the progress file, and the existing `statestore` adapter this new one should mirror.
+[94m[Bash][0m $ \cat /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md 2>/dev/null | tail -150
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/ 2>/dev/null && echo "---...
+
+[91m[Error: Exit code 1
+statestore.go
+---][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/statestore.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/docs/adr/0005*.md
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl --format toon 2>/dev/null | \cat
+[94m[Bash][0m $ rg -n "snapshot|Snapshot|written-at|WrittenAt|cache dir|age indicator|header" /Users/moncefnaji/code...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[Bash][0m $ rg -n "SnapshotStore" /Users/moncefnaji/code/github.com/mrboard --type go -g '!*_test.go' -g '!mocks...
+[94m[Bash][0m $ rg -n "XDGCacheDir|XDGDataDir|XDGConfigDir" /Users/moncefnaji/code/github.com/mrboard/internal/confi...
+[94m[Bash][0m $ rg -n "StateStore|statestore" /Users/moncefnaji/code/github.com/mrboard/internal/core/*.go
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/core/
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+[94m[Bash][0m $ rg -n "^type MergeRequest struct" -A 40 /Users/moncefnaji/code/github.com/mrboard/internal/domain/mr...
+[94m[Bash][0m $ rg -n "type MRPhase|type ReviewerInfo|MarshalJSON|MarshalYAML" /Users/moncefnaji/code/github.com/mrb...
+Good — plain int enum, no custom marshaling, so `encoding/json` round-trips it fine as a number. Now let's check `mrsvc.go` for `FetchOptions` and confirm nothing else references `SnapshotStore.Load()` signature yet, then check the `.mockery.yml` entry.
+[94m[Bash][0m $ rg -n "SnapshotStore" /Users/moncefnaji/code/github.com/mrboard/.mockery.yml
+Now I'll update the `domain.SnapshotStore` port to expose the written-at timestamp, since nothing calls it yet and the header (a later ticket) needs it.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m edit: "package domain" → "package domain
+
+import "time""
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m edit: "// SnapshotStore is the driven port for persisting..." → "// SnapshotStore is the driven port for persisting..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m "// Package snapshotstore provides a JSON-backed implementation of domain.SnapshotStore.
+package snapshotstore
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/ceffo/mrboard/inte... (2135 chars)"
+Let me align error wrapping with `statestore`'s convention for the errors that *do* surface (`New`/`Save`), and let gofmt fix struct alignment.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m edit: "import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	..." → "import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/file..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m edit: "// fileFormat is the on-disk shape of snapshot.jso..." → "// fileFormat is the on-disk shape of snapshot.jso..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m edit: "func New(cfg Config) (*JSONStore, error) {
+	if err..." → "func New(cfg Config) (*JSONStore, error) {
+	if err..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m edit: "func (s *JSONStore) Save(mrs []domain.MergeRequest..." → "func (s *JSONStore) Save(mrs []domain.MergeRequest..."
+Now let's wire it into `internal/core/core.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	"github.com/ceffo/mrboard/internal/adapters/gitla..." → "	"github.com/ceffo/mrboard/internal/adapters/gitla..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	MRSource       mrsvc.MergeRequestSource
+	StateSto..." → "	MRSource       mrsvc.MergeRequestSource
+	StateSto..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "	// 4. State store
+	store, err := statestore.New(s..." → "	// 4. State store
+	store, err := statestore.New(s..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m edit: "		MRSource:       adapter,
+		StateStore:     store..." → "		MRSource:       adapter,
+		StateStore:     store..."
+Now let's write the test file, modeled on the codebase's testify conventions.
+[94m[Bash][0m $ \ls /Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/*_test.go 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/jiraadpt/jiraadpt_test.go[0m
+Now I'll write the test suite covering: absent file, corrupt file, version mismatch, and a save/load round-trip.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore_test.go[0m "package snapshotstore
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+... (1839 chars)"
+I used a placeholder `jsonMarshal` helper that doesn't exist — fixing that to use `encoding/json` directly.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore_test.go[0m edit: "import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"..." → "import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore_test.go[0m edit: "	stale := fileFormat{Version: currentVersion + 1, ..." → "	stale := fileFormat{Version: currentVersion + 1, ..."
+Now let's regenerate the mock for the updated `SnapshotStore` interface and run the full quality gate.
+[94m[Bash][0m $ just generate 2>&1 | tail -40
+[94m[Bash][0m $ just check 2>&1 | tail -100
+`just check` passed with all tests green — let me confirm the snapshotstore-specific tests ran and check for lint issues from `gofmt`/`golangci-lint` specifically on the new files.
+[94m[Bash][0m $ just check 2>&1 | rg -i "snapshotstore|FAIL|error|lint"
+All tests pass and lint is clean. Let me confirm the round-trip test specifically ran (it didn't match my grep pattern) and double check `gofmt`/`golangci-lint` are clean on exactly the new files.
+[94m[Bash][0m $ go test ./internal/adapters/snapshotstore/... -v 2>&1 | \cat && echo "---lint---" && golangci-lint r...
+All four tests pass, lint is clean, and `just check` (fmt + lint + build + full test suite) passed earlier. Let me quickly review the final diff before closing out.
+[94m[Bash][0m $ git status --short && echo "---" && git diff --stat
+This all matches the bead scope exactly. Now let's close the bead and flush the tracker.
+[94m[Bash][0m $ SnapshotStore.Load now returns written-at time" && br sync --flush-only
+[94m[Bash][0m $ rg -o '"id":"mrr-incremental-fetch-3sl.2"[^}]*' /Users/moncefnaji/code/github.com/mrboard/.beads/iss...
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.2 --format toon 2>/dev/null | rg "status" | \cat
+Good — the bead is closed and already synced (the "nothing to export" just meant `br close` had already flushed it to JSONL directly). Now let's append the progress log entry, per the workflow instructions.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  - `internal/domain/state.go` has zero imports at..." → "  - `internal/domain/state.go` has zero imports at..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-incremental-fetch-3sl.2 (epic mrr-incremental-fetch-3sl, docs/adr/0005). Added `internal/adapters/snapshotstore.JSONStore`, modeled on `internal/adapters/statestore.YAMLStore` (sa... (1821 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.2 (child of epic mrr-incremental-fetch-3sl, docs/adr/0005): a concrete `domain.SnapshotStore` adapter (versioned JSON cache in XDG_CACHE_HOME) plus composit... (3354 chars)"
+`★ Insight ─────────────────────────────────────`
+Two design choices worth flagging: first, extending `domain.SnapshotStore.Load()` to return `(mrs, writtenAt, error)` rather than bolting on a separate `WrittenAt()` getter method — a stateless interface (call once, get everything) is easier to mock and reason about than one where callers must sequence two method calls correctly. This was only safe because ticket `.1` had added the port with zero real callers, so there was nothing downstream to break.
+
+Second, the `time.Now()` vs `time.Date(...)` gotcha in the round-trip test: `time.Time` carries an internal monotonic-clock reading whenever it comes from `time.Now()`, but `encoding/json` serializes it as an RFC3339 string and `time.Parse` on the way back never reconstructs that reading. Two `time.Time` values representing the identical instant can therefore fail `reflect.DeepEqual` (and thus `assert.Equal`) purely because one has a monotonic component and the other doesn't — building test fixtures with `time.Date(...).UTC()` sidesteps this entirely.
+`─────────────────────────────────────────────────`
+
+Bead `mrr-incremental-fetch-3sl.2` is closed. Added `internal/adapters/snapshotstore` (JSON-backed, modeled on `statestore`), extended `domain.SnapshotStore.Load()` to also return the written-at time, wired it into `internal/core`, and covered all four acceptance-criteria cases with tests. `just check` passes clean. Next up in the epic: `.3`/`.4` (the phase-1/phase-2 GitLab fetch) will be the first real consumers of this store.

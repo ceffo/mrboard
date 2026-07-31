@@ -135,6 +135,11 @@ type MRKey struct {
 	IID       int
 }
 
+// Key returns mr's identity for selection tracking, dedup, and cache lookups.
+func (mr MergeRequest) Key() MRKey {
+	return MRKey{ProjectID: mr.ProjectID, IID: mr.IID}
+}
+
 // MergeRequest is the core domain type representing a GitLab merge request.
 type MergeRequest struct {
 	ID           int

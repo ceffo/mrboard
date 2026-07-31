@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -211,4 +212,73 @@ func TestModel_TicketIndex_EmptyKeyReturnsNil(t *testing.T) {
 func TestModel_TicketIndex_NoTicketKeysProducesEmptyIndex(t *testing.T) {
 	m := makeModel(t, someMRs(), "") // someMRs have no ticket keys in titles
 	assert.Nil(t, m.SiblingMRs(ticketKeyAlpha), "expected nil when no MR has ticket key %s", ticketKeyAlpha)
+}
+
+// --- Selection identity (docs/adr/0005) ---
+//
+// board.SetMRs resolves focus from m.selected on every call, so every
+// applyMRFilter() call site keeps the same MR selected by construction. These
+// tests exercise four of those call sites directly through Model.Update.
+
+// selectSecondMR moves focus down once, landing on someMRs()'s second card
+// (IID 20), and returns the resulting Model.
+func selectSecondMR(t *testing.T, m Model) Model {
+	t.Helper()
+	next, _ := m.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})
+	return next.(Model)
+}
+
+func TestModel_Sort_KeepsSameMRSelected(t *testing.T) {
+	m := selectSecondMR(t, makeModel(t, someMRs(), ""))
+	want := m.Selected()
+	require.Equal(t, 20, want.IID, "expected focus on the second MR before sorting")
+
+	next, _ := m.Update(tea.KeyPressMsg{Text: "s", Code: 's'})
+	m2 := next.(Model)
+
+	assert.Equal(t, want, m2.Selected(), "sorting must not disturb the selected MR")
+	require.NotNil(t, m2.board.FocusedMR())
+	assert.Equal(t, want.IID, m2.board.FocusedMR().IID)
+}
+
+func TestModel_SprintToggle_KeepsSameMRSelected(t *testing.T) {
+	m := selectSecondMR(t, makeModel(t, someMRs(), ""))
+	want := m.Selected()
+	require.Equal(t, 20, want.IID)
+
+	next, _ := m.Update(tea.KeyPressMsg{Text: "S", Code: 's'})
+	m2 := next.(Model)
+
+	assert.Equal(t, want, m2.Selected(), "toggling the sprint filter must not disturb the selected MR")
+	require.NotNil(t, m2.board.FocusedMR())
+	assert.Equal(t, want.IID, m2.board.FocusedMR().IID)
+}
+
+func TestModel_ViewToggle_KeepsSameMRSelected(t *testing.T) {
+	m := selectSecondMR(t, makeModel(t, someMRs(), "bob"))
+	want := m.Selected()
+	require.Equal(t, 20, want.IID)
+
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m2 := next.(Model)
+
+	assert.Equal(t, want, m2.Selected(), "toggling the view must not disturb the selected MR")
+	require.NotNil(t, m2.board.FocusedMR())
+	assert.Equal(t, want.IID, m2.board.FocusedMR().IID)
+}
+
+func TestModel_FetchSwap_KeepsSameMRSelected(t *testing.T) {
+	m := selectSecondMR(t, makeModel(t, someMRs(), ""))
+	want := m.Selected()
+	require.Equal(t, 20, want.IID)
+
+	// A refetched snapshot: same two MRs, reordered, plus a new third MR.
+	mrs := someMRs()
+	swapped := []domain.MergeRequest{mrs[1], mrs[0], {ID: 3, IID: 30, Author: "dave", ProjectPath: "org/gamma"}}
+	next, _ := m.Update(FetchResultMsg{MRs: swapped})
+	m2 := next.(Model)
+
+	assert.Equal(t, want, m2.Selected(), "a fetch swap must not disturb the selected MR")
+	require.NotNil(t, m2.board.FocusedMR())
+	assert.Equal(t, want.IID, m2.board.FocusedMR().IID)
 }

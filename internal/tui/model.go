@@ -251,7 +251,7 @@ type Model struct {
 	baseCtx            context.Context
 	logger             *slog.Logger
 	isRefreshing       bool
-	prevFocusMR        *domain.MergeRequest // saved before refresh for focus restoration
+	selected           domain.MRKey // single source of truth for board selection, see docs/adr/0005
 	notifier           domain.Notifier
 	alerts             toast.Model
 	ticketBaseURL      string
@@ -504,10 +504,6 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.applyTheme()
 		m.applyMRFilter()
-		if m.prevFocusMR != nil {
-			m.board.TryRestoreFocus(int(m.prevFocusMR.Phase), m.prevFocusMR.IID)
-			m.prevFocusMR = nil
-		}
 		m.updateTicketKey()
 		return m, tea.Batch(m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds())
 
@@ -732,7 +728,6 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showDetail {
 			m.closeDetail()
 		}
-		m.prevFocusMR = m.board.FocusedMR()
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
 			return m, tea.Batch(m.sp.Init(), m.startFetch())
@@ -989,10 +984,14 @@ func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateTicketKey enables or disables the ticket key based on whether the
-// focused MR has a detectable ticket ID and ticketBaseURL is configured. Call after any
-// navigation that may change the focused card.
+// focused MR has a detectable ticket ID and ticketBaseURL is configured, and
+// syncs m.selected to match. Call after any navigation that may change the
+// focused card.
 func (m *Model) updateTicketKey() {
 	mr := m.board.FocusedMR()
+	if mr != nil {
+		m.selected = mr.Key()
+	}
 	enabled := m.ticketBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
 	m.keys.OpenTicket.SetEnabled(enabled)
 }
@@ -1504,7 +1503,7 @@ func (m *Model) applyMRFilter() {
 		SprintKeys:   m.sprintIssueKeys,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
-	m.board.SetMRs(displayMRs)
+	m.selected = m.board.SetMRs(displayMRs, m.selected)
 	m.header.SetMRs(displayMRs)
 	m.header.SetFilterActive(m.isFilterActive())
 	m.header.SetSprintFilterActive(m.sprintFilterActive)

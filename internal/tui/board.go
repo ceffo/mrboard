@@ -51,25 +51,6 @@ func (b *boardWidget) SetStyles(s Styles) {
 	}
 }
 
-// TryRestoreFocus attempts to focus the MR identified by colIdx+mrIID.
-// If the MR has moved or been removed, it stays on the same column when possible.
-func (b *boardWidget) TryRestoreFocus(colIdx int, mrIID int) {
-	if colIdx >= 0 && colIdx < numColumns {
-		for i, card := range b.columns[colIdx].cards {
-			if card.mr.IID == mrIID {
-				b.setFocusedCol(colIdx)
-				b.columns[colIdx].ClampFocusTo(i)
-				return
-			}
-		}
-		if len(b.columns[colIdx].cards) > 0 {
-			b.setFocusedCol(colIdx)
-			return
-		}
-	}
-	b.setInitialFocus()
-}
-
 // SetActive marks the board as owning keyboard focus (true) or yielding it to
 // a panel (false). The focused column's card renders a dimmed highlight when inactive.
 func (b *boardWidget) SetActive(v bool) {
@@ -104,7 +85,20 @@ func columnWidths(totalWidth int) [numColumns]int {
 	return w
 }
 
-func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
+// SetMRs replaces the board's cards and resolves focus from selected rather
+// than resetting to the first card, so every caller gets correct selection
+// restoration by construction (see docs/adr/0005 "Selection identity").
+//
+// If selected is still present in mrs, focus follows it — including across
+// columns, when its phase changed. Otherwise (merged, closed, or filtered
+// out) focus stays in the same column at the same row index, clamped to the
+// column's new length, falling back to the first non-empty column if that
+// column is now empty. It returns the key of whichever card focus lands on,
+// which the caller should store as its new selection.
+func (b *boardWidget) SetMRs(mrs []domain.MergeRequest, selected domain.MRKey) domain.MRKey {
+	prevCol := b.focusedCol
+	prevIdx := b.columns[prevCol].focusIdx
+
 	var byPhase [numColumns][]domain.MergeRequest
 	for _, mr := range mrs {
 		if idx := int(mr.Phase); idx >= 0 && idx < numColumns {
@@ -114,7 +108,26 @@ func (b *boardWidget) SetMRs(mrs []domain.MergeRequest) {
 	for i := range b.columns {
 		b.columns[i].SetCards(byPhase[i])
 	}
-	b.setInitialFocus()
+
+	for i := range b.columns {
+		for j, card := range b.columns[i].cards {
+			if card.mr.Key() == selected {
+				b.setFocusedCol(i)
+				b.columns[i].ClampFocusTo(j)
+				return selected
+			}
+		}
+	}
+
+	b.setFocusedCol(prevCol)
+	b.columns[prevCol].ClampFocusTo(prevIdx)
+	if len(b.columns[prevCol].cards) == 0 {
+		b.setInitialFocus()
+	}
+	if mr := b.FocusedMR(); mr != nil {
+		return mr.Key()
+	}
+	return domain.MRKey{}
 }
 
 func (b *boardWidget) setInitialFocus() {

@@ -105,6 +105,32 @@ teammate editing approvers in the GitLab web UI would otherwise be invisible to 
 `updated_at`. Keeping the field always-fresh closes that hole. If measurement shows this resolver
 dominates phase 1's latency, the trade is worth revisiting — as a deliberate decision, not silently.
 
+### Phase-1 thin query: implementation findings (resolved 2026-07-31)
+
+Two open questions from the phase-1 ticket (`mrr-incremental-fetch-3sl.3`) are now answered against
+the live `gl.nsesi.io` schema and traffic, not left as assumptions:
+
+- **`resolvedDiscussionsCount` / `resolvableDiscussionsCount` exist as scalars on `MergeRequest`**,
+  confirmed via a live GraphQL introspection query and a live data query returning real non-zero
+  counts (e.g. a merged MR with `resolvedDiscussionsCount: 3, resolvableDiscussionsCount: 3`). Both
+  fields are non-deprecated. They are now requested in the thin query alongside `approvalState`.
+  This makes the "does resolving a thread bump `updated_at`" question moot for a future phase-2: a
+  changed resolved/resolvable count is itself a cache-invalidation signal independent of
+  `updated_at`, and `resolvableDiscussionsCount - resolvedDiscussionsCount` gives `OpenThreads`
+  directly without a discussions fetch when the two snapshots' counts already agree.
+- **`approvalState` does not dominate phase-1 latency.** Three timed runs of the thin listing query
+  (5 users x authored + reviewer-requested, run in parallel — the same source shape the 2–9s fat-query
+  baseline used) against `gl.nsesi.io`, with and without the `approvalState { rules { ... } }` block,
+  measured 584–964ms with the block and 579–1320ms without it. The two conditions are within each
+  other's noise band; there is no systematic difference attributable to `approvalState`. No action
+  needed — the field stays in phase 1 as designed above.
+
+Phase-1 wall-clock for this same 5-user authored+reviewer shape: **~0.6–1.3s**, down from the fat
+query's measured 2–9s baseline, even before phase 2's per-MR diffing removes the enrichment fetch
+entirely on a cache hit. The remaining phase-1 cost is now dominated by network round-trip count
+(10 parallel requests) rather than payload size, since `discussions` was the only field requesting
+note bodies.
+
 ### Cache ownership: passed in, not held (resolved 2026-07-30)
 
 `GitLabAdapter` is stateless today — `New(client, cfg)`, with every method a pure function of its

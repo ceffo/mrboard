@@ -54,20 +54,21 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors,
 		"include_reviewer_mrs", opts.IncludeReviewerMRs)
 
-	// Stage 1: list — fetch all sources, return raw stubs, mapped MRs, and primary-source keys.
-	rawMRs, mappedMRs, primaryKeys, errs := a.listStage(ctx, opts)
+	// Stage 1: list — fetch all sources via the thin (no-discussions) query, return
+	// raw REST stubs, raw thin GraphQL MRs, and primary-source keys.
+	rawMRs, gqlRawMRs, primaryKeys, errs := a.listStage(ctx, opts)
 
 	// Stage 2: dedup — combine, apply exclusions, split survivors back into
-	// already-mapped (no enrichment needed) and raw stubs (need enrichment).
-	finalMRs, toEnrich := dedupStage(rawMRs, mappedMRs, a.cfg.ExcludedAuthors, logger)
+	// REST stubs and GraphQL-thin stubs, each still needing discussions.
+	toEnrichREST, toEnrichGQL := dedupStage(rawMRs, gqlRawMRs, a.cfg.ExcludedAuthors, logger)
 
-	// Stage 3: enrich — fetch full details for every raw stub in parallel.
+	// Stage 3: enrich — fetch discussions (REST or GraphQL, matching each MR's
+	// source) for every deduped survivor in parallel, exactly once per MR.
 	enrichStart := time.Now()
-	enriched, enrichErrs := a.enrichStage(ctx, toEnrich)
-	finalMRs = append(finalMRs, enriched...)
+	finalMRs, enrichErrs := a.enrichStage(ctx, toEnrichREST, toEnrichGQL)
 	errs = append(errs, enrichErrs...)
 	logger.Info("gitlab: enrichment done",
-		"enriched", len(enriched), "enrich_errors", len(enrichErrs),
+		"enriched", len(finalMRs), "enrich_errors", len(enrichErrs),
 		"duration", ilog.FmtDur(time.Since(enrichStart)))
 
 	// Mark MRs that came exclusively from the reviewer fetch.
@@ -85,13 +86,14 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	return finalMRs, errs
 }
 
-// listStage fetches all configured sources (primary + reviewer) in parallel.
+// listStage fetches all configured sources (primary + reviewer) in parallel,
+// via the thin (no-discussions) GraphQL query for user/reviewer sources.
 // primaryKeys contains the keys of MRs from primary sources only, used later to
 // identify reviewer-only MRs.
 func (a *GitLabAdapter) listStage(
 	ctx context.Context,
 	opts mrsvc.FetchOptions,
-) (rawMRs []*gl.BasicMergeRequest, mappedMRs []domain.MergeRequest, primaryKeys map[mrKey]bool, errs []error) {
+) (rawMRs []*gl.BasicMergeRequest, gqlRawMRs []pkggitlab.GQLMergeRequest, primaryKeys map[mrKey]bool, errs []error) {
 	logger := ilog.FromContext(ctx)
 
 	var primaryExclusion string
@@ -100,15 +102,15 @@ func (a *GitLabAdapter) listStage(
 	}
 
 	listStart := time.Now()
-	rawMRs, mappedMRs, errs = a.listAllMRs(ctx, primaryExclusion)
+	rawMRs, gqlRawMRs, errs = a.listAllMRs(ctx, primaryExclusion)
 	logger.Info("gitlab: source listing done",
-		"raw", len(rawMRs), "mapped", len(mappedMRs), "source_errors", len(errs),
+		"raw", len(rawMRs), "gql_raw", len(gqlRawMRs), "source_errors", len(errs),
 		"duration", ilog.FmtDur(time.Since(listStart)))
 
 	// Capture keys before appending reviewer MRs so we can distinguish them later.
-	primaryKeys = make(map[mrKey]bool, len(rawMRs)+len(mappedMRs))
-	for _, mr := range mappedMRs {
-		primaryKeys[mrKey{ProjectID: mr.ProjectID, IID: mr.IID}] = true
+	primaryKeys = make(map[mrKey]bool, len(rawMRs)+len(gqlRawMRs))
+	for _, mr := range gqlRawMRs {
+		primaryKeys[mrKey{ProjectID: parseGIDNumericSafe(mr.Project.ID), IID: parseIIDSafe(mr.IID)}] = true
 	}
 	for _, mr := range rawMRs {
 		primaryKeys[mrKey{ProjectID: int(mr.ProjectID), IID: int(mr.IID)}] = true
@@ -116,72 +118,72 @@ func (a *GitLabAdapter) listStage(
 
 	if opts.IncludeReviewerMRs && len(a.cfg.ReviewerUsernames) > 0 {
 		revStart := time.Now()
-		revRaw, revMapped, revErrs := a.listReviewerMRs(ctx)
+		revRaw, revGQLRaw, revErrs := a.listReviewerMRs(ctx)
 		logger.Info("gitlab: reviewer listing done",
-			"raw", len(revRaw), "mapped", len(revMapped), "reviewer_errors", len(revErrs),
+			"raw", len(revRaw), "gql_raw", len(revGQLRaw), "reviewer_errors", len(revErrs),
 			"duration", ilog.FmtDur(time.Since(revStart)))
 		rawMRs = append(rawMRs, revRaw...)
-		mappedMRs = append(mappedMRs, revMapped...)
+		gqlRawMRs = append(gqlRawMRs, revGQLRaw...)
 		errs = append(errs, revErrs...)
 	}
-	return rawMRs, mappedMRs, primaryKeys, errs
+	return rawMRs, gqlRawMRs, primaryKeys, errs
 }
 
-// dedupStage builds a combined slice (mapped first so they win on collision),
-// runs the dedup+exclusion pass, then separates survivors into already-mapped
-// MRs (returned as finalMRs) and raw stubs that still need enrichment (toEnrich).
+// dedupStage builds a combined slice (GraphQL-thin stubs first so they win on
+// collision, matching the previous mapped-wins precedence), runs the
+// dedup+exclusion pass, then splits survivors back into REST stubs and
+// GraphQL-thin stubs — both still need discussions, fetched in enrichStage.
 func dedupStage(
 	rawMRs []*gl.BasicMergeRequest,
-	mappedMRs []domain.MergeRequest,
+	gqlRawMRs []pkggitlab.GQLMergeRequest,
 	excludedAuthors []string,
 	logger *slog.Logger,
-) (finalMRs []domain.MergeRequest, toEnrich []*gl.BasicMergeRequest) {
+) (toEnrichREST []*gl.BasicMergeRequest, toEnrichGQL []pkggitlab.GQLMergeRequest) {
 	deduper := MRDeduplicator{ExcludedAuthors: excludedAuthors}
 
-	rawByKey := make(map[mrKey]*gl.BasicMergeRequest, len(rawMRs))
-	combined := make([]domain.MergeRequest, 0, len(mappedMRs)+len(rawMRs))
-	combined = append(combined, mappedMRs...)
+	restByKey := make(map[mrKey]*gl.BasicMergeRequest, len(rawMRs))
+	gqlByKey := make(map[mrKey]pkggitlab.GQLMergeRequest, len(gqlRawMRs))
+	combined := make([]domain.MergeRequest, 0, len(gqlRawMRs)+len(rawMRs))
+
+	for _, mr := range gqlRawMRs {
+		k := mrKey{ProjectID: parseGIDNumericSafe(mr.Project.ID), IID: parseIIDSafe(mr.IID)}
+		gqlByKey[k] = mr
+		combined = append(combined, domain.MergeRequest{ProjectID: k.ProjectID, IID: k.IID, Author: mr.Author.Username})
+	}
 	for _, mr := range rawMRs {
 		k := mrKey{ProjectID: int(mr.ProjectID), IID: int(mr.IID)}
-		rawByKey[k] = mr
+		restByKey[k] = mr
 		authorUsername := ""
 		if mr.Author != nil {
 			authorUsername = mr.Author.Username
 		}
 		logger.Debug("gitlab: raw MR", "iid", mr.IID, "title", mr.Title, "author", authorUsername)
-		combined = append(combined, domain.MergeRequest{
-			ProjectID: int(mr.ProjectID),
-			IID:       int(mr.IID),
-			Author:    authorUsername,
-		})
+		combined = append(combined, domain.MergeRequest{ProjectID: k.ProjectID, IID: k.IID, Author: authorUsername})
 	}
 
 	deduped := deduper.Deduplicate(combined)
 
-	mappedKeys := make(map[mrKey]bool, len(mappedMRs))
-	for _, mr := range mappedMRs {
-		mappedKeys[mrKey{ProjectID: mr.ProjectID, IID: mr.IID}] = true
-	}
-
 	for _, mr := range deduped {
 		k := mrKey{ProjectID: mr.ProjectID, IID: mr.IID}
-		if mappedKeys[k] {
-			finalMRs = append(finalMRs, mr)
-		} else if raw, ok := rawByKey[k]; ok {
-			toEnrich = append(toEnrich, raw)
+		if g, ok := gqlByKey[k]; ok {
+			toEnrichGQL = append(toEnrichGQL, g)
+		} else if raw, ok := restByKey[k]; ok {
+			toEnrichREST = append(toEnrichREST, raw)
 		}
 	}
 	logger.Info("gitlab: dedup summary",
-		"raw", len(rawMRs), "mapped", len(mappedMRs),
-		"unique_to_enrich", len(toEnrich), "already_mapped", len(finalMRs))
-	return finalMRs, toEnrich
+		"raw", len(rawMRs), "gql_raw", len(gqlRawMRs),
+		"to_enrich_rest", len(toEnrichREST), "to_enrich_gql", len(toEnrichGQL))
+	return toEnrichREST, toEnrichGQL
 }
 
-// enrichStage fetches full details for each raw MR stub in parallel, bounded by
-// enrichConcurrency. Errors are collected and returned alongside successful results.
+// enrichStage fetches discussions for each deduped survivor in parallel, bounded
+// by enrichConcurrency across both REST stubs and GraphQL-thin stubs combined.
+// Errors are collected and returned alongside successful results.
 func (a *GitLabAdapter) enrichStage(
 	ctx context.Context,
-	toEnrich []*gl.BasicMergeRequest,
+	toEnrichREST []*gl.BasicMergeRequest,
+	toEnrichGQL []pkggitlab.GQLMergeRequest,
 ) ([]domain.MergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 
@@ -190,11 +192,11 @@ func (a *GitLabAdapter) enrichStage(
 		err error
 	}
 
-	results := make([]result, len(toEnrich))
+	results := make([]result, len(toEnrichREST)+len(toEnrichGQL))
 	sem := make(chan struct{}, enrichConcurrency)
 	var wg sync.WaitGroup
 
-	for i, mr := range toEnrich {
+	for i, mr := range toEnrichREST {
 		i, mr := i, mr
 		sem <- struct{}{}
 		wg.Add(1)
@@ -203,6 +205,18 @@ func (a *GitLabAdapter) enrichStage(
 			defer func() { <-sem }()
 			domainMR, err := a.enrichMR(ctx, mr)
 			results[i] = result{mr: domainMR, err: err}
+		}()
+	}
+	offset := len(toEnrichREST)
+	for i, mr := range toEnrichGQL {
+		i, mr := i, mr
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			domainMR, err := a.enrichGQLMR(ctx, mr)
+			results[offset+i] = result{mr: domainMR, err: err}
 		}()
 	}
 	wg.Wait()
@@ -240,18 +254,19 @@ func (a *GitLabAdapter) GetDetail(ctx context.Context, projectID, mrIID int64) (
 }
 
 // sourceResult is the output of fetching a single source ID.
-// raw holds MRs from group sources that still need enrichment.
-// mapped holds fully-mapped MRs from GraphQL user sources.
+// raw holds MRs from group sources (REST) that still need discussions.
+// gqlRaw holds thin (no-discussions) MRs from GraphQL user/reviewer sources
+// that still need discussions, fetched via a different route in enrichStage.
 type sourceResult struct {
 	raw    []*gl.BasicMergeRequest
-	mapped []domain.MergeRequest
+	gqlRaw []pkggitlab.GQLMergeRequest
 	errs   []error
 }
 
 // listAllMRs fetches every source ID in parallel and merges the results.
 func (a *GitLabAdapter) listAllMRs(
 	ctx context.Context, primaryExclusion string,
-) ([]*gl.BasicMergeRequest, []domain.MergeRequest, []error) {
+) ([]*gl.BasicMergeRequest, []pkggitlab.GQLMergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 
 	type task struct {
@@ -278,14 +293,14 @@ func (a *GitLabAdapter) listAllMRs(
 	wg.Wait()
 
 	var allRaw []*gl.BasicMergeRequest
-	var allMapped []domain.MergeRequest
+	var allGQLRaw []pkggitlab.GQLMergeRequest
 	var errs []error
 	for _, r := range results {
 		allRaw = append(allRaw, r.raw...)
-		allMapped = append(allMapped, r.mapped...)
+		allGQLRaw = append(allGQLRaw, r.gqlRaw...)
 		errs = append(errs, r.errs...)
 	}
-	return allRaw, allMapped, errs
+	return allRaw, allGQLRaw, errs
 }
 
 func (a *GitLabAdapter) fetchSourceID(
@@ -329,13 +344,14 @@ func (a *GitLabAdapter) fetchSourceID(
 	}
 }
 
-// fetchUserSourceGraphQL fetches a user source via GraphQL (single query, no enrichment phase).
+// fetchUserSourceGraphQL fetches a user source via the thin GraphQL query
+// (phase-1 listing; discussions are fetched later in enrichStage).
 // Falls back to REST on error.
 func (a *GitLabAdapter) fetchUserSourceGraphQL(
 	ctx context.Context, username string, logger *slog.Logger, start time.Time,
 ) sourceResult {
 	return a.fetchSourceViaGQL(ctx, username, "user",
-		a.client.FetchUserMRsGraphQL, a.fetchUserSourceREST, logger, start)
+		a.client.FetchUserMRsThinGraphQL, a.fetchUserSourceREST, logger, start)
 }
 
 // fetchUserSourceREST is the legacy REST fallback for user sources.
@@ -518,6 +534,25 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 	return MapMR(mr, dr.discussions, ar.approvals, rr.rules), nil
 }
 
+// enrichGQLMR completes a phase-1 thin GraphQL MR by fetching its discussions —
+// the one field the thin listing query omits — via a single-MR GraphQL query,
+// then maps the result exactly as the old fat query's response would have been.
+func (a *GitLabAdapter) enrichGQLMR(ctx context.Context, mr pkggitlab.GQLMergeRequest) (domain.MergeRequest, error) {
+	logger := ilog.FromContext(ctx)
+	discussions, hasNextPage, err := a.client.FetchMRDiscussionsGraphQL(ctx, mr.Project.FullPath, mr.IID)
+	if err != nil {
+		return domain.MergeRequest{}, fmt.Errorf(
+			"enrichGQLMR project=%q MR=%s discussions: %w", mr.Project.FullPath, mr.IID, err)
+	}
+	if hasNextPage {
+		logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
+			"project", mr.Project.FullPath, "mr_iid", mr.IID)
+	}
+	mr.Discussions.Nodes = discussions
+	mr.Discussions.PageInfo.HasNextPage = hasNextPage
+	return MapMRFromGraphQL(mr), nil
+}
+
 // GetDiff implements mrsvc.MergeRequestSource.
 // Fetches file diffs and diff refs (BaseSHA/HeadSHA) in parallel.
 func (a *GitLabAdapter) GetDiff(ctx context.Context, projectID, mrIID int64) (domain.MRDiff, error) {
@@ -589,7 +624,7 @@ func (a *GitLabAdapter) GetFileContent(ctx context.Context, projectID int64, pat
 // listReviewerMRs fetches MRs for all configured reviewer usernames in parallel.
 func (a *GitLabAdapter) listReviewerMRs(
 	ctx context.Context,
-) ([]*gl.BasicMergeRequest, []domain.MergeRequest, []error) {
+) ([]*gl.BasicMergeRequest, []pkggitlab.GQLMergeRequest, []error) {
 	logger := ilog.FromContext(ctx)
 	results := make([]sourceResult, len(a.cfg.ReviewerUsernames))
 	var wg sync.WaitGroup
@@ -604,23 +639,23 @@ func (a *GitLabAdapter) listReviewerMRs(
 	wg.Wait()
 
 	var allRaw []*gl.BasicMergeRequest
-	var allMapped []domain.MergeRequest
+	var allGQLRaw []pkggitlab.GQLMergeRequest
 	var errs []error
 	for _, r := range results {
 		allRaw = append(allRaw, r.raw...)
-		allMapped = append(allMapped, r.mapped...)
+		allGQLRaw = append(allGQLRaw, r.gqlRaw...)
 		errs = append(errs, r.errs...)
 	}
-	return allRaw, allMapped, errs
+	return allRaw, allGQLRaw, errs
 }
 
-// fetchReviewerSourceGraphQL fetches reviewer-requested MRs for username via GraphQL.
-// Falls back to REST on error.
+// fetchReviewerSourceGraphQL fetches reviewer-requested MRs for username via the
+// thin GraphQL query. Falls back to REST on error.
 func (a *GitLabAdapter) fetchReviewerSourceGraphQL(
 	ctx context.Context, username string, logger *slog.Logger, start time.Time,
 ) sourceResult {
 	return a.fetchSourceViaGQL(ctx, username, "reviewer",
-		a.client.FetchReviewerMRsGraphQL, a.fetchReviewerSourceREST, logger, start)
+		a.client.FetchReviewerMRsThinGraphQL, a.fetchReviewerSourceREST, logger, start)
 }
 
 // fetchReviewerSourceREST is the REST fallback for reviewer-requested MRs.
@@ -646,23 +681,19 @@ func (a *GitLabAdapter) fetchSourceViaGQL(
 		return restFallback(ctx, username, logger, start)
 	}
 
-	var mapped []domain.MergeRequest
+	var active []pkggitlab.GQLMergeRequest
 	for _, mr := range gqlMRs {
 		if mr.Project.Archived {
 			logger.Debug("gitlab: skipping "+label+" MR from archived project (graphql)",
 				"iid", mr.IID, "project", mr.Project.FullPath)
 			continue
 		}
-		if mr.Discussions.PageInfo.HasNextPage {
-			logger.Warn("gitlab: graphql discussions overflow, thread count may be incomplete",
-				"username", username, "mr_iid", mr.IID)
-		}
-		mapped = append(mapped, MapMRFromGraphQL(mr))
+		active = append(active, mr)
 	}
-	logger.Info("gitlab: "+label+" source fetched (graphql)",
-		"username", username, "total", len(gqlMRs), "active", len(mapped),
+	logger.Info("gitlab: "+label+" source fetched (graphql, thin)",
+		"username", username, "total", len(gqlMRs), "active", len(active),
 		"duration", ilog.FmtDur(time.Since(start)))
-	return sourceResult{mapped: mapped}
+	return sourceResult{gqlRaw: active}
 }
 
 // fetchSourceViaREST is the shared REST-fallback implementation for user and reviewer sources.

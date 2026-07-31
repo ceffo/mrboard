@@ -1,0 +1,154 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.1
+- **Task Title**: domain+ports: MRKey, UpdatedAt, SnapshotStore, FetchOptions.Previous, XDGCacheDir
+- **Description**: ## Scope
+
+Pure type/port foundation for the whole epic. No behaviour, no I/O, no query changes.
+
+- `domain.MRKey{ProjectID, IID int}` -- exported. Promote the private `mrKey` in
+  internal/adapters/gi...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-31T04:03:56.996Z
+- **Ended At**: 2026-07-31T04:08:18.985Z
+- **Duration**: 4m 21s
+- **Input Tokens**: 286
+- **Output Tokens**: 20391
+- **Total Tokens**: 20677
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and understanding the current state of the codebase before implementing this ticket.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Bash][0m $ \rg -l "mrKey" internal/adapters/gitlabadpt/ && echo "---" && \rg -n "type MergeRequest struct" -A 4...
+[94m[Bash][0m $ \rg -n "XDGConfigDir|XDGDataDir" internal/config/*.go
+Now let me look at the mrKey definition in gitlabadpt, the mrsvc.FetchOptions struct, and config.go's XDGConfigDir/XDGDataDir for the exact pattern to mirror.
+[94m[Bash][0m $ \rg -n "mrKey" internal/adapters/gitlabadpt/dedup.go internal/adapters/gitlabadpt/gitlabadpt.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup.go[0m
+[94m[Bash][0m $ \rg -n "func MapMR|func MapMRFromGraphQL|UpdatedAt" internal/adapters/gitlabadpt/mapper.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.mockery.yml[0m
+[94m[Bash][0m $ \rg -n "StateStore" --type go -l
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+[94m[Bash][0m $ \rg -n "UpdatedAt" pkg/gitlab/*.go internal/adapters/gitlabadpt/*.go
+[94m[Bash][0m $ \rg -n "BasicMergeRequest struct" -A 60 $(go env GOPATH 2>/dev/null)/pkg/mod/gitlab.com/gitlab-org/a...
+[94m[Bash][0m $ go doc gitlab.com/gitlab-org/api/client-go.BasicMergeRequest 2>&1 | \rg -n "UpdatedAt"
+Good — `mr.UpdatedAt` is `*time.Time` in REST, matching the `mr.CreatedAt` pattern already used. Now let me check the mapper test file style for how CreatedAt is tested, to follow the same pattern for UpdatedAt tests.
+[94m[Bash][0m $ \rg -n "CreatedAt" internal/adapters/gitlabadpt/mapper_test.go | head -30
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Bash][0m $ \rg -n "func TestMapMR|func TestMapMRFromGraphQL" internal/adapters/gitlabadpt/mapper_test.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+Now I have a full picture. Let me check the full `mrKey` type comment location and domain mr.go imports before editing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+Now let's make the changes. First, `domain.MRKey` and `MergeRequest.UpdatedAt`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m edit: "// MergeRequest is the core domain type representi..." → "// MRKey uniquely identifies a merge request acros..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m edit: "	CreatedAt         time.Time
+	NonDraftSince     ti..." → "	CreatedAt         time.Time
+	UpdatedAt         ti..."
+Now the `SnapshotStore` port in `state.go`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m edit: "// StateStore is the driven port for persisting ap..." → "// StateStore is the driven port for persisting ap..."
+Now update `mrsvc.FetchOptions`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/service/mrsvc/mrsvc.go[0m edit: "// FetchOptions controls what FetchAll returns.
+ty..." → "// FetchOptions controls what FetchAll returns.
+ty..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/config/config.go[0m edit: "func xdgSearchDirs() []string {" → "// XDGCacheDir returns the mrboard-specific XDG ca..."
+Now promote the private `mrKey` in gitlabadpt to alias `domain.MRKey`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/dedup.go[0m edit: "package gitlabadpt
+
+import "github.com/ceffo/mrboa..." → "package gitlabadpt
+
+import "github.com/ceffo/mrboa..."
+Now update the other usages in `gitlabadpt.go`:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+I'll use `sed` for these mechanical field-name replacements since they're all identical rename patterns, then verify each replacement.
+[94m[Bash][0m $ \ python3 -c " import re path = 'internal/adapters/gitlabadpt/gitlabadpt.go' with open(path) as f:  ...
+Now let's update the mapper to populate `UpdatedAt` in both `MapMR` and `MapMRFromGraphQL`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil..." → "	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil..."
+
+[91m[Error: <tool_use_error>Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.
+String: 	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil {
+		mrCreatedAt = *mr.CreatedAt
+	}</tool_use_error>][0m
+[94m[Bash][0m $ \rg -n "mrCreatedAt" internal/adapters/gitlabadpt/mapper.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+Right, that's `DeriveReviewerStates`, unrelated. I'll target the `MapMR` occurrence specifically using surrounding context.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil..." → "	var mrCreatedAt time.Time
+	if mr.CreatedAt != nil..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "		Reviewers:      reviewers,
+		CreatedAt:      mrC..." → "		Reviewers:      reviewers,
+		CreatedAt:      mrC..."
+Now the GraphQL path in `MapMRFromGraphQL`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "	createdAt, _ := time.Parse(time.RFC3339, mr.Creat..." → "	createdAt, _ := time.Parse(time.RFC3339, mr.Creat..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m edit: "		Reviewers:      reviewers,
+		CreatedAt:      cre..." → "		Reviewers:      reviewers,
+		CreatedAt:      cre..."
+Now add the `.mockery.yml` entry for `SnapshotStore`, sibling to `StateStore` in the `internal/domain` package (same package as `Notifier`):
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.mockery.yml[0m edit: "    interfaces:
+      Notifier:" → "    interfaces:
+      Notifier:
+      SnapshotStor..."
+Now let's add round-trip tests for `UpdatedAt`, following the existing `SourceBranch`/`TargetBranch` test pattern:
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper_test.go[0m edit: "func TestMapMRFromGraphQL_SourceTargetBranch_Store..." → "func TestMapMRFromGraphQL_SourceTargetBranch_Store..."
+Now let's regenerate mocks and run the quality gates.
+[94m[Bash][0m $ just generate 2>&1 | tail -50
+[94m[Bash][0m $ git status --short
+Mock generated cleanly. Let's verify a second `just generate` run produces no diff (acceptance criterion), then run `just check`.
+[94m[Bash][0m $ just generate 2>&1 | tail -20 && git status --short internal/domain/mocks/
+No diff on second run — good. Now the full quality gate:
+[94m[Bash][0m $ just check 2>&1 | tail -100
+All tests passed. Let me confirm the whole `just check` chain (fmt + lint + build + test) succeeded without errors earlier in the output too.
+[94m[Bash][0m $ \rg -c "^--- PASS" /tmp/check_output.log
+`just check` passed cleanly: fmt, lint, build, and 185 passing tests, no failures. Let's verify zero non-stdlib imports rule for `internal/domain` still holds (only added `time` usage already present, and `MRKey`/`SnapshotStore` use no new imports).
+[94m[Bash][0m $ \rg -n "^import|\t\"" internal/domain/mr.go internal/domain/state.go | head -20
+state.go has no imports at all (uses only builtin types), and mr.go still only imports `fmt`/`time` — non-negotiable rule 1 holds. Now let's close the bead, flush tracker state, save memory, and update progress.md.
+[94m[Bash][0m $ br close mrr-incremental-fetch-3sl.1 --reason "Added domain.MRKey, MergeRequest.UpdatedAt, domain.Sn...
+[94m[Bash][0m $ git diff --stat .beads/issues.jsonl
+Good, the JSONL was already updated (flush must have happened synchronously on close). Now let me append the progress log and save engram memory.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+*Add reu..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-incremental-fetch-3sl.1 (first child of epic mrr-incremental-fetch-3sl, docs/adr/0005). Added `domain.MRKey{ProjectID, IID int}`, `domain.MergeRequest.UpdatedAt time.Time`, `domai... (1575 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.1 (child of epic mrr-incremental-fetch-3sl): the pure type/port foundation for ADR-0005 (incremental fetch, non-blocking refresh, selection identity) — no b... (3103 chars)"
+`★ Insight ─────────────────────────────────────`
+Type aliases (`type mrKey = domain.MRKey`) versus defined types (`type mrKey domain.MRKey`) matter here: an alias makes `mrKey` and `domain.MRKey` completely interchangeable — same underlying type, same method set, usable as map keys against either name. A defined type would need explicit conversions everywhere. This is exactly the tool for "promote a private type to a canonical exported one without touching every call site."
+
+The GraphQL vs REST split for `UpdatedAt` (string needing `time.Parse` vs `*time.Time` needing a nil-check) mirrors why `CreatedAt` already had two different handling blocks in the same mapper file — GitLab's REST and GraphQL APIs serialize timestamps differently, and the codebase already had the pattern to copy rather than invent.
+`─────────────────────────────────────────────────`
+
+## Summary
+
+Implemented the pure type/port foundation for the incremental-fetch epic (ADR-0005):
+- `domain.MRKey{ProjectID, IID int}` — promoted from `gitlabadpt`'s private `mrKey` via a type alias
+- `domain.MergeRequest.UpdatedAt` — populated in both `MapMR` (REST) and `MapMRFromGraphQL`, with round-trip tests
+- `domain.SnapshotStore` port, sibling to `StateStore`
+- `mrsvc.FetchOptions.Previous` — unused by adapters yet, deliberately (behavior comes in a later ticket)
+- `config.XDGCacheDir()` mirroring the existing XDG helpers
+- `SnapshotStore` mock generated via `.mockery.yml` + `just generate` (verified no-op on rerun)
+
+`just check` passed clean (185 tests, no lint/build issues). Bead closed, tracker flushed, progress.md and engram memory updated. Next up in the epic: the actual two-phase fetch behavior and TUI wiring that consume these types.
+
+<promise>COMPLETE</promise>

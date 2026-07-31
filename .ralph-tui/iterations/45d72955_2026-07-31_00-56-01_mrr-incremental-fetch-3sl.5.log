@@ -1,0 +1,201 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.5
+- **Task Title**: tui: selection keyed by MRKey, not row+column
+- **Description**: ## Scope
+
+Independent of the fetch work -- only needs domain.MRKey. Can proceed in parallel.
+
+- Model.selected domain.MRKey becomes the single source of truth. board.SetMRs takes the key and
+  resolve...
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-07-31T04:56:01.811Z
+- **Ended At**: 2026-07-31T05:08:07.485Z
+- **Duration**: 12m 5s
+- **Input Tokens**: 532
+- **Output Tokens**: 51835
+- **Total Tokens**: 52367
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading session context and reviewing the ADR and progress notes to understand what's been done so far.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[mcp__plugin_engram_engram__mem_current_project][0m
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Bash][0m Check size of relevant TUI files $ wc -l internal/tui/board*.go internal/tui/model*.go 2>/dev/null
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m
+[94m[Bash][0m Find all callers/usages of selection-related functions $ rg -n "applyMRFilter|prevFocusMR|TryRestoreFocus|SetMRs|m\.selected|FocusedMR|ClampFocusTo|setInitia...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/column.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+Now let me look at the remaining call sites and the applyMRFilter function itself.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Inspect domain.MRKey and MergeRequest fields $ rg -n "MRKey|ProjectID|type MergeRequest struct" internal/domain/mr.go | head -40
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m Check for existing MRKey helper methods $ rg -n "func.*MRKey|\.Key\(\)" internal/domain/*.go internal/adapters/gitlabadpt/*.go internal/tui/*....
+[94m[Bash][0m Find board initialization in Model.New $ rg -n "newBoardWidget|m.board\b|board:" internal/tui/model.go | head -30
+[94m[Bash][0m Check test files for usages that will need updates $ rg -n "SetMRs|TryRestoreFocus|prevFocusMR|selected" internal/tui/*_test.go
+[94m[Bash][0m List board/column related Go files $ fd -e go . internal/tui | rg -i "board|column"
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Bash][0m Find file containing Model accessor methods $ rg -n "func (m Model) State\(\)|func (m Model) AllMRs\(\)|func (m Model) SiblingMRs\(" internal/tui/...
+[94m[Bash][0m Find file containing Model accessor methods with corrected quoting $ rg -n "func \(m Model\) (State|AllMRs|SiblingMRs|SortFieldKey|SortDesc|MyView|ShowDetail)\(" interna...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m
+[94m[Bash][0m Check existing FocusedMR exposure for tests $ rg -n "FocusedMR\(\)" internal/tui/model.go internal/tui/export_test.go internal/tui/command_exec_te...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/command_exec_test.go[0m
+[94m[Bash][0m Inspect IssueTypeIconResolver interface and newCardWidget for test construction needs $ rg -n "func newCardWidget" -A 15 internal/tui/card.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m edit: "type MRKey struct {
+	ProjectID int
+	IID       int
+..." → "type MRKey struct {
+	ProjectID int
+	IID       int
+..."
+Now let's rewrite `board.go`'s `SetMRs` and remove `TryRestoreFocus`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m edit: "// TryRestoreFocus attempts to focus the MR identi..." → "// SetActive marks the board as owning keyboard fo..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board.go[0m edit: "func (b *boardWidget) SetMRs(mrs []domain.MergeReq..." → "// SetMRs replaces the board's cards and resolves ..."
+Now updating `model.go`: replace the `prevFocusMR` field with `selected`, and wire it through `applyMRFilter`, the fetch-result handler, and `updateTicketKey`.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	isRefreshing       bool
+	prevFocusMR        *doma..." → "	isRefreshing       bool
+	selected           domai..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		m.applyTheme()
+		m.applyMRFilter()
+		if m.prevFo..." → "		m.applyTheme()
+		m.applyMRFilter()
+		m.updateTic..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "		if m.showDetail {
+			m.closeDetail()
+		}
+		m.pre..." → "		if m.showDetail {
+			m.closeDetail()
+		}
+		if le..."
+Now the `applyMRFilter` call site and `updateTicketKey`:
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "	displayMRs := visibleMRs(mrs, m.currentUser)
+	m.b..." → "	displayMRs := visibleMRs(mrs, m.currentUser)
+	m.s..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m edit: "// updateTicketKey enables or disables the ticket ..." → "// updateTicketKey enables or disables the ticket ..."
+Now add a `Selected()` test accessor and confirm the build compiles.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/export_test.go[0m edit: "func (m Model) ErrMsg() string                { re..." → "func (m Model) ErrMsg() string                { re..."
+[94m[Bash][0m Build the project to check for compile errors $ go build ./... 2>&1 | head -60
+Build is clean. Now let's write the tests: board-level tests for the collision/fallback cases, and model-level tests confirming selection survives sort/sprint/view/fetch transitions.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/card_preview_test.go[0m
+[94m[Bash][0m Check MRPhase enum ordering $ rg -n "PhaseDraft|PhaseNeedsReview|PhaseNeedsAuthorAction|PhaseReadyToMerge|type MRPhase" internal/d...
+Good, `PhaseDraft = 0` matches `phaseOrder[0]`. Now let's write `board_test.go`.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/board_test.go[0m "package tui
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/domain"
+)
+
+func newTestBoard() boardWidget {
+	return... (3468 chars)"
+[94m[Bash][0m Check default keybindings for sort, sprint, view toggle $ rg -n "Sort |Sprint |ToggleView |Sort:|Sprint:|ToggleView:|Sort\b|Sprint\b|ToggleView\b" internal/tu...
+[94m[Bash][0m Inspect Action.Match implementation for how key strings are compared $ rg -n "func Act\(" internal/tui/*.go
+[94m[Bash][0m Search for existing Sprint key test patterns $ rg -n "Sprint" internal/tui/*_test.go
+[94m[Bash][0m Search for existing Sprint key test patterns and bubbletea source location $ find / -type d -iname "bubbletea*" 2>/dev/null | grep -v Cellar | head
+[94m[Bash][0m Locate bubbletea v2 module and KeyPressMsg.String implementation $ grep -rn "func (k KeyPressMsg) String" /Users/moncefnaji/go/pkg/mod/charm.land/bubbletea*/*.go 2>/de...
+[94m[Bash][0m Find bubbletea/v2 module version and key.go source $ find / -path "*charm.land/bubbletea/v2*" -name "key.go" 2>/dev/null | head -5
+[94m[Bash][0m Inspect KeyPressMsg String method and shift handling $ grep -n "func (k KeyPressMsg) String\|func (k Key) String\|Shift" "/Users/moncefnaji/go/pkg/mod/char...
+[94m[Bash][0m Read Key.String and KeyPressMsg.String implementation details $ 340,400p' "/Users/moncefnaji/go/pkg/mod/charm.land/bubbletea/v2@v2.0.7/key.go"
+[94m[Bash][0m Locate uv package key.go for String() details $ find / -path "*uv/key.go" 2>/dev/null | grep -v Cellar | head -5
+[94m[Bash][0m Find the uv import path used in bubbletea v2 key.go $ grep -n "uv \"" "/Users/moncefnaji/go/pkg/mod/charm.land/bubbletea/v2@v2.0.7/key.go" | head -3
+[94m[Bash][0m Find ultraviolet Key.String implementation $ grep -n "func (k Key) String" -A 30 "$f"/key.go 2>/dev/null | head -50
+Confirmed: `String()` returns `Text` directly when set. So `tea.KeyPressMsg{Text: "S", Code: 's'}` matches the `"S"` binding, same pattern as the existing sort test.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model.go[0m
+[94m[Bash][0m Check Refresh keybinding default $ rg -n "Refresh" internal/tui/keys.go
+[94m[Bash][0m Check arrow key bindings for Up/Down/Left/Right $ rg -n "Up:|Down:|Left:|Right:" internal/tui/keys.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/keymap.go[0m
+[94m[Bash][0m Check FilterAndSort's sprint filter behavior when SprintKeys is nil $ rg -n "SprintFilter|SprintKeys" internal/domain/service/mrsvc/*.go
+Confirmed sprint toggle with nil keys stays inert (shows all). Now let's add the model-level selection tests.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	tea "charm.land/bubbletea/v2"
+	"github.com/stretc..." → "	tea "charm.land/bubbletea/v2"
+	"github.com/stretc..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "func TestModel_TicketIndex_NoTicketKeysProducesEmp..." → "func TestModel_TicketIndex_NoTicketKeysProducesEmp..."
+[94m[Bash][0m Run tui and domain package tests $ go test ./internal/tui/... ./internal/domain/... 2>&1 | tail -80
+All tests pass. Now let's run `just check` (full quality gate: fmt + lint + build + test).
+[94m[Bash][0m Run project quality gate: fmt, lint, build, test $ just check 2>&1 | tail -100
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m edit: "	swapped := []domain.MergeRequest{mrs[1], mrs[0], ..." → "	swapped := []domain.MergeRequest{mrs[1], mrs[0], ..."
+[94m[Bash][0m Re-run project quality gate after goconst fix $ just check 2>&1 | tail -100
+`just check` passes clean. Now the mandatory agent-tui gate: verify visually that selection survives sort and view toggle.
+[94m[Bash][0m Build the mrboard binary before agent-tui verification $ just build 2>&1 | tail -20 && ls scripts/run-tui.sh
+[94m[Bash][0m Launch mrboard TUI via agent-tui for manual verification $ agent-tui run /Users/moncefnaji/code/github.com/mrboard/scripts/run-tui.sh 2>&1
+[94m[Bash][0m Wait for TUI to stabilize and take initial screenshot $ agent-tui screenshot 2>&1
+[94m[Bash][0m Move focus down to select the third Draft card $ agent-tui screenshot 2>&1
+[94m[Bash][0m Check screenshot command options for color/highlight capture $ agent-tui screenshot --help 2>&1 | head -30
+[94m[Bash][0m Get structured JSON screenshot to inspect for style/attribute data $ agent-tui screenshot --format json 2>&1 | head -c 3000
+[94m[Bash][0m Check how cardWidget visually indicates focus in render() $ rg -n "focused|Focused" internal/tui/card.go | head -30
+[94m[Bash][0m List agent-tui top-level commands $ agent-tui --help 2>&1 | head -50
+[94m[Bash][0m Check agent-tui live preview command options $ agent-tui live --help 2>&1 | head -40
+[94m[Bash][0m Capture raw screenshot output to a file and inspect for ANSI escape sequences $ cat -v /tmp/scr.txt | sed -n '1,10p'
+[94m[Bash][0m Check if focused styles differ structurally (not just color) for text-mode detection $ rg -n "ColumnBorderFocused|ColumnBorder\b|CardFocused\b|CardFocusedBg" internal/tui/styles.go
+[94m[Bash][0m Inspect full card render logic for any ASCII focus indicator $ rg -n "func.*render\(\)" -A 40 internal/tui/card.go | head -80
+[94m[Bash][0m Check top-level keys of JSON screenshot output $ print(list(d.keys()))"
+[94m[Bash][0m Check agent-tui environment/terminal diagnostics $ agent-tui env 2>&1 | head -30
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/styles.go[0m
+[94m[Bash][0m Open detail panel on the currently focused card to capture its identity as text $ agent-tui screenshot 2>&1 | head -20
+[94m[Bash][0m Close detail panel and trigger re-sort via 's' key $ agent-tui screenshot 2>&1 | head -10
+[94m[Bash][0m Wait for stability then re-check screen state $ agent-tui screenshot 2>&1 | head -15
+[94m[Bash][0m Check DetailKeyMap Close key binding $ rg -n "DetailKeyMap|Close:" internal/tui/keys.go | head -20
+[94m[Bash][0m Press Escape again and check if detail panel closes $ agent-tui screenshot 2>&1 | head -10
+[94m[Bash][0m Trigger re-sort now that detail panel is confirmed closed $ agent-tui screenshot 2>&1 | head -8
+[94m[Bash][0m Open detail panel on the current focus after sorting, to verify identity $ agent-tui screenshot 2>&1 | head -10
+Confirmed: after re-sorting (order changed — `!187` is now first in the column instead of `!534`), the detail panel still shows the same MR, `!195` / `OD-2368` — selection survived the sort. Now let's verify the view toggle the same way.
+[94m[Bash][0m Close detail, toggle view mode, and inspect resulting board state $ agent-tui screenshot 2>&1 | head -8
+[94m[Bash][0m Open detail to confirm fallback focus landed on a valid card after view toggle filtered out the selection $ agent-tui screenshot 2>&1 | head -10
+[94m[Bash][0m Toggle view back to all and confirm focus stays on the same MR that was present in both views $ agent-tui screenshot 2>&1 | head -10
+Toggling back to "all" view: focus correctly stayed on `!1`/`OD-2400` — the MR that was present in both views — instead of resetting to the first card. Both the fix-by-construction path and the absent-MR fallback are confirmed working live. Let's clean up.
+[94m[Bash][0m Kill the agent-tui session $ agent-tui kill 2>&1
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "- **Learnings:**
+  - `just check`'s `dupl` linter ..." → "---
+
+## [2026-07-31] - mrr-incremental-fetch-3sl.5..."
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "---
+
+## [2026-07-31] - mrr-incremental-fetch-3sl.5..." → "---
+
+- **Learnings:**
+  - `just check`'s `dupl` li..."
+Now let's close the bead and sync the tracker.
+[94m[Bash][0m Close the bead and flush tracker state to JSONL $ board.SetMRs resolves focus by construction" && br sync --flush-only
+[94m[Bash][0m Check whether beads JSONL was actually updated after close $ git diff --stat .beads/issues.jsonl 2>&1
+Good, the JSONL is updated (it was already in a modified state before this session started, from prior work — the close just added its own delta). Now let me save the engram memory entry per the mandatory protocol, and do a final sanity build/test.
+[94m[Bash][0m Final full build and test sanity check across the repo $ go build ./... && go test ./... 2>&1 | tail -20
+All green. Now saving the decision to engram memory per the mandatory protocol.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Closed mrr-incremental-fetch-3sl.5 (epic mrr-incremental-fetch-3sl, docs/adr/0005 "Selection identity"). `Model.selected domain.MRKey` replaces `prevFocusMR *domain.MergeRequest`. `boardWidg... (1851 chars)"
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.5 (child of epic mrr-incremental-fetch-3sl, docs/adr/0005): rework mrboard's TUI selection tracking to be keyed by domain.MRKey (ProjectID+IID) instead of c... (3856 chars)"
+## Summary
+
+Implemented mrr-incremental-fetch-3sl.5: TUI selection is now keyed by `domain.MRKey{ProjectID, IID}` instead of column+row position.
+
+**Key changes:**
+- `boardWidget.SetMRs(mrs, selected) domain.MRKey` (internal/tui/board.go) owns focus resolution: it finds the selected MR anywhere on the board (fixing the old `TryRestoreFocus`'s same-IID-different-project collision), follows it across columns on a phase change, and falls back to the same row (clamped) or the first non-empty column when the MR is gone.
+- `Model.selected` replaces `prevFocusMR`; `applyMRFilter()`'s one-line `m.selected = m.board.SetMRs(displayMRs, m.selected)` fixes all 8 former call sites by construction, per the ADR.
+- Added `domain.MergeRequest.Key()` helper; deleted `TryRestoreFocus`.
+
+**Verification:**
+- New tests: `internal/tui/board_test.go` (collision, cross-column follow, both fallback cases) and 4 selection-identity tests in `model_test.go` (sort, sprint toggle, view toggle, fetch swap).
+- `just check` passes clean.
+- agent-tui live gate against gl.nsesi.io confirmed selection survives sort and a view-toggle round trip. Note: screenshots in this sandbox carry no color info, so I verified focus via the detail panel's text (IID/title) rather than the highlight color — documented in progress.md.
+
+Bead closed, tracker synced, decision and session summary saved to engram.
