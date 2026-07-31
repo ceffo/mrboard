@@ -3,10 +3,10 @@
   "sessionId": "6d7c0431-ace4-4a63-a182-25eb3b9f2abc",
   "status": "running",
   "startedAt": "2026-07-31T18:50:21.765Z",
-  "updatedAt": "2026-07-31T19:30:12.693Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-07-31T19:31:41.559Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -53,8 +53,8 @@
       {
         "id": "mrr-incremental-fetch-3sl.7",
         "title": "tui: dirty-set guard so a stale snapshot cannot revert a local write",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-incremental-fetch-3sl.8",
@@ -80,6 +80,16 @@
       "durationMs": 473117,
       "startedAt": "2026-07-31T18:50:22.854Z",
       "endedAt": "2026-07-31T18:58:15.971Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "mrr-incremental-fetch-3sl.7",
+      "taskTitle": "tui: dirty-set guard so a stale snapshot cannot revert a local write",
+      "taskCompleted": true,
+      "durationMs": 1915519,
+      "startedAt": "2026-07-31T18:58:17.121Z",
+      "endedAt": "2026-07-31T19:30:12.640Z"
     }
   ],
   "skippedTaskIds": [],

@@ -116,3 +116,22 @@ after each iteration and it's included in prompts for context.
   the important one; it could otherwise cause a scratch agent-tui gate to silently fire a real write
   against production GitLab data.
 ---
+
+## 2026-07-31 - mrr-incremental-fetch-3sl.8
+- Verified already implemented (same "bundled under an earlier bead's commit" pattern as .3/.4/.5,
+  bundled into commit 9491963, labeled as .4's phase-2 commit). No code changes made this session.
+- Confirmed against every acceptance-criteria line: `config.AppConfig.RefreshInterval time.Duration`
+  (`internal/config/config.go`, `mapstructure:"refresh_interval"`, `v.SetDefault("refresh_interval",
+  "60s")`), `refreshTickCmd`/`handleRefreshTick`/`refreshGen` in `internal/tui/model.go` (skip-in-
+  flight via `isRefreshing` check, generation counter bumped by manual `r` so a stale scheduled tick
+  is dropped instead of acting), `mrboard.yaml.example:22` documents the key, and
+  `internal/tui/refresh_test.go` + `internal/config/config_test.go` already cover every acceptance
+  line (zero-disables, skip-while-in-flight, stale-generation-dropped, unchanged-data-causes-no-
+  mutation-or-selection-change).
+- Ran `just check` clean (fmt/lint/build/test all pass). No agent-tui gate needed — no TUI-visible
+  change was made (nothing to screenshot), consistent with the ticket being a no-op this session.
+- **Learnings:** this is the fourth bead in the epic found fully pre-implemented and bundled into an
+  earlier commit (after .3, .4, .5) — reinforces the top "Codebase Patterns" entry: always read the
+  actual code and tests against the acceptance criteria before writing anything, especially when
+  `br show` reports `in_progress`.
+---
