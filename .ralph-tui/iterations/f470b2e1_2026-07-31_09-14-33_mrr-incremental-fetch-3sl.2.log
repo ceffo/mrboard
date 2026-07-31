@@ -1,0 +1,71 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.2
+- **Task Title**: snapshotstore: versioned JSON cache in XDG_CACHE_HOME + core wiring
+- **Description**: ## Scope
+
+Concrete `domain.SnapshotStore` implementation and its composition-root wiring.
+
+- New `internal/adapters/snapshotstore` writing `{XDGCacheDir()}/mrboard/snapshot.json`, mode 0600.
+  Model i...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-31T13:14:33.539Z
+- **Ended At**: 2026-07-31T13:16:44.089Z
+- **Duration**: 2m 10s
+- **Input Tokens**: 118
+- **Output Tokens**: 7536
+- **Total Tokens**: 7654
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.2 --format toon 2>&1 | head -50
+[94m[Bash][0m $ \ls internal/adapters/snapshotstore/ 2>&1
+Interesting — memory shows this bead was already closed in a previous session, but `br show` says it's still `in_progress`. Let me look at the actual files to see what's already implemented before deciding what's left to do.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/snapshotstore/snapshotstore_test.go[0m
+[94m[Bash][0m $ \cat /Users/moncefnaji/code/github.com/mrboard/internal/adapters/statestore/*.go 2>&1 | head -150
+The snapshotstore adapter and its tests already fully satisfy the acceptance criteria. Let me check the domain port signature and whether `internal/core` wiring is done.
+[94m[Bash][0m $ rg -n "SnapshotStore" /Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go /Users/monc...
+Wiring is present in core.go too. Let me look at the relevant core.go section and domain state.go to confirm the full picture, then run `just check`.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/core/core.go[0m
+Everything required by the bead is already implemented: the `snapshotstore.JSONStore` adapter mirrors `statestore`'s shape, handles absent/corrupt/version-mismatch files by returning an empty snapshot with no error, the round-trip test exists, and `internal/core/core.go` wires it in alongside `StateStore`. This matches what a prior session already did. Let me confirm everything still passes quality gates before closing.
+[94m[Bash][0m $ just check 2>&1 | tail -80
+Let me confirm the full command exited cleanly (no lint or build failures earlier in the output).
+[94m[Bash][0m $ \grep -iE "fail|error|FAIL" /tmp/check_output.txt | \grep -v "no test files" | head -30
+`just check` exits 0 — fmt, lint, build, and tests (including all four snapshotstore tests) pass. Everything from the acceptance criteria is confirmed working. Let me search memory for any prior context I should reconcile before closing, since the bead status was unexpectedly `in_progress` despite memory claiming closure.
+[94m[Bash][0m $ br list --status=closed --format toon 2>&1 | \grep -i "3sl"
+[94m[Bash][0m $ already implemented, verified via just check" && br sync --flush-only
+[94m[Bash][0m $ git diff --stat .beads/issues.jsonl
+Good, the close is reflected in `.beads/issues.jsonl` (the "nothing to export" message referred to a separate flush queue, but the JSONL diff confirms it landed). Now let me update the progress log per the workflow instructions.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "## Codebase Patterns (Study These First)
+
+*Add reu..." → "## Codebase Patterns (Study These First)
+
+*Add reu..."
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_save[0m
+[94m[mcp__plugin_engram_engram__mem_save][0m "**What**: Bead mrr-incremental-fetch-3sl.2 (JSON snapshotstore + core wiring) was found `in_progress` via `br show` at session start, despite an engram memory from a prior session recording it as clos... (1157 chars)"
+These candidate matches are unrelated topics (JIRA links, README conventions, alignment feedback) with near-zero similarity scores — not real conflicts. I'll resolve them silently as unrelated.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_judge[0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+[94m[mcp__plugin_engram_engram__mem_judge][0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Implement mrr-incremental-fetch-3sl.2 (child of epic mrr-incremental-fetch-3sl, docs/adr/0005): concrete `domain.SnapshotStore` adapter (versioned JSON cache in XDG_CACHE_HOME) + composition-r... (2057 chars)"
+★ Insight ─────────────────────────────────────
+The `statestore`/`snapshotstore` pair is a nice illustration of "same shape, different failure policy": both share the `Config{Dir}` → `New` → `Load`/`Save` skeleton with identical file permissions (`0o700`/`0o600`), but `StateStore.Load` treats a corrupt file as a real error (durable user state), while `SnapshotStore.Load` swallows *every* failure mode — absent, corrupt, or version-mismatched — into a silent empty result. That asymmetry is deliberate: a snapshot is a cache, and per ADR-0005's "cache ownership: passed in, not held," losing it should cost nothing but one slow fetch.
+
+The `version int` field baked into the JSON header is what makes future schema changes safe without a migration path — bump `currentVersion` and old files just get treated as if they never existed, rather than crashing `json.Unmarshal` on a mismatched struct shape.
+─────────────────────────────────────────────────
+
+This bead's implementation was already complete from a prior session — `internal/adapters/snapshotstore` and its wiring into `internal/core/core.go` fully satisfy the acceptance criteria — but the earlier `br close` never got flushed to `.beads/issues.jsonl`, leaving it stuck `in_progress`. I verified everything against the acceptance criteria, ran `just check` (clean), then re-closed the bead and flushed. No code changes were made. Next up per the dependency graph: `mrr-incremental-fetch-3sl.6`, now unblocked.
+
+<promise>COMPLETE</promise>
