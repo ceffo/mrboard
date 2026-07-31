@@ -1,6 +1,7 @@
 # ADR-0005: Incremental Fetch, Background Refresh, and Selection Identity
 
-**Status**: Accepted — all decisions resolved 2026-07-30; execution work not yet started
+**Status**: Implemented 2026-07-31 — all decisions resolved 2026-07-30; both verification items
+(phase-1 findings, phase-2 timing) settled during implementation, see below
 
 ## Context
 

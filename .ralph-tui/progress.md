@@ -53,6 +53,30 @@ after each iteration and it's included in prompts for context.
   gracefully with a toast, no crash) and lean on the unit tests for the timing-precise assertion —
   document the scoping decision explicitly rather than silently skipping or fabricating the live
   race.
+- **A minimal scratch mock-GitLab GraphQL server is cheap when only one query shape is needed.**
+  For `mrr-incremental-fetch-3sl.9`'s combined end-to-end pass, "force an MR to change phase and
+  confirm focus follows it" genuinely needed a live changing fetch (unlike `.7`'s millisecond race,
+  a deterministic multi-second sequence is easy to control). The key shortcut: `GitLabAdapter`
+  automatically falls back from GraphQL to REST on any GraphQL error (`fetchSourceViaGQL` in
+  `gitlabadpt.go`), and phase (`ClassifyPhase`) is driven entirely by `approvedBy`/`approvalState`
+  in the thin GraphQL response — no discussion-note fixtures needed to flip a reviewer to Approved.
+  A ~90-line `net/http` server serving only `POST /api/graphql` (discriminating the thin-listing
+  vs. phase-2-aliased query by the presence of a `"p0"` variable key) and `GET /api/v4/users`
+  (for `ResolveUsers`, otherwise a non-fatal "Team resolution failed" toast appears) was enough for
+  a full live cycle: cold boot → warm boot → navigate mid-fetch → manual `r` flips
+  `approvedBy` → card moves column and focus follows, confirmed by reopening the detail panel.
+  Endpoint: `{gitlab.url}/api/graphql`, header `PRIVATE-TOKEN`, envelope
+  `{"data":{"user":{"authoredMergeRequests":{"nodes":[...]}}}}}` for the thin query,
+  `{"data":{"mr0":{"mergeRequest":{"discussions":{...}}}}}` for the phase-2 aliased query (one key
+  per aliased MR, `mrN`).
+- **A single long-running mock server across multiple app relaunches accumulates call count from
+  background auto-refresh ticks, not just app boots.** First attempt at the phase-change scenario
+  above set `refresh_interval: 6s` throughout, and the "call N" the mock server was on by the time
+  of a deliberate action depended on how much real wall-clock time had passed since the server
+  started — including auto-ticks fired by a *previous, already-killed* app session. Fix: set
+  `refresh_interval` to something inert (e.g. `300s`) while deliberately sequencing scenarios via
+  manual `r`, and only dial it down short for the one scenario that specifically wants to observe
+  the timer firing on its own.
 
 ---
 
@@ -134,4 +158,53 @@ after each iteration and it's included in prompts for context.
   earlier commit (after .3, .4, .5) — reinforces the top "Codebase Patterns" entry: always read the
   actual code and tests against the acceptance criteria before writing anything, especially when
   `br show` reports `in_progress`.
+---
+
+## 2026-07-31 - mrr-incremental-fetch-3sl.9
+- Epic-closing bead: docs + full end-to-end agent-tui pass, no code changes to `internal/`.
+- `docs/architecture.md`: added `internal/adapters/snapshotstore` (implements `domain.SnapshotStore`)
+  as a sibling box to `statestore` in the dependency-rules diagram, file layout, and the composition
+  wiring line (`core.New` now shown wiring through `snapshotstore` too, and `tui.New`'s real
+  parameter list including `SnapshotStore`); rewrote the "Data flow" paragraph to describe boot-
+  from-cache + `FetchOptions.Previous` diffing + `SnapshotStore.Save` on every landed
+  `FetchResultMsg`, replacing the old modal-fetch description. `state.go`'s file-layout comment now
+  says "StateStore + SnapshotStore interfaces" (both actually live there).
+- `docs/domain-model.md`: added an `MRKey` section (struct + one paragraph on what it's for, linking
+  docs/adr/0005) and `MergeRequest.UpdatedAt` to the struct listing, per the bead's explicit scope.
+  Left the rest of that doc's `MergeRequest` struct (many fields — `ProjectPath`, `Description`,
+  `DetailedMergeStatus`, etc. — and the phase-classification table's stale `detailed_merge_status ==
+  "mergeable"` rule 2, which `ClassifyPhase` in `mr.go` no longer implements) untouched — a real
+  pre-existing doc/code drift, but unrelated to this epic's scope (MRKey/UpdatedAt/SnapshotStore) and
+  not called out in the bead's acceptance lines; noted here as a candidate for a future docs bead.
+- `mrboard.yaml.example` already documents `refresh_interval` (added under `.8`) — no change needed.
+- `docs/adr/0005-incremental-fetch-and-selection-identity.md`: flipped the Status line from
+  "Accepted ... execution work not yet started" to "Implemented 2026-07-31" — the two "verify during
+  implementation" items (resolvedDiscussionsCount/resolvableDiscussionsCount existence, approvalState
+  phase-1 cost) and the final measured cold/warm latency were already folded into the ADR body during
+  `.3`/`.4` sessions (see "Phase-1 thin query: implementation findings" and "Phase-2 aliased query:
+  measured timing" sections) — only the stale top-line status needed updating; no remaining
+  "verify during implementation" items exist in the file.
+- Confirmed no dangling `prevFocusMR`/`TryRestoreFocus` references anywhere except the ADR's own
+  historical "what was broken" narrative and a one-line explanatory comment in `board_test.go` — both
+  intentional descriptions of the pre-epic bug, not leftover code.
+- **Full end-to-end agent-tui pass**, all 5 scenarios, via a scratch mock GitLab GraphQL+REST server
+  (see new "Codebase Patterns" entries above) rather than the real `gl.nsesi.io` backend or a
+  black-hole IP (needed a live, changing fetch, not just a hanging one): boot cold (loading spinner,
+  then board renders with header "just now"), boot warm (board renders instantly at "< 1m ago" with
+  the in-progress spinner, before the background fetch lands), navigate mid-fetch (opened the detail
+  panel while a refresh was in flight, no lag/crash), forced a live phase change (`Needs Review` ->
+  `Approved`) via manual `r` and confirmed the card moved column with focus following it (reopened
+  the detail panel on the same MR, now showing "Approved"), and auto-refresh firing on its own
+  (`refresh_interval: 5s`, 3 consecutive autonomous ticks observed in the mock server's log with no
+  keypress, selection/highlight undisturbed since the data was unchanged on those ticks). All
+  screenshots checked concrete state (column counts, header age/spinner, card content, detail-panel
+  phase label), not just "no crash".
+- Backed up and restored the real `~/.cache/mrboard/snapshot.json` around the whole pass; deleted the
+  scratch `tools/mock_gitlab/` Go program and `/tmp/mrboard-e2e/` config+wrapper afterward — `git
+  status` confirms only the three doc files changed.
+- Ran `just check` clean before and after the docs edits (docs-only changes don't affect Go build/
+  lint/test, confirmed anyway per the bead's explicit acceptance line).
+- **Learnings:** see the two new "Codebase Patterns" entries above — the REST-fallback shortcut for
+  building a minimal live GraphQL mock, and the call-counter/wall-clock trap when a mock server
+  outlives multiple app relaunches with a short `refresh_interval`.
 ---

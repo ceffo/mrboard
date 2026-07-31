@@ -1,0 +1,200 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.9
+- **Task Title**: docs + end-to-end agent-tui verification; close out the epic
+- **Description**: ## Scope
+
+- Update docs/architecture.md (the SnapshotStore port and the cache adapter are new boxes in the
+  dependency story) and docs/domain-model.md (MRKey, MergeRequest.UpdatedAt).
+- Update mrboar...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-31T19:31:42.772Z
+- **Ended At**: 2026-07-31T19:45:52.605Z
+- **Duration**: 14m 9s
+- **Input Tokens**: 536
+- **Output Tokens**: 61487
+- **Total Tokens**: 62023
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by loading memory context and checking the current state of this bead and the epic.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_current_project,mcp__plugin_engram_engram__mem_context,mcp__plugin_engram_engram__mem_search,mcp__plugin_engram_engram__mem_save,mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[Bash][0m Show bead .9 and epic details $ br show mrr-incremental-fetch-3sl --format toon
+[94m[Bash][0m Check file sizes before reading $ wc -l .ralph-tui/progress.md docs/adr/0005*.md docs/architecture.md docs/domain-model.md mrboard.yam...
+[94m[mcp__plugin_engram_engram__mem_context][0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/domain-model.md[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/mrboard.yaml.example[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m Search for dangling references and doc gaps $ rg -n "MRKey|UpdatedAt" docs/domain-model.md internal/domain/mr.go
+[94m[Bash][0m Run quality gates to confirm current state passes $ just check 2>&1 | tail -40
+[94m[Bash][0m Inspect domain and snapshotstore files $ wc -l internal/core/core.go
+[94m[Bash][0m Find SnapshotStore interface definition and wiring $ rg -n "SnapshotStore" internal/domain/state.go internal/adapters/snapshotstore/snapshotstore.go inte...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/state.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/domain/mr.go[0m
+[94m[Bash][0m Check core.go wiring for snapshot store and state store $ rg -n "SnapshotStore|snapStore|statestore|StateStore" internal/core/core.go
+[94m[Bash][0m Check tui model.go wiring signature for snapshot store param $ rg -n "func New|snapStore|snapshotStore|domain.SnapshotStore" internal/tui/model.go | head -30
+Now I have enough to update the docs accurately. Let me update `docs/architecture.md` first — adding the SnapshotStore port and snapshotstore adapter as boxes in the dependency diagram, file layout, and data flow.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "internal/domain                  (stdlib only — ze..." → "internal/domain                  (stdlib only — ze..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "On startup the TUI fires a `FetchAllCmd` which cal..." → "On startup the TUI boots from `domain.SnapshotStor..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "    domain/
+      mr.go                # All domai..." → "    domain/
+      mr.go                # All domai..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "      statestore/
+        statestore.go      # dom..." → "      statestore/
+        statestore.go      # dom..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "  → core.New(ctx, cfg)                    wires lo..." → "  → core.New(ctx, cfg)                    wires lo..."
+[94m[Bash][0m Find actual tui.New call site signature $ rg -n "tui\.New\(" internal/cmd/mrboard/*.go
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/cmd/mrboard/board.go[0m
+Good, my edit is accurate enough (`tui.New(core.MRSource, cfg, core.SnapshotStore, ...)` — order slightly differs but "..." already signals abbreviation). Let me tighten it to match reality more precisely.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/architecture.md[0m edit: "  → tui.New(core.MRSource, cfg, core.SnapshotStore..." → "  → tui.New(ctx, cfg, core.MRSource, core.StateSto..."
+Now update `docs/domain-model.md` to add `MRKey` and `MergeRequest.UpdatedAt`, matching the real struct field.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/domain-model.md[0m edit: "## MergeRequest
+
+```go
+type MergeRequest struct {
+..." → "## MRKey
+
+```go
+type MRKey struct {
+    ProjectID ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/docs/adr/0005-incremental-fetch-and-selection-identity.md[0m edit: "**Status**: Accepted — all decisions resolved 2026..." → "**Status**: Implemented 2026-07-31 — all decisions..."
+[94m[Bash][0m Check for existing httptest mock GitLab server fixtures $ rg -n "httptest.NewServer|httptest.Server" internal/adapters/gitlabadpt/*.go pkg/gitlab/*.go 2>&1 | ...
+[94m[Bash][0m Inspect gitlabadpt FetchAll structure $ rg -n "func.*FetchAll|listAllMRs|listReviewerMRs|gqlUserMRsQuery|gqlReviewerMRsQuery|phase1|Phase1|t...
+[94m[Bash][0m Inspect existing test client pattern for building a mock GitLab server $ \cat pkg/gitlab/graphql_aliased_test.go | \head -60
+[94m[Bash][0m Check for existing unit test coverage of focus following phase change $ rg -n "func Test.*[Ff]ocus.*[Pp]hase|func Test.*[Pp]hase.*[Ff]ocus|FollowsMR|focus.*follow" internal...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/gitlabadpt.go[0m
+[94m[Bash][0m Inspect GQL-to-REST fallback logic $ rg -n "func.*fetchSourceViaGQL|func.*fetchSourceViaREST" -A 25 internal/adapters/gitlabadpt/gitlabad...
+[94m[Bash][0m Inspect enrichMR REST enrichment path $ rg -n "func.*enrichMR" -A 40 internal/adapters/gitlabadpt/gitlabadpt.go | head -60
+[94m[Bash][0m Look for model-level tests on focus/selection across fetch results $ rg -n "func Test" internal/tui/model_test.go internal/tui/refresh_test.go internal/tui/board_test.go...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/model_test.go[0m
+[94m[Bash][0m Inspect GraphQL thin response struct shapes $ rg -n "type GQLMergeRequest|type GQLReviewer|type GQLApprovalState|type GQLUser|type GQLProject" -A ...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/graphql.go[0m
+[94m[Bash][0m Check mapper.go for reviewer state / approval derivation from GQL data $ rg -n "func MergeMRGQL|func.*normalizeDiscussionEventsGQL|ApprovedBy|func MapGQLMR|IsApprover" inter...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/mapper.go[0m
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/adapters/gitlabadpt/phase2.go[0m
+[94m[Bash][0m Inspect phase2 aliased discussions query builder $ rg -n "func.*FetchMRsDiscussionsGraphQL" -A 60 pkg/gitlab/graphql.go | head -90
+[94m[Bash][0m Check GraphQL request path and auth header construction $ rg -n "func.*doGQLRequest|func.*doGQLUserMRs|func.*doGQLGenericRequest|apiURL\s*\+|http.NewRequest.*...
+[94m[Bash][0m Check apiURL derivation and config URL validation rules $ rg -n "url|URL" internal/config/config.go | rg -i "valid|rule|require"
+[94m[Bash][0m Check required config fields and defaults $ rg -n "validation.Field|Required|SetDefault" internal/config/config.go | head -60
+[94m[Bash][0m Check justfile build target and existing cache state $ \ls ~/.cache/mrboard/ 2>&1
+[94m[Bash][0m Back up real snapshot cache and build the binary $ just build 2>&1 | tail -20
+Good, binary built and the real cache backed up. Now let me write the scratch mock GitLab server.
+[94m[Write][0m [95m/Users/moncefnaji/code/github.com/mrboard/tools/mock_gitlab/main.go[0m "// Scratch tool: a minimal mock GitLab GraphQL backend for a live agent-tui
+// end-to-end pass over mrr-incremental-fetch-3sl (docs/adr/0005). Deleted
+// after verification — not part of the shipped c... (3073 chars)"
+Now the scratch config and wrapper script.
+[94m[Write][0m [95m/tmp/mrboard-e2e/mrboard.yaml[0m "gitlab:
+  url: http://127.0.0.1:18080
+  token: test-token
+  timeout: 20s
+
+sources:
+  - type: user
+    ids: [testuser]
+
+current_user: testuser
+refresh_interval: 6s
+"
+[94m[Write][0m [95m/tmp/mrboard-e2e/run.sh[0m "#!/bin/bash
+cd /Users/moncefnaji/code/github.com/mrboard
+exec ./bin/mrboard run --config /tmp/mrboard-e2e/mrboard.yaml
+"
+[94m[Bash][0m Delete real cache for cold-boot test, start mock GitLab server in background $ go run ./tools/mock_gitlab -delay 2s > /tmp/mrboard-e2e/mock.log 2>&1 & disown sleep 1 \cat /tmp/mrb...
+Mock server is up. Now let's run the cold-boot scenario through agent-tui.
+[94m[Skill][0m
+[94m[Bash][0m Launch mrboard TUI for cold-boot scenario 1 $ agent-tui run /tmp/mrboard-e2e/run.sh
+[94m[Bash][0m Screenshot immediately to catch cold-boot loading state $ agent-tui screenshot
+[94m[Bash][0m Kill stale session and inspect actual CLI subcommands $ \cat internal/cmd/mrboard/root.go | \head -60
+[94m[Bash][0m Check actual subcommand names and run-tui.sh contents $ \cat scripts/run-tui.sh
+[94m[Edit][0m [95m/tmp/mrboard-e2e/run.sh[0m edit: "exec ./bin/mrboard run --config /tmp/mrboard-e2e/m..." → "exec ./bin/mrboard --config /tmp/mrboard-e2e/mrboa..."
+[94m[Bash][0m Relaunch and screenshot immediately for cold-boot loading state $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.3 && agent-tui screenshot
+[94m[Bash][0m Find the user-resolution REST call that failed $ rg -n "Team resolution failed|resolve users|func.*ResolveUsers|list users" internal/tui/*.go interna...
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/pkg/gitlab/client.go[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/tools/mock_gitlab/main.go[0m edit: "	log.Printf("mock gitlab listening on %s (delay=%s..." → "	http.HandleFunc("/api/v4/users", func(w http.Resp..."
+[94m[Bash][0m Restart mock server with user-resolution endpoint, reset cache for cold boot $ agent-tui kill pkill -f "tools/mock_gitlab" 2>/dev/null sleep 0.5 rm -f ~/.cache/mrboard/snapshot.js...
+[94m[Bash][0m Kill process on port 18080 and restart mock server $ go run ./tools/mock_gitlab -delay 2s > /tmp/mrboard-e2e/mock.log 2>&1 & disown sleep 1 \cat /tmp/mrb...
+Good, mock server restarted cleanly. Now let's relaunch the cold-boot scenario.
+[94m[Bash][0m Launch cold-boot scenario, screenshot immediately $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.3 && agent-tui screenshot
+Clean cold-boot loading state — no toast this time, confirming user resolution succeeded. Now let's wait for the fetch to land and confirm the board renders.
+[94m[Bash][0m Wait for cold fetch to land and screenshot the board $ agent-tui screenshot
+[94m[Bash][0m Kill cold-boot session, relaunch for warm-boot scenario, screenshot immediately $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.3 && agent-tui screenshot
+[94m[Bash][0m Open detail panel mid-refresh to prove interactivity during fetch (scenario 3) $ agent-tui screenshot
+That screenshot got two scenarios entangled because background auto-refresh ticks advanced the mock's call counter while I was working. Let me redo this cleanly with a longer refresh interval so I can sequence each scenario deliberately.
+[94m[Bash][0m Kill session and mock server, reset cache for a clean re-sequenced run $ sleep 0.3 lsof -ti:18080 | xargs -r kill -9 sleep 0.5 rm -f ~/.cache/mrboard/snapshot.json
+[94m[Edit][0m [95m/tmp/mrboard-e2e/mrboard.yaml[0m edit: "refresh_interval: 6s" → "refresh_interval: 300s"
+[94m[Bash][0m Restart mock server fresh with counter at 0, refresh interval disabled for now $ go run ./tools/mock_gitlab -delay 2s > /tmp/mrboard-e2e/mock.log 2>&1 & disown sleep 1 \cat /tmp/mrb...
+Scenario 1 — cold boot:
+[94m[Bash][0m Cold boot: launch and screenshot immediately for loading state $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.3 && agent-tui screenshot
+Cold-boot loading state confirmed (call #1 in flight). Now wait for it to land.
+[94m[Bash][0m Wait for cold-boot fetch to land, screenshot board, check mock call count $ \cat /tmp/mrboard-e2e/mock.log
+[94m[Bash][0m Warm boot: relaunch and screenshot immediately for instant interactive board $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.2 && agent-tui screenshot
+[94m[Bash][0m Open detail panel mid-refresh to prove interactivity during fetch $ agent-tui screenshot
+Interactivity during a fetch confirmed cleanly — detail panel opened mid-refresh, unaffected. Let's close it and trigger the manual refresh that will flip the MR's approval state (call #3 → phase change).
+[94m[Bash][0m Close detail panel, confirm back on board with same selection $ agent-tui screenshot
+Now trigger a manual refresh (call #3, which the mock flips to "approved").
+[94m[Bash][0m Manual refresh mid-scenario, should be in flight $ agent-tui screenshot
+Refresh confirmed in flight (spinner ⣾). Let's wait for it to land and screenshot the result.
+[94m[Bash][0m Wait for manual refresh (call #3) to land, screenshot phase-change result $ \cat /tmp/mrboard-e2e/mock.log
+[94m[Bash][0m Confirm selection landed on the moved card by opening its detail panel $ agent-tui screenshot
+Focus-follows-phase-change confirmed live and cleanly. Now let's close the panel and set up scenario 4 — auto-refresh firing without any keypress.
+[94m[Bash][0m Close detail panel and kill session to reconfigure for auto-refresh scenario $ sleep 0.3
+[94m[Edit][0m [95m/tmp/mrboard-e2e/mrboard.yaml[0m edit: "refresh_interval: 300s" → "refresh_interval: 5s"
+[94m[Bash][0m Relaunch with short refresh_interval, screenshot immediately $ agent-tui run /tmp/mrboard-e2e/run.sh && sleep 0.3 && agent-tui screenshot
+[94m[Bash][0m Wait for boot fetch (call #4) to land $ agent-tui screenshot
+[94m[Bash][0m Wait a bit more and recheck header + mock call log $ \cat /tmp/mrboard-e2e/mock.log
+[94m[Bash][0m Capture the settled state between auto-refresh ticks $ agent-tui screenshot
+All five scenarios verified live and cleanly. Now let's clean up everything — kill sessions, restore the real cache, and remove scratch files.
+[94m[Bash][0m Kill agent-tui and mock server, restore real snapshot cache, delete scratch files $ agent-tui kill lsof -ti:18080 | xargs -r kill -9 sleep 0.5 cp /tmp/mrboard-e2e/snapshot.json.bak ~/....
+Cache restored, scratch tool and config removed. Only the intended doc changes remain in git status. Let's run `just check` one final time to confirm everything is clean.
+[94m[Bash][0m Final quality gate check $ just check 2>&1 | tail -25
+[94m[Bash][0m Re-run just check and grep for any failures $ rg -i "FAIL|error" /tmp/check_output.log | head -30
+`just check` passes clean (exit 0). Now let's update `.ralph-tui/progress.md` with the session's findings, and close the bead.
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "- **Live reproduction of a network-timing race is ..." → "- **Live reproduction of a network-timing race is ..."
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "  `internal/tui/refresh_test.go` + `internal/confi..." → "  `internal/tui/refresh_test.go` + `internal/confi..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String:   `internal/tui/refresh_test.go` + `internal/config/config_test.go` already cover every acceptance
+  line (zero-disables, skip-while-in-flight, stale-generation-dropped, unchanged-data-causes-no-
+  mutation-or-selection-change).
+- **Learnings:** this is the fourth bead in the epic found fully pre-implemented and bundled into an
+  earlier commit (after .3, .4, .5) — reinforces the top "Codebase Patterns" entry: always read the
+  actual code and tests against the acceptance criteria before writing anything, especially when
+  `br show` reports `in_progress`.
+---
+(note: Edit also tried swapping \uXXXX escapes and their characters; neither form matched, so the mismatch is likely elsewhere in old_string. Re-read the file and copy the exact surrounding text.)</tool_use_error>][0m
+[94m[Bash][0m Inspect exact trailing bytes of progress.md $ tail -15 .ralph-tui/progress.md | cat -A | tail -15
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "- **Learnings:** this is the fourth bead in the ep..." → "- **Learnings:** this is the fourth bead in the ep..."
+Now let's close the bead and flush beads state.
+[94m[Bash][0m Close bead .9 and flush beads state to JSONL $ just check clean" br sync --flush-only
+[94m[Bash][0m Verify bead closed and check if epic is now closeable $ br show mrr-incremental-fetch-3sl --format toon | rg "status"
+[94m[Bash][0m Check if the parent epic is eligible for closing now that all children are done $ br epic close-eligible
+The epic auto-closed since all children are now done. Let's flush again and confirm final state.
+[94m[Bash][0m Flush beads state after epic close, final status check $ git status --short
+Everything's flushed. Now let's save the engram session summary as required.
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Close out mrr-incremental-fetch-3sl.9 (epic mrr-incremental-fetch-3sl, docs/adr/0005): docs updates + a full end-to-end agent-tui pass over the combined incremental-fetch/selection-identity fe... (4802 chars)"
+[94m[Bash][0m Final review of changed files $ git diff --stat
+Everything's in order. Per instructions, I won't create a git commit — the engine handles that automatically.
+[94m[ScheduleWakeup][0m
+`mrr-incremental-fetch-3sl.9` is closed, and closing it made `br epic close-eligible` auto-close the whole `mrr-incremental-fetch-3sl` epic — all 9 children are now done.
+
+**What changed** (docs only, no `internal/` code):
+- `docs/architecture.md` — added the `snapshotstore` adapter and `SnapshotStore` port as boxes in the dependency diagram, file layout, and composition wiring; rewrote the data-flow section to describe boot-from-cache + `FetchOptions.Previous` diffing.
+- `docs/domain-model.md` — added `MRKey` and `MergeRequest.UpdatedAt`.
+- `docs/adr/0005` — flipped the stale "execution not yet started" status line to "Implemented"; the two verification items (resolvedDiscussionsCount existence, approvalState cost) and final latency numbers had already been folded in during earlier sessions.
+
+**Verification**: since this bead's acceptance criteria needed a genuinely live "force a phase change, confirm focus follows" scenario (not just a hanging-fetch trick), I built a small scratch mock GitLab GraphQL/REST server (`tools/mock_gitlab`, deleted afterward) and ran a full 5-scenario agent-tui pass against it: cold boot, warm boot (instant interactive render), navigating mid-fetch, a manual refresh that flips an MR's approval and moves it to the "Approved" column with focus following, and three autonomous auto-refresh ticks firing without any keypress. The real `~/.cache/mrboard/snapshot.json` was backed up and restored around the test. `just check` passes clean.
+
+Full details and the two new reusable patterns (REST-fallback shortcut for building minimal live GraphQL mocks; the call-counter/wall-clock trap with long-running mock servers) are recorded in `.ralph-tui/progress.md` and engram memory.
+
+<promise>COMPLETE</promise>

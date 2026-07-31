@@ -20,6 +20,7 @@ internal/domain/service/mrsvc    (port interfaces; imports only internal/domain)
 pkg/gitlab                       (REST + GQL client; imports only stdlib + net/http libs)
 internal/adapters/gitlabadpt     (implements mrsvc; imports pkg/gitlab + internal/domain)
 internal/adapters/statestore     (implements domain.StateStore; stdlib + file I/O)
+internal/adapters/snapshotstore  (implements domain.SnapshotStore; stdlib + file I/O)
 internal/core                    (composition root; no TUI imports)
 internal/tui                     (charmbracelet v2; depends on mrsvc interfaces, never on adapters)
 ```
@@ -40,13 +41,21 @@ name the capability, not the vendor — see AGENTS.md rule 7 for the full statem
 ```
 cmd/mrboard/main.go
   → config.Load()                         reads mrboard.yaml / $MRBOARD_CONFIG
-  → core.New(ctx, cfg)                    wires logger → pkg/gitlab.Client → gitlabadpt → statestore
-  → tui.NewModel(core.MRSource, cfg)
+  → core.New(ctx, cfg)                    wires logger → pkg/gitlab.Client → gitlabadpt →
+                                             statestore → snapshotstore
+  → tui.New(ctx, cfg, core.MRSource, core.StateStore, core.SnapshotStore, ...)
   → tea.NewProgram(model).Run()
 ```
 
-On startup the TUI fires a `FetchAllCmd` which calls `MergeRequestSource.FetchAll(ctx)` and
-sends the result back as `FetchResultMsg`. Manual refresh (`r`) repeats the same cycle.
+On startup the TUI boots from `domain.SnapshotStore.Load()` (see
+`docs/adr/0005-incremental-fetch-and-selection-identity.md`): a warm cache renders the board
+immediately, fully interactive, at any age, while a `FetchAllCmd` runs in the background. A cold
+cache (nothing to load) is the only case that shows the loading state. `FetchAllCmd` calls
+`MergeRequestSource.FetchAll(ctx, mrsvc.FetchOptions{Previous: m.allMRs, ...})`, passing the
+current in-memory snapshot so `gitlabadpt` can diff `UpdatedAt` and skip re-fetching discussions
+for unchanged MRs. Every landed `FetchResultMsg` is persisted via `SnapshotStore.Save`. Manual
+refresh (`r`) and the `refresh_interval` timer both repeat the same cycle; a tick is skipped while
+a fetch is already in flight.
 
 Detail panel (`↵`) calls `MergeRequestSource.GetDetail(ctx, projectID, mrIID)`.
 
@@ -74,7 +83,7 @@ mrboard/
       core.go              # Composition root — builds and wires all dependencies
     domain/
       mr.go                # All domain types (see domain-model.md)
-      state.go             # StateStore interface
+      state.go             # StateStore + SnapshotStore interfaces
       service/mrsvc/
         mrsvc.go           # MergeRequestSource port + SourceType, Source, Config
         filter.go          # MR filtering helpers
@@ -86,6 +95,8 @@ mrboard/
         dedup.go           # Cross-source deduplication
       statestore/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
+      snapshotstore/
+        snapshotstore.go   # domain.SnapshotStore — versioned JSON cache (XDG cache dir)
     log/
       log.go               # slog wrapper (file + stderr)
     tui/

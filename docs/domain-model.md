@@ -54,6 +54,19 @@ const (
 
 Rule 3 takes precedence over rule 4 in mixed states (some commented, some re-requested).
 
+## MRKey
+
+```go
+type MRKey struct {
+    ProjectID int
+    IID       int
+}
+```
+
+Uniquely identifies a merge request across all sources, independent of position in any slice or
+column — the single identity type for selection tracking, dedup, and snapshot-cache lookups (see
+docs/adr/0005-incremental-fetch-and-selection-identity.md). `MergeRequest.Key()` returns it.
+
 ## MergeRequest
 
 ```go
@@ -69,6 +82,9 @@ type MergeRequest struct {
     Reviewers         []ReviewerInfo  // Approvers appear first; distinguished by IsApprover
 
     CreatedAt         time.Time
+    UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, approvals, reviewer
+                                // changes, title/draft edits — the version marker the snapshot
+                                // cache diffs against (docs/adr/0005)
     NonDraftSince     time.Time // "marked as ready" note, or CreatedAt if never a draft
     WaitingSince      time.Time // when current phase started
 

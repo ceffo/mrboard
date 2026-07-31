@@ -3,10 +3,10 @@
   "sessionId": "6d7c0431-ace4-4a63-a182-25eb3b9f2abc",
   "status": "running",
   "startedAt": "2026-07-31T18:50:21.765Z",
-  "updatedAt": "2026-07-31T19:31:41.559Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-07-31T21:01:39.466Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -59,14 +59,14 @@
       {
         "id": "mrr-incremental-fetch-3sl.8",
         "title": "config+tui: refresh_interval auto-refresh timer",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "mrr-incremental-fetch-3sl.9",
         "title": "docs + end-to-end agent-tui verification; close out the epic",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       }
     ]
   },
@@ -90,6 +90,26 @@
       "durationMs": 1915519,
       "startedAt": "2026-07-31T18:58:17.121Z",
       "endedAt": "2026-07-31T19:30:12.640Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "mrr-incremental-fetch-3sl.8",
+      "taskTitle": "config+tui: refresh_interval auto-refresh timer",
+      "taskCompleted": true,
+      "durationMs": 87488,
+      "startedAt": "2026-07-31T19:30:14.022Z",
+      "endedAt": "2026-07-31T19:31:41.510Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "mrr-incremental-fetch-3sl.9",
+      "taskTitle": "docs + end-to-end agent-tui verification; close out the epic",
+      "taskCompleted": true,
+      "durationMs": 849833,
+      "startedAt": "2026-07-31T19:31:42.772Z",
+      "endedAt": "2026-07-31T19:45:52.605Z"
     }
   ],
   "skippedTaskIds": [],

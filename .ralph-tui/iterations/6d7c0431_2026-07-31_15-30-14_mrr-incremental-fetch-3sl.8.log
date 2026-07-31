@@ -1,0 +1,70 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: mrr-incremental-fetch-3sl.8
+- **Task Title**: config+tui: refresh_interval auto-refresh timer
+- **Description**: ## Scope
+
+Small ticket, but only viable once the fetch is cheap and the board is ungated.
+
+- New refresh_interval config key, default 60s, 0 disables. Follow the existing config validation
+  and defau...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-07-31T19:30:14.022Z
+- **Ended At**: 2026-07-31T19:31:41.510Z
+- **Duration**: 1m 27s
+- **Input Tokens**: 92
+- **Output Tokens**: 5537
+- **Total Tokens**: 5629
+- **Agent**: claude
+- **Model**: claude-sonnet-5
+- **Epic**: mrr-incremental-fetch-3sl
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether this bead was already implemented — the session memory shows a matching decision record from a prior session, and the project's own guidance warns that beads can appear in-progress while actually being fully done under a different commit.
+[94m[Bash][0m $ br show mrr-incremental-fetch-3sl.8 --format toon 2>&1 | \toon 2>/dev/null || br show mrr-incrementa...
+[94m[Bash][0m $ git status --short
+[94m[Bash][0m $ rg -n "RefreshInterval|refresh_interval" --type go --type yaml -i
+Confirmed — this is already fully implemented, matching the git-status observation that no uncommitted diffs exist despite the bead showing `in_progress`. Let me verify each acceptance criterion against the actual code rather than trust the memory summary blindly.
+[94m[Bash][0m $ git log --oneline -S "refresh_interval" -- internal/config internal/tui mrboard.yaml.example | head ...
+[94m[Bash][0m $ rg -n "refresh_interval" mrboard.yaml.example
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/internal/tui/refresh_test.go[0m
+All acceptance criteria are covered by existing tests and code. Let me run `just check` to confirm it passes before closing.
+[94m[Bash][0m $ just check 2>&1 | tail -60
+Let me confirm there were no failures earlier in the output (fmt/lint/build stages).
+[94m[Bash][0m $ \grep -iE "FAIL|error" /tmp/check_output.log | \grep -v "^--- PASS" | head -30
+`just check` exited 0 — those matched lines are just test names containing "Error"/"FAIL" as substrings (expected-error-path tests), not actual failures. All good: fmt, lint, build, and tests all pass.
+[94m[Bash][0m $ br close mrr-incremental-fetch-3sl.8 --reason "Already implemented: RefreshInterval config, refresh ...
+[94m[Bash][0m $ git diff --stat .beads/issues.jsonl
+[94m[Bash][0m $ git diff .beads/issues.jsonl | \grep -o '"id":"mrr-incremental-fetch-3sl.8".*"status":"[a-z_]*"' | h...
+The bead is confirmed closed in the flushed JSONL (`"status":"open"` → `"status":"closed"`). Now let me update the progress log and save the engram memory before finishing.
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Bash][0m $ wc -l /Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md
+[94m[Read][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/moncefnaji/code/github.com/mrboard/.ralph-tui/progress.md[0m edit: "- **Learnings:** see the two new "Codebase Pattern..." → "- **Learnings:** see the two new "Codebase Pattern..."
+Now saving the engram session summary before wrapping up.
+[94m[ToolSearch][0m query: [93mselect:mcp__plugin_engram_engram__mem_session_summary[0m
+[94m[mcp__plugin_engram_engram__mem_session_summary][0m "## Goal
+Verify/close mrr-incremental-fetch-3sl.8 (epic mrr-incremental-fetch-3sl, docs/adr/0005 "Refresh cadence"): refresh_interval auto-refresh timer for the mrboard TUI.
+
+## Discoveries
+- Bead show... (2004 chars)"
+`★ Insight ─────────────────────────────────────`
+The generation-counter pattern (`refreshGen`) here is the standard fix for the classic "stale timer" race in Bubble Tea's Elm-architecture model: because `tea.Cmd`s are just functions returning a message at some future point, you can't cancel an already-scheduled `refreshTickCmd`. Instead, each scheduled tick carries the generation it belongs to; `Update` compares that against the model's *current* generation and silently drops the message if they don't match. Bumping the counter on manual refresh is cheaper than plumbing real cancellation through `tea.Cmd`, and it composes for free with the fetch-in-flight skip (a second orthogonal check on `isRefreshing`).
+`─────────────────────────────────────────────────`
+
+This bead was already fully implemented in a prior iteration — bundled (and mislabeled) into commit `9491963`, the fourth time in this epic that's happened (after `.3`, `.4`, `.5`). I verified every acceptance-criteria line against the actual code and tests rather than trusting the commit label:
+
+- `RefreshInterval time.Duration` config key, default `60s`, `0` disables — `internal/config/config.go:92-94,182`, tested in `config_test.go`.
+- Timer skip-while-in-flight and manual-`r`-resets-generation logic — `internal/tui/model.go` (`refreshTickCmd`, `handleRefreshTick`, `refreshGen`).
+- Unchanged-data refresh causes zero board/selection mutation — asserted directly on the model in `TestModel_RefreshTick_UnchangedDataCausesNoBoardMutationOrSelectionChange`.
+- Documented in `mrboard.yaml.example:22`.
+- `just check` passes clean.
+
+No code changes were needed, so no agent-tui gate was required this session. Closed the bead, flushed beads state, and logged the verification in `.ralph-tui/progress.md`.
+
+<promise>COMPLETE</promise>
