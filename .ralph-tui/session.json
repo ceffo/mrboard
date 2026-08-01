@@ -3,7 +3,7 @@
   "sessionId": "6d7c0431-ace4-4a63-a182-25eb3b9f2abc",
   "status": "running",
   "startedAt": "2026-07-31T18:50:21.765Z",
-  "updatedAt": "2026-07-31T21:01:39.466Z",
+  "updatedAt": "2026-07-31T21:02:50.740Z",
   "currentIteration": 4,
   "maxIterations": 10,
   "tasksCompleted": 3,
@@ -114,8 +114,6 @@
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/moncefnaji/code/github.com/mrboard",
-  "activeTaskIds": [
-    "mrr-incremental-fetch-3sl.6"
-  ],
+  "activeTaskIds": [],
   "subagentPanelVisible": false
 }
