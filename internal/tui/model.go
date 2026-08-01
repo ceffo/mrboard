@@ -153,10 +153,18 @@ func refreshTickCmd(interval time.Duration, gen int) tea.Cmd {
 // returned); the dirty-set guard compares it against each entry in
 // Model.dirty to tell a stale landing snapshot from a confirming one
 // (docs/adr/0005, "The write race that ungating creates").
+//
+// Seq is the value of Model.fetchSeq at dispatch time. startFetch cancels any
+// fetch already in flight, and a cancelled fetch returns almost immediately
+// with a partial result plus context.Canceled errors — Cmd goroutines are not
+// ordered, so that degraded result can land after the newer fetch's good one.
+// Update drops any result whose Seq no longer matches Model.fetchSeq. The boot
+// fetch from makeFetchCmd leaves Seq at 0, matching fetchSeq's zero value.
 type FetchResultMsg struct {
 	MRs            []domain.MergeRequest
 	Errors         []error
 	FetchStartedAt time.Time
+	Seq            int
 }
 
 // FetchErrMsg carries a fatal fetch error (e.g. network down, bad token).
@@ -275,6 +283,7 @@ type Model struct {
 	baseCtx            context.Context
 	logger             *slog.Logger
 	isRefreshing       bool
+	fetchSeq           int // bumped per dispatched fetch; see FetchResultMsg.Seq
 	snapshotStore      domain.SnapshotStore
 	snapshotWrittenAt  time.Time    // when the displayed data was captured; zero until a snapshot exists
 	selected           domain.MRKey // single source of truth for board selection, see docs/adr/0005
@@ -509,6 +518,8 @@ func (m *Model) startFetch() tea.Cmd {
 		m.fetchCancel()
 	}
 	m.fetchCancel = cancel
+	m.fetchSeq++
+	seq := m.fetchSeq
 	src := m.src
 	includeReviewerMRs := m.includeReviewerMRs
 	previous := m.allMRs
@@ -521,8 +532,51 @@ func (m *Model) startFetch() tea.Cmd {
 			Previous:           previous,
 			ForceStale:         forceStale,
 		})
-		return FetchResultMsg{MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt}
+		return FetchResultMsg{MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt, Seq: seq}
 	}
+}
+
+// handleFetchResult lands a fetch result on the board: it clears the refreshing
+// state, merges the snapshot against any local writes, and persists the cache.
+func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Seq != m.fetchSeq {
+		// A newer fetch has superseded this one (see FetchResultMsg.Seq). Its
+		// result is authoritative, so drop this landing — and leave
+		// isRefreshing set, because that newer fetch is still in flight.
+		m.logger.Debug("tui: dropping superseded fetch result",
+			"seq", msg.Seq, "current", m.fetchSeq, "mrs", len(msg.MRs))
+		return m, nil
+	}
+	m.state = stateBoard
+	m.isRefreshing = false
+	m.allMRs = m.applyFetchResult(msg)
+	m.clearResolvedDirty(msg)
+	m.errors = msg.Errors
+	m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
+	// Only a wholly clean fetch may overwrite the cache. A partial or total
+	// failure yields a truncated or empty board, and persisting that would
+	// destroy the last-known-good snapshot the next launch boots from
+	// (docs/adr/0005, "Non-blocking refresh"). snapshotWrittenAt is left
+	// untouched too, so the header keeps reporting the real cache age.
+	if len(msg.Errors) == 0 {
+		m.saveSnapshot()
+	}
+	m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
+	for _, e := range msg.Errors {
+		m.logger.Warn("tui: fetch partial error", "error", e)
+	}
+	m.applyTheme()
+	m.applyMRFilter()
+	m.updateTicketKey()
+	cmds := []tea.Cmd{m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds()}
+	if len(m.dirty) > 0 {
+		// Landing snapshot was stale relative to one or more local writes;
+		// issue an immediate targeted refetch instead of waiting for the
+		// next refresh tick (docs/adr/0005).
+		m.isRefreshing = true
+		cmds = append(cmds, m.startFetch())
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // handleRefreshTick fires a background fetch on the refresh_interval cadence
@@ -648,29 +702,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FetchResultMsg:
-		m.state = stateBoard
-		m.isRefreshing = false
-		m.allMRs = m.applyFetchResult(msg)
-		m.clearResolvedDirty(msg)
-		m.errors = msg.Errors
-		m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
-		m.saveSnapshot()
-		m.logger.Info("tui: fetch result", "mrs", len(msg.MRs), "errors", len(msg.Errors))
-		for _, e := range msg.Errors {
-			m.logger.Warn("tui: fetch partial error", "error", e)
-		}
-		m.applyTheme()
-		m.applyMRFilter()
-		m.updateTicketKey()
-		cmds := []tea.Cmd{m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds()}
-		if len(m.dirty) > 0 {
-			// Landing snapshot was stale relative to one or more local writes;
-			// issue an immediate targeted refetch instead of waiting for the
-			// next refresh tick (docs/adr/0005).
-			m.isRefreshing = true
-			cmds = append(cmds, m.startFetch())
-		}
-		return m, tea.Batch(cmds...)
+		return m.handleFetchResult(msg)
 
 	case FetchErrMsg:
 		m.isRefreshing = false
@@ -902,6 +934,13 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// timer" means (docs/adr/0005, "Refresh cadence").
 		m.refreshGen++
 		resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
+		if m.isRefreshing {
+			// A fetch is already in flight. Starting a second one would cancel
+			// it (startFetch cancels the previous context) and land a degraded
+			// partial result, so skip — not queue — this fetch, the same rule
+			// handleRefreshTick applies. The cadence is still reset above.
+			return m, resetTimer
+		}
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
 			return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch())

@@ -675,6 +675,12 @@ func (a *GitLabAdapter) fetchReviewerSourceREST(
 
 // fetchSourceViaGQL is the shared implementation for GQL-first fetches (user or reviewer).
 // label is used in log messages ("user" or "reviewer").
+//
+// The GraphQL attempt runs under its own sub-budget of the caller's deadline
+// (see gqlAttemptContext) so that a hung endpoint still leaves the REST
+// fallback room to issue a request. Without that split the GraphQL attempt
+// consumes the whole per-fetch deadline and the fallback inherits an
+// already-expired context, failing instantly without ever hitting the network.
 func (a *GitLabAdapter) fetchSourceViaGQL(
 	ctx context.Context,
 	username, label string,
@@ -683,8 +689,18 @@ func (a *GitLabAdapter) fetchSourceViaGQL(
 	logger *slog.Logger,
 	start time.Time,
 ) sourceResult {
-	gqlMRs, err := gqlFetch(ctx, username)
+	gqlCtx, cancelGQL := gqlAttemptContext(ctx)
+	gqlMRs, err := gqlFetch(gqlCtx, username)
+	cancelGQL()
 	if err != nil {
+		// The caller's own deadline is gone (or it cancelled), so REST could not
+		// issue a request either — report the GraphQL failure instead of logging
+		// a fallback that cannot run.
+		if ctx.Err() != nil {
+			logger.Error("gitlab: graphql "+label+" fetch failed with no budget left for REST fallback",
+				"username", username, "error", err, "ctx_err", ctx.Err())
+			return sourceResult{errs: []error{fmt.Errorf("%s user=%q: %w", label, username, err)}}
+		}
 		logger.Warn("gitlab: graphql "+label+" fetch failed, falling back to REST", "username", username, "error", err)
 		return restFallback(ctx, username, logger, start)
 	}
@@ -702,6 +718,28 @@ func (a *GitLabAdapter) fetchSourceViaGQL(
 		"username", username, "total", len(gqlMRs), "active", len(active),
 		"duration", ilog.FmtDur(time.Since(start)))
 	return sourceResult{gqlRaw: active}
+}
+
+// gqlAttemptShare is the divisor applied to the remaining deadline budget to
+// size the phase-1 GraphQL attempt, leaving the rest for the REST fallback.
+// 2 splits the budget evenly between the two attempts.
+const gqlAttemptShare = 2
+
+// gqlAttemptContext derives the context for a phase-1 GraphQL attempt. When the
+// caller supplied a deadline, the attempt gets only a fraction of the remaining
+// budget so a hung GraphQL endpoint cannot starve the REST fallback. With no
+// deadline (or none left) the context is passed through unchanged, since there
+// is nothing to divide.
+func gqlAttemptContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, remaining/gqlAttemptShare)
 }
 
 // fetchSourceViaREST is the shared REST-fallback implementation for user and reviewer sources.

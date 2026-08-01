@@ -25,7 +25,7 @@ func newTestClient(srv *httptest.Server) *Client {
 
 func TestFetchMRsDiscussionsGraphQL_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		t.Error("no request must be sent for an empty batch")
+		assert.Fail(t, "no request must be sent for an empty batch")
 	}))
 	defer srv.Close()
 

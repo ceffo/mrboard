@@ -188,8 +188,10 @@ func TestModel_RefreshTick_UnchangedDataCausesNoBoardMutationOrSelectionChange(t
 	m2 := ticked.(Model)
 	require.True(t, m2.IsRefreshing())
 
-	// Phase 1 found nothing changed: the landing snapshot is identical to what's displayed.
-	landed, _ := m2.Update(FetchResultMsg{MRs: someMRs()})
+	// Phase 1 found nothing changed: the landing snapshot is identical to what's
+	// displayed. Seq must match the fetch the tick just dispatched, or the
+	// result is dropped as superseded.
+	landed, _ := m2.Update(FetchResultMsg{MRs: someMRs(), Seq: m2.fetchSeq})
 	m3 := landed.(Model)
 
 	assert.Equal(t, wantSelected, m3.Selected(), "an unchanged refresh must not disturb the selected MR")
