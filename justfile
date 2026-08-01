@@ -27,9 +27,17 @@ check: fmt lint build test
 run: build
   @./bin/mrboard
 
-# fetch calls the fetch command 
+# fetch calls the fetch command
 fetch: build
   @./bin/mrboard fetch
+
+# run the tui against the built-in demo dataset (no config, token, or network)
+demo-run: build
+  @./scripts/demo-tui.sh
+
+# re-records the README GIF from demo/mrboard.tape (requires vhs)
+demo: build
+  vhs demo/mrboard.tape
 
 
 # render sample cards to stdout for visual style verification (pipe to a colour-capable terminal)

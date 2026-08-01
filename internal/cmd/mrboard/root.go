@@ -3,6 +3,7 @@ package mrboardcmd
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -27,6 +28,7 @@ func buildRootCmd() *cobra.Command {
 	var logLevel string
 	var themeOverride string
 	var modeOverride string
+	var demoMode bool
 	var c *core.Core
 
 	// bootCore loads config and wires up the application. Only commands that
@@ -36,14 +38,26 @@ func buildRootCmd() *cobra.Command {
 	// without any config present (e.g. Homebrew's completion-generation step
 	// runs the binary in a sandbox with no config file at all).
 	bootCore := func(cmd *cobra.Command) error {
-		cfg, err := config.Load(cfgPath)
-		if err != nil {
+		// Demo mode builds its config in memory and wires the built-in dataset,
+		// so it works with no config file and no network at all.
+		var cfg *config.AppConfig
+		var err error
+		if demoMode {
+			if cfgPath != "" {
+				return errors.New("--demo uses the built-in dataset and cannot be combined with --config")
+			}
+			cfg = config.DemoConfig()
+		} else if cfg, err = config.Load(cfgPath); err != nil {
 			return err
 		}
 		if logLevel != "" {
 			cfg.Log.Level = logLevel
 		}
-		built, err := core.New(cmd.Context(), cfg)
+		boot := core.New
+		if demoMode {
+			boot = core.NewDemo
+		}
+		built, err := boot(cmd.Context(), cfg)
 		if err != nil {
 			return err
 		}
@@ -66,7 +80,10 @@ Config search path (first match wins):
   ./mrboard.yaml
 
 Environment:
-  GITLAB_TOKEN     Override gitlab.token from config`,
+  GITLAB_TOKEN     Override gitlab.token from config
+
+Run "mrboard --demo" to explore the board against a built-in fake dataset,
+with no config file, credentials, or network access required.`,
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			return bootCore(cmd)
@@ -89,6 +106,8 @@ Environment:
 
 	root.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "config file path (default: XDG search)")
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level override (debug|info|warn|error)")
+	root.PersistentFlags().BoolVar(&demoMode, "demo", false,
+		"run against the built-in demo dataset — no config file, no token, no network")
 	root.Flags().StringVar(&themeOverride, "theme", "", "session theme (default, dracula, nord, tokyo-night, monokai)")
 	root.Flags().StringVar(&modeOverride, "mode", "", "colour mode for this session (auto, dark, light)")
 

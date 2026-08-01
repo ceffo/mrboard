@@ -1,0 +1,417 @@
+# Demo dataset for `mrboard --demo`. Everything here is invented.
+#
+# TWO RULES WHEN EDITING:
+#
+# 1. Every `*_ago` offset must be a WHOLE NUMBER OF MINUTES. Card ages are
+#    rendered truncated to the minute, so an offset with a seconds component
+#    makes the first frame of a recording differ from the next. Syntax is
+#    `<n>d<n>h<n>m`, any part optional — deliberately the same vocabulary the
+#    board prints, so you write the age you want to see. Enforced by a test.
+#
+# 2. Every MR whose title carries a ticket key in parentheses must have a
+#    description ending in the `<!-- mrboard -->` marker. Without it the board
+#    treats the back-link as missing and issues a description write on every
+#    fetch, mutating the demo while it is on screen. Enforced by a test.
+#
+# `phase` is deliberately absent: it is derived by domain.ClassifyPhase from
+# draft + reviewer states, so this fixture can never disagree with the real
+# rules. Column placement is asserted in demoadpt_test.go.
+schema: 1
+
+# How old the pre-seeded cache claims to be, so the board opens warm (an
+# interactive board on frame 1) instead of on a spinner.
+snapshot_written_ago: 14m
+
+people:
+  - {username: ada, name: Ada Lovelace, user_id: 1}
+  - {username: grace, name: Grace Hopper, user_id: 2}
+  - {username: linus, name: Linus Torvalds, user_id: 3}
+  - {username: margaret, name: Margaret Hamilton, user_id: 4}
+  - {username: katherine, name: Katherine Johnson, user_id: 5}
+  - {username: ops-bot, name: Ops Bot, user_id: 6}
+
+projects:
+  - id: 101
+    path: demo-corp/platform-api
+    members: [ada, grace, linus, margaret, katherine, ops-bot]
+  - id: 102
+    path: demo-corp/web-console
+    members: [ada, grace, linus, margaret, katherine, ops-bot]
+  - id: 103
+    path: demo-corp/infra-terraform
+    members: [ada, linus, margaret, katherine, ops-bot]
+
+# Ticket key -> issue type name, read by the TicketEnricher port. SEC-9 is
+# deliberately absent so the 🎫 fallback icon is visible on the board.
+issue_types:
+  DEMO-1418: Story
+  DEMO-1421: Story
+  DEMO-1422: Bug
+  DEMO-1424: Story
+  DEMO-1425: Bug
+  DEMO-1426: Bug
+  OPS-12: Task
+  INFRA-7: Epic
+
+# Pressing S narrows the board to just these tickets' MRs.
+sprint_ticket_keys: [DEMO-1421, DEMO-1422, DEMO-1424, OPS-12]
+
+merge_requests:
+  # ---- Draft ----
+  - project_id: 101
+    iid: 412
+    id: 9412
+    title: "wip(SEC-9): extract rate limiter into middleware"
+    author: ada
+    draft: true
+    merge_status: draft_status
+    source_branch: sec-9-rate-limiter
+    created_ago: 3h12m
+    updated_ago: 41m
+    description: |-
+      Pulling the token-bucket logic out of the handler so the admin API can
+      reuse it. Still spiking — do not review yet.
+
+      ---
+      🎫 [SEC-9](https://tickets.demo.invalid/browse/SEC-9) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 88
+    id: 9088
+    title: "feat(OPS-12): dark-mode polish for the console shell"
+    author: grace
+    draft: true
+    merge_status: draft_status
+    source_branch: ops-12-dark-mode
+    created_ago: 9h37m
+    updated_ago: 2h3m
+    reviewers:
+      - {username: ada, state: not_started, waiting_ago: 9h37m}
+    description: |-
+      Sweeps the remaining hard-coded greys out of the shell chrome.
+
+      ---
+      🎫 [OPS-12](https://tickets.demo.invalid/browse/OPS-12) <!-- mrboard -->
+
+  # ---- Needs Review ----
+  - project_id: 101
+    iid: 418
+    id: 9418
+    title: "feat(DEMO-1421): stream board updates over websockets"
+    author: ada
+    merge_status: mergeable
+    source_branch: demo-1421-websockets
+    created_ago: 26h
+    updated_ago: 40m
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 26h}
+      - {username: linus, state: not_started, waiting_ago: 26h}
+    description: |-
+      Replaces the 30s poll with a websocket subscription. Falls back to polling
+      when the upgrade is refused, so no config change is required.
+
+      ---
+      🎫 [DEMO-1421](https://tickets.demo.invalid/browse/DEMO-1421) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 91
+    id: 9091
+    title: "fix(DEMO-1422): console crashes on empty board payload"
+    author: linus
+    merge_status: ci_still_running
+    source_branch: demo-1422-empty-payload
+    created_ago: 4d6h
+    updated_ago: 5h20m
+    reviewers:
+      - {username: ada, approver: true, state: re_review_requested, waiting_ago: 5h20m}
+      - {username: margaret, state: approved, approved_ago: 2d}
+    description: |-
+      Guards the render path against a board with no columns, which the API can
+      return for a brand-new project.
+
+      ---
+      🎫 [DEMO-1422](https://tickets.demo.invalid/browse/DEMO-1422) <!-- mrboard -->
+
+  - project_id: 103
+    iid: 37
+    id: 9037
+    title: "chore(INFRA-7): pin provider versions and split state"
+    author: margaret
+    assignee: katherine
+    merge_status: blocked_status
+    source_branch: infra-7-pin-providers
+    created_ago: 124d4h
+    updated_ago: 31d
+    round_trips: 3
+    reviewers:
+      - {username: linus, approver: true, state: not_started, waiting_ago: 124d4h}
+    description: |-
+      Splits the monolithic state file per environment and pins every provider.
+      Needs a maintenance window to apply.
+
+      ---
+      🎫 [INFRA-7](https://tickets.demo.invalid/browse/INFRA-7) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 420
+    id: 9420
+    title: "refactor: split fetch pipeline into two phases"
+    author: katherine
+    merge_status: mergeable
+    source_branch: two-phase-fetch
+    created_ago: 2h5m
+    updated_ago: 18m
+    reviewer_source: true
+    reviewers:
+      - {username: ada, state: not_started, waiting_ago: 2h5m}
+    description: |-
+      A thin listing query first, then one batched query for only the MRs whose
+      updatedAt moved. No ticket — internal cleanup.
+
+  # ---- Needs Author Action ----
+  - project_id: 101
+    iid: 410
+    id: 9410
+    title: "feat(DEMO-1418): add approval-rule editor"
+    author: ada
+    merge_status: discussions_not_resolved
+    source_branch: demo-1418-approval-editor
+    created_ago: 3d18h
+    updated_ago: 6h45m
+    open_threads: 2
+    reviewers:
+      - {username: grace, approver: true, state: commented, waiting_ago: 6h45m}
+      - {username: linus, state: approved, approved_ago: 1d}
+    description: |-
+      ## What
+
+      Adds an editor for a project's approval rule so reviewers can be promoted
+      to approvers without leaving the board.
+
+      ## Why
+
+      Today this is a four-click trip through the web UI, and it is the single
+      most common thing we do during standup.
+
+      - reads the existing rule, so it is safe to open on any MR
+      - writes only when the set actually changed
+      - falls back to a plain reviewer list when the rule is unsupported
+
+      ```go
+      func (e Editor) Staged() []domain.ProjectMember {
+          return slices.Clone(e.staged)
+      }
+      ```
+
+      ---
+      🎫 [DEMO-1418](https://tickets.demo.invalid/browse/DEMO-1418) <!-- mrboard -->
+    threads:
+      - resolved: false
+        notes:
+          - author: grace
+            created_ago: 8h20m
+            body: |-
+              The staged set is shared with the preview screen — is that a copy?
+              If not, cancelling the editor will still mutate the board.
+          - author: ada
+            created_ago: 6h45m
+            body: "Good catch, it was aliased. Now cloned on read, and there's a test."
+      - resolved: true
+        notes:
+          - author: linus
+            created_ago: 2d4h
+            body: "Any reason this is not behind the same guard as the batch editor?"
+          - author: ada
+            created_ago: 2d1h
+            body: "Same guard now. Resolving."
+      - resolved: false
+        notes:
+          - author: grace
+            created_ago: 7h10m
+            body: "One nit: the footer still says 'save' after the write fails."
+    diff:
+      base_sha: 3f1c9a2e8b7d4506cf1a2b3c4d5e6f7089abcdef
+      head_sha: 7b2d4e6f8a0c1357bdf9e8d7c6b5a4938271605f
+      files:
+        - new_path: internal/tui/approval_editor.go
+          new_file: true
+          added: 96
+          removed: 0
+          diff: |-
+            @@ -0,0 +1,12 @@
+            +package tui
+            +
+            +// approvalEditor edits a project's approval rule for one MR.
+            +type approvalEditor struct {
+            +	members []domain.ProjectMember
+            +	staged  []domain.ProjectMember
+            +	cursor  int
+            +}
+            +
+            +func (e approvalEditor) Staged() []domain.ProjectMember {
+            +	return slices.Clone(e.staged)
+            +}
+        - old_path: internal/tui/keys.go
+          new_path: internal/tui/keys.go
+          added: 6
+          removed: 1
+          diff: |-
+            @@ -142,7 +142,12 @@ func newKeyMap() KeyMap {
+             		Sort: Act("sort", "s", "sort"),
+            -		Reviewers: Act("reviewers", "v", "reviewers"),
+            +		Reviewers: Act("reviewers", "v", "reviewers"),
+            +		Approvers: Act("approvers", "V", "approvers"),
+
+  - project_id: 102
+    iid: 94
+    id: 9094
+    title: "fix(DEMO-1425): debounce resize handler"
+    author: grace
+    merge_status: ci_still_running
+    source_branch: demo-1425-debounce-resize
+    created_ago: 22h
+    updated_ago: 55m
+    open_threads: 1
+    reviewers:
+      - {username: ada, approver: true, state: commented, waiting_ago: 55m}
+      - {username: katherine, state: re_review_requested, waiting_ago: 3h}
+    description: |-
+      Coalesces resize events into one relayout per frame. Fixes the flicker when
+      dragging the window across a display boundary.
+
+      ---
+      🎫 [DEMO-1425](https://tickets.demo.invalid/browse/DEMO-1425) <!-- mrboard -->
+
+  - project_id: 103
+    iid: 39
+    id: 9039
+    title: "fix(OPS-12): terraform fmt drift in ci"
+    author: katherine
+    merge_status: blocked_status
+    source_branch: ops-12-fmt-drift
+    created_ago: 6d2h
+    updated_ago: 5d1h
+    open_threads: 1
+    reviewers:
+      - {username: margaret, approver: true, state: commented, waiting_ago: 5d1h}
+    description: |-
+      The fmt check and the local hook disagreed on nested block spacing. Pins
+      both to the same version.
+
+      ---
+      🎫 [OPS-12](https://tickets.demo.invalid/browse/OPS-12) <!-- mrboard -->
+    threads:
+      - resolved: false
+        notes:
+          - author: margaret
+            created_ago: 5d1h
+            body: "This will conflict with the provider pin in !37 — land that first?"
+
+  # ---- Approved ----
+  - project_id: 101
+    iid: 415
+    id: 9415
+    title: "feat(DEMO-1424): batch reviewer editor"
+    author: ada
+    merge_status: mergeable
+    source_branch: demo-1424-batch-editor
+    created_ago: 1d9h
+    updated_ago: 45m
+    reviewers:
+      - {username: grace, approver: true, state: approved, approved_ago: 2h10m}
+      - {username: linus, approver: true, state: approved, approved_ago: 45m}
+    description: |-
+      Edits reviewers across every MR that shares a ticket, with a preview screen
+      before anything is written. Rows with no detected change are skipped.
+
+      ---
+      🎫 [DEMO-1424](https://tickets.demo.invalid/browse/DEMO-1424) <!-- mrboard -->
+    diff:
+      base_sha: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+      head_sha: 9f8e7d6c5b4a3928170f6e5d4c3b2a1908f7e6d5
+      files:
+        - new_path: internal/tui/batch_preview.go
+          new_file: true
+          added: 184
+          removed: 0
+          diff: |-
+            @@ -0,0 +1,24 @@
+            +package tui
+            +
+            +import (
+            +	"charm.land/bubbletea/v2"
+            +
+            +	"github.com/ceffo/mrboard/internal/domain"
+            +)
+            +
+            +// batchPreview lists the per-MR reviewer changes staged by the batch
+            +// editor and lets the operator include or exclude each row before the
+            +// writes are issued. Rows whose before/after sets match are excluded
+            +// and cannot be toggled on — writing them would be a no-op round trip.
+            +type batchPreview struct {
+            +	rows   []previewRow
+            +	cursor int
+            +	width  int
+            +	height int
+            +}
+            +
+            +type previewRow struct {
+            +	mr       domain.MergeRequest
+            +	before   []string
+            +	after    []string
+            +	included bool
+            +}
+        - old_path: internal/tui/model.go
+          new_path: internal/tui/model.go
+          added: 42
+          removed: 9
+          diff: |-
+            @@ -318,9 +318,14 @@ type Model struct {
+             	board       Board
+             	detail      DetailPane
+            -	reviewers   ReviewerEditor
+            +	reviewers   ReviewerEditor
+            +	batch       BatchEditor
+            +	preview     batchPreview
+             	footer      Footer
+
+            @@ -742,6 +747,18 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+            +	case BatchPreviewMsg:
+            +		m.preview = newBatchPreview(msg.Rows)
+            +		m.state = statePreview
+            +		return m, nil
+            +
+             	case FetchResultMsg:
+             		return m.handleFetchResult(msg)
+        - old_path: internal/tui/filter_popup.go
+          new_path: internal/tui/settings_widget.go
+          renamed_file: true
+          added: 3
+          removed: 3
+          diff: |-
+            @@ -1,6 +1,6 @@
+            -// Package-level filter popup, superseded by the settings widget.
+            +// Settings widget: filters, sort, theme, and reviewer-source toggle.
+        - new_path: docs/board.png
+          too_large: true
+          added: 0
+          removed: 0
+
+  - project_id: 102
+    iid: 96
+    id: 9096
+    title: "fix(DEMO-1426): sanitize markdown in detail pane"
+    author: margaret
+    merge_status: ci_still_running
+    source_branch: demo-1426-sanitize-markdown
+    created_ago: 5d3h
+    updated_ago: 18h
+    reviewers:
+      - {username: ada, approver: true, state: approved, approved_ago: 20h}
+      - {username: katherine, state: commented, waiting_ago: 18h}
+    description: |-
+      Strips raw HTML before handing the description to the renderer, so a
+      pasted script tag cannot break the pane layout.
+
+      ---
+      🎫 [DEMO-1426](https://tickets.demo.invalid/browse/DEMO-1426) <!-- mrboard -->

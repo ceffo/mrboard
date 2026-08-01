@@ -21,6 +21,7 @@ pkg/gitlab                       (REST + GQL client; imports only stdlib + net/h
 internal/adapters/gitlabadpt     (implements mrsvc; imports pkg/gitlab + internal/domain)
 internal/adapters/statestore     (implements domain.StateStore; stdlib + file I/O)
 internal/adapters/snapshotstore  (implements domain.SnapshotStore; stdlib + file I/O)
+internal/adapters/demoadpt       (implements every driven port from an embedded fixture; see adr/0006)
 internal/core                    (composition root; no TUI imports)
 internal/tui                     (charmbracelet v2; depends on mrsvc interfaces, never on adapters)
 ```
@@ -97,6 +98,9 @@ mrboard/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
       snapshotstore/
         snapshotstore.go   # domain.SnapshotStore — versioned JSON cache (XDG cache dir)
+      demoadpt/
+        demoadpt.go        # every driven port, backed by an in-memory dataset (--demo)
+        fixture/board.yaml # the embedded demo dataset; see adr/0006-demo-mode.md
     log/
       log.go               # slog wrapper (file + stderr)
     tui/
