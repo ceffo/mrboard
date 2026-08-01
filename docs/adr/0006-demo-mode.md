@@ -169,6 +169,39 @@ differ once in a package `init()` with no runtime override, so whether one happe
 installed changes how diffs render; pinning `PATH` keeps a recording reproducible across
 machines.
 
+### The published GIF is recorded from a clean worktree, not the working tree
+
+The version string is baked in at build time by `git describe` and is visible in the
+recorded footer. That makes recording from the working tree unable to produce a
+release-looking frame, for two compounding reasons:
+
+- anything uncommitted stamps `-dirty` — including `demo/mrboard.gif` itself, which the
+  recording command rewrites, so the tree is dirty by the time the next run reads it;
+- even a clean tree past a tag reads `v0.10.0-2-gabc1234`, since `describe` counts commits
+  since the tag.
+
+A bare `v0.10.0` is therefore only reachable from a checkout sitting exactly on the tag.
+`scripts/record-demo.sh <ref>` creates a throwaway `git worktree` at that ref, builds
+there, records, and copies the GIF back. `just demo` keeps the working-tree behaviour for
+iterating; `just demo-release <tag>` produces the committed artefact.
+
+The binary comes from the ref but the **tape comes from the working tree**, so the
+recording script can be iterated without tagging first. The version is resolved *before*
+the tape is staged: the stamp describes the source the binary is compiled from, and the
+tape contributes nothing to the binary — but copying it in does dirty the worktree, which
+would otherwise reintroduce the exact problem this exists to solve. The script asserts the
+worktree is clean at that point rather than silently emitting a `-dirty` GIF.
+
+Consequence worth noting: the tag cannot contain the GIF recorded from it, since the GIF
+is produced after tagging. The GIF documents a release rather than shipping inside it.
+
+### Recording dimensions have a hard floor
+
+The board is four 28-column panes, so it needs ~120 columns; below that the Approved
+column is truncated off the right edge and reviewer pills clip mid-word, which reads as a
+broken app rather than a small window. The tape is set to the smallest grid that fits
+(~120x34). If the GIF needs to be smaller, cut `Framerate` or a beat — not the width.
+
 ## Consequences
 
 - `mrboard --demo` runs the full board with no config, credentials, or network. It is the

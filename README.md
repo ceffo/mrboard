@@ -92,6 +92,12 @@ editor, and `,` the settings panel.
 ## Development
 
 ```bash
-just check      # fmt + lint + build + test
-just demo       # re-record demo/mrboard.gif (requires vhs)
+just check                    # fmt + lint + build + test
+just demo-run                 # launch the board against the demo dataset
+just demo                     # re-record the GIF from the working tree
+just demo-release v0.10.0     # re-record it from a clean checkout of a tag
 ```
+
+Use `demo-release` for the committed GIF: the version in the footer is stamped at
+build time, so recording from the working tree labels the frame `-dirty`. Both need
+[vhs](https://github.com/charmbracelet/vhs).

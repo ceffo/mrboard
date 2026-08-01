@@ -35,9 +35,14 @@ fetch: build
 demo-run: build
   @./scripts/demo-tui.sh
 
-# re-records the README GIF from demo/mrboard.tape (requires vhs)
-demo: build
-  vhs demo/mrboard.tape
+# re-records the README GIF from the working tree — footer reads "…-dirty" (requires vhs)
+demo:
+  bash scripts/record-demo.sh
+
+# re-records the README GIF from a clean checkout of a tag, so the footer reads
+# a real released version rather than "<tag>-N-g<sha>-dirty"
+demo-release ref:
+  bash scripts/record-demo.sh {{ref}}
 
 
 # render sample cards to stdout for visual style verification (pipe to a colour-capable terminal)

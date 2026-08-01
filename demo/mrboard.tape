@@ -10,9 +10,13 @@
 Output demo/mrboard.gif
 
 Set Shell zsh
+# Sized to the smallest grid the board actually fits in: ~120x34. Four columns
+# of 28 need ~112 plus borders, so anything much narrower truncates the Approved
+# column off the right edge and clips reviewer pills mid-word. If you need a
+# smaller file, cut Framerate or a beat rather than the width.
 Set FontSize 13
-Set Width 1560
-Set Height 860
+Set Width 1000
+Set Height 700
 Set Padding 14
 Set Framerate 20
 Set WindowBar Colorful
