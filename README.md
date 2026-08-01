@@ -2,6 +2,8 @@
 
 A terminal board for your team's GitLab merge requests — built for daily standups.
 
+![mrboard](demo/mrboard.gif)
+
 ## Install
 
 ```bash
@@ -9,250 +11,87 @@ brew tap ceffo/tap
 brew install mrboard
 ```
 
-## Configuration
+## Try it without a GitLab account
 
-Create a config file at `~/.config/mrboard/mrboard.yaml` (or set `$MRBOARD_CONFIG` to point
-anywhere you like):
+```bash
+mrboard --demo
+```
+
+Runs the whole board against built-in fake data — no config file, no token, no network. Every
+key works, including the reviewer editor and the diff view. Nothing is written to your cache
+or state directories; writes only mutate the in-memory dataset.
+
+## Quick start
+
+Create `~/.config/mrboard/mrboard.yaml`:
 
 ```yaml
 gitlab:
   url: https://gitlab.example.com
-  token: glpat-xxx        # or set $GITLAB_TOKEN; needs api scope for write operations
-  timeout: 30s            # default: 30s
+  token: glpat-xxx        # or set $GITLAB_TOKEN; needs api scope
 
 sources:
   - type: group
-    ids: [my-team]        # one or more GitLab group paths or numeric IDs
+    ids: [my-team]        # group paths, numeric IDs, or use type: user with usernames
 
-  - type: user
-    ids: [alice, bob]     # one or more GitLab usernames
-
-excluded_authors:
-  - renovate-bot
-  - dependabot
-
-current_user: alice       # your GitLab username — highlights your MRs in the board
-
-log:
-  path: /tmp/mrboard.log  # optional; omit to disable file logging
-  level: info             # debug | info | warn | error
-
-# Optional: JIRA integration (enables card issue-type icons, sprint filter, and batch editor)
-jira:
-  instance_url: https://yourorg.atlassian.net
-  email: you@example.com
-  api_token: your-jira-token   # or set $JIRA_TOKEN
-  board_id: 42                 # optional; enables the sprint filter (S key)
-  cache_ttl: 24h               # default: 24h
-  issue_type_icons:            # optional; override the default emoji map
-    Bug: "🐛"
-    Story: "📖"
-    Task: "✅"
-    Epic: "⚡"
-
-# Optional: Teams notifications (enables the n key)
-notifications:
-  teams:
-    webhook_url: https://outlook.office.com/webhook/...
-    user_mappings:             # GitLab username → Teams display name
-      alice: Alice Smith
-      bob: Bob Jones
-    user_ids:                  # GitLab username → Teams UPN/email for @mentions
-      alice: alice@example.com
-      bob: bob@example.com
+current_user: alice       # highlights your MRs and enables the "my view" toggle
 ```
 
-You can mix as many `group` and `user` sources as you need. MRs from all sources are merged
-and deduplicated.
+Then run `mrboard`. That's the whole required surface — everything else is optional.
 
-## Columns
+Issue-tracker integration, Teams notifications, custom themes, external command launchers, and
+the full list of settings with their defaults are documented in
+[docs/configuration.md](docs/configuration.md).
 
-| Column | What's in it |
+## How the board works
+
+Cards are grouped by whose turn it is, not by GitLab's merge status:
+
+| Column | An MR lands here when |
 | --- | --- |
-| **Draft** | MRs marked as draft |
-| **Needs Review** | Waiting for reviewer feedback |
-| **Needs Author Action** | Reviewer left comments; author needs to respond |
-| **Approved** | GitLab reports `detailed_merge_status == mergeable` (all approvals, CI, and branch protection satisfied) |
+| **Draft** | it is marked draft — this wins over everything else |
+| **Needs Review** | reviewers still owe feedback |
+| **Needs Author Action** | at least one reviewer has commented; the ball is with the author |
+| **Approved** | every *designated approver* has approved |
 
-## Keybindings
+The Approved column is about approvers specifically. An MR with no designated approvers stays
+in Needs Review however many plain reviewers approve it — mark approvers in the reviewer editor
+(`v`, then `space`). GitLab's `detailed_merge_status` doesn't decide the column; it only tints
+an approved card green when it is genuinely mergeable and red when something still blocks it.
 
-### Board
+Each reviewer shows as a pill with their state:
 
-| Key | Action |
+| | |
 | --- | --- |
-| `↑`/`k`, `↓`/`j` | Navigate cards |
-| `←`/`h`, `→`/`l` | Switch columns |
-| `↵` | Open detail pane |
-| `o` | Open MR in browser |
-| `r` | Refresh |
-| `s` | Cycle sort order |
-| `S` | Toggle sprint filter (requires `jira.board_id`) |
-| `tab` | Toggle "my view" (MRs relevant to you) |
-| `v` | Open reviewer editor |
-| `E` | Open batch reviewer editor (groups sibling MRs by JIRA ticket) |
-| `d` | Open diff view |
-| `J` | Open linked JIRA ticket in browser |
-| `n` | Send Teams notification for focused card |
-| `t` | Open theme picker |
-| `,` | Open settings |
-| `q` / `ctrl+c` | Quit |
+| ⏳ | hasn't started, with how long they've been waiting |
+| 💬 | left comments |
+| 🔄 | re-review requested after changes |
+| ✓ | approved |
 
-### Reviewer editor
+Card ages turn amber after `lifetime_warn_after` (72h) and red after `lifetime_error_after`
+(120h).
 
-| Key | Action |
+## Keys
+
+Press **`?`** for every binding available in the current context — that modal is the source of
+truth, and the footer always shows the most useful ones for where you are.
+
+The four worth knowing up front: `↵` opens the detail pane, `d` the diff view, `v` the reviewer
+editor, and `,` the settings panel.
+
+## Documentation
+
+| | |
 | --- | --- |
-| `↑`/`k`, `↓`/`j` | Navigate |
-| `space` | Toggle approver flag |
-| `d` | Remove reviewer |
-| `/` | Search members |
-| `T` | Set team |
-| `↵` | Save |
-| `v` / `esc` | Cancel |
+| [configuration.md](docs/configuration.md) | Every config key, defaults, env vars, troubleshooting |
+| [theme-format.md](docs/theme-format.md) | Writing a custom theme |
+| [architecture.md](docs/architecture.md) | Package boundaries and data flow |
+| [domain-model.md](docs/domain-model.md) | Phase rules and the reviewer state machine |
+| [adr/](docs/adr/) | Why things are built the way they are |
 
-### Batch reviewer editor
-
-| Key | Action |
-| --- | --- |
-| `↑`/`k`, `↓`/`j` | Navigate |
-| `tab` | Switch between MR list and reviewer panels |
-| `space` | Toggle approver flag |
-| `d` | Remove reviewer |
-| `↵` | Preview changes |
-| `E` / `esc` | Cancel |
-
-**Batch preview screen**
-
-| Key | Action |
-| --- | --- |
-| `↑`/`k`, `↓`/`j` | Navigate rows |
-| `space` | Include / exclude a row |
-| `↵` | Apply (writes only rows with detected changes) |
-| `esc` | Back to editor |
-
-### Diff view
-
-| Key | Action |
-| --- | --- |
-| `p` / `n` | Previous / next file |
-| `↑`/`k`, `↓`/`j` | Scroll |
-| `ctrl+u`, `ctrl+d` | Half-page up / down |
-| `g` / `G` | Jump to top / bottom |
-| `o` | Open file in browser |
-| `d` / `esc` | Close |
-| `q` | Quit |
-
-### Detail pane
-
-| Key | Action |
-| --- | --- |
-| `↑`/`k`, `↓`/`j` | Scroll |
-| `o` | Open MR in browser |
-| `esc` / `↵` | Close |
-| `q` | Quit |
-
-### Settings panel
-
-| Key | Action |
-| --- | --- |
-| `↑`/`k`, `↓`/`j` | Navigate items |
-| `←`/`h`, `→`/`l` | Switch sections |
-| `tab` / `shift+tab` | Next / previous tab |
-| `space` | Toggle option |
-| `↵` | Apply |
-| `,` / `esc` | Close |
-
-## Theming
-
-Five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`.
-
-Press **`t`** to open the live theme picker — the board stays visible behind it so you see
-changes in real time. You can also switch between **auto** (follows your terminal's background),
-**dark**, and **light** mode from within the picker. Your selection is saved automatically.
-
-To override for a single session without saving:
+## Development
 
 ```bash
-mrboard --theme dracula
-mrboard --mode light
-mrboard --theme nord --mode dark
+just check      # fmt + lint + build + test
+just demo       # re-record demo/mrboard.gif (requires vhs)
 ```
-
-**Custom themes:** drop any `.json` file into `~/.config/mrboard/themes/` and it appears in
-the picker automatically. A file with the same name as a built-in overrides it. See
-[docs/theme-format.md](docs/theme-format.md) for the format.
-
-## JIRA integration
-
-When `jira` is configured, each card shows a dedicated third line with an issue-type icon and
-the JIRA key (e.g. `🐛 OD-3345`). Icons are fetched asynchronously — a `🎫` placeholder
-appears while loading — and results are cached to disk for `cache_ttl` (default 24 hours) to
-minimise API traffic.
-
-**Sprint filter (`S` key):** when `jira.board_id` is set, pressing `S` restricts the board to
-MRs whose linked JIRA issue is part of the active sprint. A sprint indicator appears in the board
-header while the filter is on.
-
-**JIRA backlink injection:** when fetching MRs, mrboard automatically appends a JIRA link to the
-MR description if the `<!-- mrboard -->` marker is absent, keeping GitLab MR descriptions in sync
-with their linked tickets. This runs in the background and does not block the board.
-
-**Batch reviewer editor (`E` key):** opens a full-screen editor pre-filled from the focused
-card's reviewers, with a panel listing all sibling MRs that share the same JIRA ticket. A preview
-diff screen shows per-MR reviewer changes before committing. Writes are skipped for MRs where
-nothing changed, making the operation idempotent.
-
-Issue type icons can be customised via `jira.issue_type_icons` in the config — the key is the
-JIRA issue type name (case-sensitive) and the value is any single emoji or character.
-
-## Teams notifications
-
-When `notifications.teams.webhook_url` is set, pressing **`n`** on a focused card fires a webhook
-to post a notification about MR review assignment. The card includes the MR title, author, and
-reviewer list.
-
-`user_mappings` translates GitLab usernames to Teams display names in the notification body.
-`user_ids` maps GitLab usernames to Teams UPNs (email addresses) to enable `@mention` pings in
-the Adaptive Card.
-
-Approver saves also fire a Teams notification automatically when a webhook is configured.
-
-## Troubleshooting
-
-**Authentication failed**
-
-- Make sure your token has `api` scope (`read_api` is not sufficient — the reviewer editor writes
-  back to GitLab)
-- Check it hasn't expired: `echo $GITLAB_TOKEN`
-
-**No MRs showing**
-
-- Verify the group ID or username is correct
-- Test the API directly:
-
-```bash
-curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  "https://gitlab.example.com/api/v4/groups/my-team/merge_requests"
-```
-
-**Slow or timing out**
-
-```bash
-MRBOARD_TIMEOUT=60s mrboard
-```
-
-**JIRA icons not appearing**
-
-- Check that `jira.instance_url`, `jira.email`, and `jira.api_token` (or `$JIRA_TOKEN`) are set
-- Enable debug logging and inspect the log file — JIRA fetch errors are logged at `warn` level
-
-**Debug logging**
-
-Add to your config:
-
-```yaml
-log:
-  path: /tmp/mrboard.log
-  level: debug
-```
-
-Then: `cat /tmp/mrboard.log`
