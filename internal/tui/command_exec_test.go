@@ -58,6 +58,27 @@ func TestHandleKeyBoard_CustomCommand_ShadowsBoardDefault(t *testing.T) {
 	assert.False(t, result.(Model).isRefreshing, "board's default refresh must be shadowed")
 }
 
+// TestHandleKeyBoard_CustomCommand_NoFocusedMR covers the case where a
+// configured command's key matches but the board has no focused card (e.g.
+// an empty column) — the command must no-op rather than exec against a nil MR.
+func TestHandleKeyBoard_CustomCommand_NoFocusedMR(t *testing.T) {
+	cmds := []config.Command{
+		{Name: "review via tool", Key: "R", Binary: "false"},
+	}
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	cfg := &config.Config{Commands: cmds}
+	m := New(context.Background(), cfg, src, noopStore{}, noopSnapshotStore{}, nil, nil, nil, "dev", Options{})
+	next, _ := m.Update(FetchResultMsg{MRs: nil})
+	m = next.(Model)
+	require.Nil(t, m.board.FocusedMR(), "expected an empty board to have no focused MR")
+
+	result, cmd := m.handleKeyBoard(tea.KeyPressMsg{Text: "R", Code: 'R'})
+
+	assert.Nil(t, cmd, "no MR focused means no exec Cmd, and no toast either")
+	assert.Equal(t, m, result.(Model))
+}
+
 func TestExecCommandCmd_ArgvResolutionFailure(t *testing.T) {
 	m := makeModelWithCommands(t, nil)
 	mr := someMRs()[0]

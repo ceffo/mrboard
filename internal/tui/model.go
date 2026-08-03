@@ -906,10 +906,12 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Custom commands sit above BoardCtx in the stack (see baseStack), so a
 	// match here takes priority over the static board bindings below.
 	if cmd, ok := m.matchCustomCommand(msg); ok {
-		if mr := m.board.FocusedMR(); mr != nil {
-			return m, m.execCommandCmd(*mr, cmd)
+		mr := m.board.FocusedMR()
+		if mr == nil {
+			m.logger.Debug("tui: configured command matched but no MR focused", "command", cmd.Name)
+			return m, nil
 		}
-		return m, nil
+		return m, m.execCommandCmd(*mr, cmd)
 	}
 	switch {
 	case m.keys.Up.Match(msg):
@@ -1176,8 +1178,12 @@ func (m Model) matchCustomCommand(msg tea.KeyPressMsg) (config.Command, bool) {
 func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cmd {
 	argv, err := BuildCommandArgv(mr, cmd)
 	if err != nil {
+		m.logger.Debug("tui: configured command argv resolution failed",
+			"command", cmd.Name, "binary", cmd.Binary, "err", err)
 		return func() tea.Msg { return CommandResultMsg{CommandName: cmd.Name, Err: err} }
 	}
+	m.logger.Debug("tui: executing configured command",
+		"command", cmd.Name, "binary", cmd.Binary, "args", argv, "mr_iid", mr.IID)
 	//nolint:gosec // G204: cmd.Binary is an admin-configured mrboard.toml entry, not attacker input;
 	// no shell is involved, so there is no injection surface beyond running the configured binary itself.
 	execCmd := exec.Command(cmd.Binary, argv...)
