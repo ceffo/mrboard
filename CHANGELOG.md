@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.10.1] - 2026-08-03
+
+### Fixed
+- A configured external command (e.g. a code-review tool bound to a card) no longer fails silently when triggered while no card is focused — the attempt is now logged instead of being dropped with no trace.
+
+## [0.10.0] - 2026-07-31
+
+### Added
+- `mrboard --demo` runs the board against a built-in fake dataset — no GitLab account, token, or network required, for trying mrboard out or recording demos.
+- Refreshes are now incremental: mrboard caches merge request state locally and re-fetches only what changed since the last poll (via GitLab's `updatedAt`), instead of re-querying every discussion thread every time.
+- A configurable `refresh_interval` auto-refreshes the board on a timer.
+
+### Changed
+- Card selection is now keyed by a stable merge-request identity instead of row/column position, so it no longer jumps to a different card when the board reshuffles on refresh.
+
+### Fixed
+- Guarded the fetch cache, fallback budget, and refresh race so a stale snapshot can no longer revert a card's local, in-progress state.
+
+## [0.9.0] - 2026-07-30
+
+### Added
+- A configurable external-command launcher: define named commands in `mrboard.toml` (binary + argv template) that launch against the focused MR's metadata, suspending mrboard's terminal and resuming on exit — the doorway for plugging in review tools like `tuicr` or `hunk`.
+
+## [0.8.1] - 2026-07-10
+
+### Added
+- "My View" now only matches merge requests where you have approver status, instead of any reviewer match.
+
+## [0.8.0] - 2026-07-09
+
+### Added
+- The reviewer editor and batch reviewer editor are now unified into a single widget.
+
 ## [0.7.7] - 2026-07-08
 
 ### Fixed
