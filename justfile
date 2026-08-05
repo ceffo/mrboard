@@ -57,6 +57,8 @@ preview-card:
 generate:
   mockery
 
-# bumps version, tags, and pushes to trigger a release (patch|minor|major)
-release bump="patch":
-  bash scripts/release.sh {{bump}}
+# bumps version, tags, and pushes to trigger a release
+# no args: interactive prompt (patch|minor|major) with a live version preview
+# with args: forwarded as-is, e.g. `just release patch --force`
+release *args:
+  bash scripts/release.sh {{args}}
