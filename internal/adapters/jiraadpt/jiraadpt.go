@@ -1,18 +1,21 @@
 // Package jiraadpt implements ticketsvc.TicketEnricher and ticketsvc.TicketLinker
-// using pkg/jira.Client, with a JSON disk cache (default TTL 24h).
+// using pkg/jira.Client, with a disk cache (default TTL 24h) built on
+// github.com/eko/gocache and pkg/diskstore.
 package jiraadpt
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/eko/gocache/lib/v4/cache"
+	"github.com/eko/gocache/lib/v4/marshaler"
+	"github.com/eko/gocache/lib/v4/store"
+	"github.com/spf13/afero"
+
+	"github.com/ceffo/mrboard/pkg/diskstore"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
 
@@ -28,56 +31,52 @@ type jiraClient interface {
 
 // Config holds adapter-specific settings.
 type Config struct {
-	// CacheDir is the directory where cache files are written.
-	// Defaults to os.UserCacheDir()/mrboard/jira when empty.
+	// FS is the filesystem the disk cache is written through. Production
+	// callers pass afero.NewOsFs(); tests pass afero.NewMemMapFs() to avoid
+	// touching disk.
+	FS afero.Fs
+	// CacheDir is the directory cache entries are written to. Callers must
+	// supply an already-resolved path (e.g. config.XDGCacheDir()); this
+	// package applies no platform-specific defaulting of its own.
 	CacheDir string
-	// TTL is the cache lifetime. Zero disables caching.
+	// TTL is the cache lifetime. Zero or negative disables caching.
 	TTL time.Duration
 	// LinkIconURL is the URL of a 16×16 icon shown next to remote links in JIRA.
 	// Empty string omits the icon field from the payload.
 	LinkIconURL string
 }
 
-const (
-	cacheDirPerm  = 0o700
-	cacheFilePerm = 0o600
-)
-
-// cacheEntry wraps a cached JSON value with its expiry timestamp.
-type cacheEntry struct {
-	Value     json.RawMessage `json:"v"`
-	ExpiresAt time.Time       `json:"e"`
-}
-
 // JiraAdapter implements ticketsvc.TicketEnricher and ticketsvc.TicketLinker backed
-// by a live JIRA client and a write-through JSON disk cache.
+// by a live JIRA client and a write-through disk cache.
 type JiraAdapter struct {
 	client     jiraClient
+	cache      *marshaler.Marshaler
 	cfg        Config
 	logger     *slog.Logger
 	sessionMap sync.Map // globalID → last-written mrTitle; resets on process restart
 }
 
 // New returns a JiraAdapter wired to the given client, config, and logger.
-// If cfg.CacheDir is empty, the OS user cache directory is used.
-func New(client jiraClient, cfg Config, logger *slog.Logger) *JiraAdapter {
-	if cfg.CacheDir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			base = os.TempDir()
-		}
-		cfg.CacheDir = filepath.Join(base, "mrboard", "jira")
+func New(client jiraClient, cfg Config, logger *slog.Logger) (*JiraAdapter, error) {
+	st, err := diskstore.New(diskstore.Config{FS: cfg.FS, Dir: cfg.CacheDir})
+	if err != nil {
+		return nil, fmt.Errorf("jiraadpt: %w", err)
 	}
-	return &JiraAdapter{client: client, cfg: cfg, logger: logger}
+	return &JiraAdapter{
+		client: client,
+		cache:  marshaler.New(cache.New[any](st)),
+		cfg:    cfg,
+		logger: logger,
+	}, nil
 }
 
 // GetIssueType implements ticketsvc.TicketEnricher.
 // Returns ("", nil) when the issue is not found.
 func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string, error) {
-	filename := a.cacheFile("issue_" + sanitizeKey(issueKey) + ".json")
+	key := issueTypeCacheKey(issueKey)
 
 	var cached string
-	if a.readCache(filename, &cached) {
+	if a.getCache(ctx, key, &cached) {
 		a.logger.Debug("jiraadpt: cache hit", "key", issueKey)
 		return cached, nil
 	}
@@ -90,17 +89,19 @@ func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string
 		return "", nil
 	}
 
-	a.writeCache(filename, issue.Type)
+	a.setCache(ctx, key, issue.Type)
 	return issue.Type, nil
 }
 
 // GetActiveSprintIssueKeys implements ticketsvc.TicketEnricher.
-// Returns (nil, nil) when no active sprint exists for boardID.
-func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
-	filename := a.cacheFile(fmt.Sprintf("sprint_board_%d.json", boardID))
+// Returns (nil, nil) when no active sprint exists for boardID. forceRefresh
+// skips the cache read and always fetches live, then rewrites the cache entry
+// with the fresh result (and a new expiry).
+func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int, forceRefresh bool) ([]string, error) {
+	key := sprintCacheKey(boardID)
 
 	var cached []string
-	if a.readCache(filename, &cached) {
+	if !forceRefresh && a.getCache(ctx, key, &cached) {
 		a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(cached))
 		return cached, nil
 	}
@@ -118,11 +119,9 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int)
 		return nil, fmt.Errorf("jiraadpt: get sprint %d issue keys: %w", sprint.ID, err)
 	}
 
-	a.writeCache(filename, keys)
+	a.setCache(ctx, key, keys)
 	return keys, nil
 }
-
-const remoteLinksCacheSubdir = "remotelinks"
 
 // UpsertRemoteLink implements ticketsvc.TicketLinker.
 // It is idempotent across three layers:
@@ -139,11 +138,11 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 		return nil
 	}
 
-	filename := a.cacheFile(filepath.Join(remoteLinksCacheSubdir, sanitizeKey(globalID)+".json"))
+	key := remoteLinkCacheKey(globalID)
 
 	// Layer 2: disk cache
 	var cachedTitle string
-	diskHit := a.readCache(filename, &cachedTitle)
+	diskHit := a.getCache(ctx, key, &cachedTitle)
 	if diskHit && cachedTitle == mrTitle {
 		a.logger.Debug("jiraadpt: remote link disk cache hit", "globalId", globalID)
 		a.sessionMap.Store(globalID, mrTitle)
@@ -159,7 +158,7 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 		}
 		if existing == mrTitle {
 			a.logger.Debug("jiraadpt: remote link JIRA already current", "globalId", globalID)
-			a.writeCache(filename, mrTitle)
+			a.setCache(ctx, key, mrTitle)
 			a.sessionMap.Store(globalID, mrTitle)
 			return nil
 		}
@@ -190,7 +189,7 @@ func (a *JiraAdapter) UpsertRemoteLink(ctx context.Context, issueKey, globalID, 
 	}
 
 	a.logger.Info("jiraadpt: remote link written", "action", action, "issueKey", issueKey, "globalId", globalID)
-	a.writeCache(filename, mrTitle)
+	a.setCache(ctx, key, mrTitle)
 	a.sessionMap.Store(globalID, mrTitle)
 	return nil
 }
@@ -204,57 +203,31 @@ func (a *JiraAdapter) linkIcon() *pkgjira.RemoteLinkIcon {
 	return &pkgjira.RemoteLinkIcon{URL16x16: a.cfg.LinkIconURL}
 }
 
-// readCache reads a cache entry from filename and JSON-unmarshals its value
-// into dest. Returns false on any error (miss, expiry, or decode failure).
-func (a *JiraAdapter) readCache(filename string, dest any) bool {
+// getCache reads dest from the disk cache under key. A miss, an expired or
+// corrupt entry, and caching disabled via cfg.TTL are all treated the same
+// way: return false so the caller falls back to a live fetch.
+func (a *JiraAdapter) getCache(ctx context.Context, key string, dest any) bool {
 	if a.cfg.TTL <= 0 {
 		return false
 	}
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return false
-	}
-	var entry cacheEntry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return false
-	}
-	if time.Now().After(entry.ExpiresAt) {
-		return false
-	}
-	return json.Unmarshal(entry.Value, dest) == nil
+	_, err := a.cache.Get(ctx, key, dest)
+	return err == nil
 }
 
-// writeCache serializes value to a cache entry file with expiry = now + TTL.
-// Errors are logged as warnings — callers still receive live data.
-func (a *JiraAdapter) writeCache(filename string, value any) {
+// setCache writes value to the disk cache under key, honoring cfg.TTL. Write
+// failures are logged and otherwise ignored — callers already have the live
+// value in hand regardless of whether the cache write succeeds.
+func (a *JiraAdapter) setCache(ctx context.Context, key string, value any) {
 	if a.cfg.TTL <= 0 {
 		return
 	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		a.logger.Warn("jiraadpt: cache marshal failed", "filename", filename, "err", err)
-		return
-	}
-	entry := cacheEntry{Value: raw, ExpiresAt: time.Now().Add(a.cfg.TTL)}
-	data, err := json.Marshal(entry)
-	if err != nil {
-		a.logger.Warn("jiraadpt: cache entry marshal failed", "filename", filename, "err", err)
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(filename), cacheDirPerm); err != nil {
-		a.logger.Warn("jiraadpt: cache dir create failed", "dir", filepath.Dir(filename), "err", err)
-		return
-	}
-	if err := os.WriteFile(filename, data, cacheFilePerm); err != nil {
-		a.logger.Warn("jiraadpt: cache write failed", "filename", filename, "err", err)
+	if err := a.cache.Set(ctx, key, value, store.WithExpiration(a.cfg.TTL)); err != nil {
+		a.logger.Warn("jiraadpt: cache write failed", "key", key, "err", err)
 	}
 }
 
-func (a *JiraAdapter) cacheFile(name string) string {
-	return filepath.Join(a.cfg.CacheDir, name)
-}
+func issueTypeCacheKey(issueKey string) string { return "issue_" + issueKey }
 
-// sanitizeKey replaces characters unsafe for filenames with underscores.
-func sanitizeKey(s string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(s)
-}
+func sprintCacheKey(boardID int) string { return fmt.Sprintf("sprint_board_%d", boardID) }
+
+func remoteLinkCacheKey(globalID string) string { return "remotelink_" + globalID }

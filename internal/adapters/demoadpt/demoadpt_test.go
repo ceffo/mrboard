@@ -305,7 +305,7 @@ func TestTicketsPortServesFixtureAndFallsBackOnUnknownKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, missing)
 
-	keys, err := tk.GetActiveSprintIssueKeys(context.Background(), 1)
+	keys, err := tk.GetActiveSprintIssueKeys(context.Background(), 1, false)
 	require.NoError(t, err)
 	assert.Contains(t, keys, "DEMO-1421")
 }

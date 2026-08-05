@@ -445,18 +445,25 @@ func New(
 // Init starts the spinner, fires the first data fetch, schedules the minute ticker,
 // and resolves team usernames from type:user sources.
 func (m Model) Init() tea.Cmd {
-	var sprintCmd tea.Cmd
-	if m.ticketEnricher != nil && m.cfg.Jira.BoardID != 0 {
-		sprintCmd = makeSprintFetchCmd(m.baseCtx, m.ticketEnricher, m.cfg.Jira.BoardID)
-	}
 	return tea.Batch(
 		m.sp.Init(),
 		makeFetchCmd(m.baseCtx, m.src, m.includeReviewerMRs, m.allMRs),
 		tickCmd(),
 		refreshTickCmd(m.refreshInterval, m.refreshGen),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
-		sprintCmd,
+		m.sprintFetchCmd(true),
 	)
+}
+
+// sprintFetchCmd returns a Cmd that (re)loads active-sprint issue keys, or nil
+// when no JIRA board is configured. forceRefresh bypasses the enricher's
+// cache, used at boot and on manual refresh so a sprint rollover upstream is
+// picked up instead of silently serving stale cached keys.
+func (m Model) sprintFetchCmd(forceRefresh bool) tea.Cmd {
+	if m.ticketEnricher == nil || m.cfg.Jira.BoardID == 0 {
+		return nil
+	}
+	return makeSprintFetchCmd(m.baseCtx, m.ticketEnricher, m.cfg.Jira.BoardID, forceRefresh)
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
@@ -936,19 +943,22 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// timer" means (docs/adr/0005, "Refresh cadence").
 		m.refreshGen++
 		resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
+		sprintCmd := m.sprintFetchCmd(true)
 		if m.isRefreshing {
 			// A fetch is already in flight. Starting a second one would cancel
 			// it (startFetch cancels the previous context) and land a degraded
 			// partial result, so skip — not queue — this fetch, the same rule
-			// handleRefreshTick applies. The cadence is still reset above.
-			return m, resetTimer
+			// handleRefreshTick applies. The cadence is still reset above. The
+			// sprint fetch is independent of the MR fetch's cancellation, so it
+			// still runs.
+			return m, tea.Batch(resetTimer, sprintCmd)
 		}
 		if len(m.allMRs) > 0 {
 			m.isRefreshing = true
-			return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch())
+			return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
 		}
 		m.state = stateLoading
-		return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch())
+		return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
 	case m.keys.Sort.Match(msg):
 		m.sortField, m.sortDesc = advanceSort(m.sortField, m.sortDesc)
 		m.header.SetSort(sortLabel(m.sortField, m.sortDesc))
@@ -1528,11 +1538,13 @@ func makeTicketFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher,
 
 // makeSprintFetchCmd returns a Cmd that loads all issue keys for the active sprint
 // of the given JIRA board and wraps the result in a SprintIssueKeysMsg.
-func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, boardID int) tea.Cmd {
+func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, boardID int,
+	forceRefresh bool,
+) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
-		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
+		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID, forceRefresh)
 		return SprintIssueKeysMsg{Keys: keys, Err: err}
 	}
 }

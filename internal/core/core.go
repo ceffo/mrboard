@@ -7,6 +7,9 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"path/filepath"
+
+	"github.com/spf13/afero"
 
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
 	"github.com/ceffo/mrboard/internal/adapters/jiraadpt"
@@ -107,7 +110,16 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			Email:       j.Email,
 			APIToken:    j.APIToken,
 		})
-		adpt := jiraadpt.New(jiraClient, jiraadpt.Config{TTL: j.CacheTTL, LinkIconURL: j.RemoteLinkIconURL}, logger)
+		adpt, err := jiraadpt.New(jiraClient, jiraadpt.Config{
+			FS:          afero.NewOsFs(),
+			CacheDir:    filepath.Join(config.XDGCacheDir(), "jira"),
+			TTL:         j.CacheTTL,
+			LinkIconURL: j.RemoteLinkIconURL,
+		}, logger)
+		if err != nil {
+			closer.Close()
+			return nil, err
+		}
 		ticketEnricher = adpt
 		ticketLinker = adpt
 	}

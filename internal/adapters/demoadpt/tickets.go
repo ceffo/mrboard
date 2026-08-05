@@ -23,8 +23,9 @@ func (t *tickets) GetIssueType(ctx context.Context, issueKey string) (string, er
 }
 
 // GetActiveSprintIssueKeys returns the fixture's sprint membership regardless of
-// board ID; the demo config only ever names one board.
-func (t *tickets) GetActiveSprintIssueKeys(ctx context.Context, _ int) ([]string, error) {
+// board ID; the demo config only ever names one board. forceRefresh is unused —
+// the fixture has no cache to bypass.
+func (t *tickets) GetActiveSprintIssueKeys(ctx context.Context, _ int, _ bool) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

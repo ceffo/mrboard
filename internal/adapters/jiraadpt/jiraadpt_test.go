@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,8 +61,9 @@ func (f *fakeClient) CreateOrUpdateRemoteLink(_ context.Context, _ string, _ pkg
 
 func newTestAdapter(t *testing.T, client jiraClient, ttl time.Duration) *JiraAdapter {
 	t.Helper()
-	dir := t.TempDir()
-	return New(client, Config{CacheDir: dir, TTL: ttl}, slog.Default())
+	a, err := New(client, Config{FS: afero.NewMemMapFs(), CacheDir: "/cache", TTL: ttl}, slog.Default())
+	require.NoError(t, err)
+	return a
 }
 
 func TestGetIssueType_LiveAndCached(t *testing.T) {
@@ -110,13 +111,13 @@ func TestGetActiveSprintIssueKeys_LiveAndCached(t *testing.T) {
 	}
 	a := newTestAdapter(t, fc, time.Hour)
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys)
 	assert.Equal(t, 2, fc.calls) // GetActiveSprint + GetSprintIssueKeys
 
 	// second call must hit cache
-	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
+	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys2)
 	assert.Equal(t, 2, fc.calls, "expected cache hit")
@@ -126,30 +127,47 @@ func TestGetActiveSprintIssueKeys_NoActiveSprint(t *testing.T) {
 	fc := &fakeClient{sprint: nil}
 	a := newTestAdapter(t, fc, time.Hour)
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 9)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 9, false)
 	require.NoError(t, err)
 	assert.Nil(t, keys)
 }
 
-func TestCacheFile_Sanitize(t *testing.T) {
-	assert.Equal(t, "OD_3345", sanitizeKey("OD:3345"))
-	assert.Equal(t, "OD_3345", sanitizeKey("OD/3345"))
+func TestGetActiveSprintIssueKeys_ForceRefreshBypassesCache(t *testing.T) {
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
+		sprintKeys: []string{issueKeyOD10},
+	}
+	a := newTestAdapter(t, fc, time.Hour)
+
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{issueKeyOD10}, keys)
+	assert.Equal(t, 2, fc.calls)
+
+	// simulate the upstream sprint rolling over between calls
+	fc.sprintKeys = []string{issueKeyOD11}
+
+	// forceRefresh must skip the cache and observe the new sprint's keys
+	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7, true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{issueKeyOD11}, keys2)
+	assert.Equal(t, 4, fc.calls, "forceRefresh should hit the live client, not the cache")
+
+	// the forced fetch rewrites the cache, so a subsequent plain read sees the fresh value
+	keys3, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{issueKeyOD11}, keys3)
+	assert.Equal(t, 4, fc.calls, "expected cache hit after forceRefresh rewrote the entry")
 }
 
-func TestCacheFile_BadDir(t *testing.T) {
-	// write to a path that cannot be created (file in place of dir)
-	f, err := os.CreateTemp(t.TempDir(), "file")
-	require.NoError(t, err)
-	f.Close()
-
+func TestNew_BadCacheDir(t *testing.T) {
+	// A read-only filesystem can never satisfy the store's MkdirAll, so
+	// construction fails fast instead of silently degrading on every write.
+	fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
 	fc := &fakeClient{issue: &pkgjira.Issue{Key: "OD-1", Type: "Bug"}}
-	// point CacheDir at the file — MkdirAll will fail silently
-	a := New(fc, Config{CacheDir: f.Name(), TTL: time.Hour}, slog.Default())
 
-	// should still return live data even when cache write fails
-	typ, err := a.GetIssueType(context.Background(), "OD-1")
-	require.NoError(t, err)
-	assert.Equal(t, "Bug", typ)
+	_, err := New(fc, Config{FS: fs, CacheDir: "/cache", TTL: time.Hour}, slog.Default())
+	require.Error(t, err)
 }
 
 const (
@@ -182,8 +200,7 @@ func TestUpsertRemoteLink_DiskCacheHit(t *testing.T) {
 	// Pre-seed the disk cache with the current title.
 	fc := &fakeClient{}
 	a := newTestAdapter(t, fc, time.Hour)
-	filename := a.cacheFile("remotelinks/" + sanitizeKey(testGlobalID) + ".json")
-	a.writeCache(filename, testTitle)
+	a.setCache(context.Background(), remoteLinkCacheKey(testGlobalID), testTitle)
 
 	err := a.UpsertRemoteLink(context.Background(), testIssueKey, testGlobalID, testTitle, testURL)
 	require.NoError(t, err)
@@ -206,8 +223,7 @@ func TestUpsertRemoteLink_TitleChanged(t *testing.T) {
 	// Disk cache has stale title → skip GET, go straight to POST.
 	fc := &fakeClient{}
 	a := newTestAdapter(t, fc, time.Hour)
-	filename := a.cacheFile("remotelinks/" + sanitizeKey(testGlobalID) + ".json")
-	a.writeCache(filename, "old title")
+	a.setCache(context.Background(), remoteLinkCacheKey(testGlobalID), "old title")
 
 	err := a.UpsertRemoteLink(context.Background(), testIssueKey, testGlobalID, testTitle, testURL)
 	require.NoError(t, err)

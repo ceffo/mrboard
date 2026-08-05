@@ -27,6 +27,10 @@ check: fmt lint build test
 run: build
   @./bin/mrboard
 
+# run the tui with debug log level 
+run-debug: build
+  @./bin/mrboard --log-level debug
+
 # fetch calls the fetch command
 fetch: build
   @./bin/mrboard fetch

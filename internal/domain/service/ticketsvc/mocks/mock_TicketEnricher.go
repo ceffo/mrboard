@@ -38,8 +38,8 @@ func (_m *MockTicketEnricher) EXPECT() *MockTicketEnricher_Expecter {
 }
 
 // GetActiveSprintIssueKeys provides a mock function for the type MockTicketEnricher
-func (_mock *MockTicketEnricher) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
-	ret := _mock.Called(ctx, boardID)
+func (_mock *MockTicketEnricher) GetActiveSprintIssueKeys(ctx context.Context, boardID int, forceRefresh bool) ([]string, error) {
+	ret := _mock.Called(ctx, boardID, forceRefresh)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveSprintIssueKeys")
@@ -47,18 +47,18 @@ func (_mock *MockTicketEnricher) GetActiveSprintIssueKeys(ctx context.Context, b
 
 	var r0 []string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int) ([]string, error)); ok {
-		return returnFunc(ctx, boardID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, bool) ([]string, error)); ok {
+		return returnFunc(ctx, boardID, forceRefresh)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int) []string); ok {
-		r0 = returnFunc(ctx, boardID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, bool) []string); ok {
+		r0 = returnFunc(ctx, boardID, forceRefresh)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]string)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int) error); ok {
-		r1 = returnFunc(ctx, boardID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int, bool) error); ok {
+		r1 = returnFunc(ctx, boardID, forceRefresh)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -73,11 +73,12 @@ type MockTicketEnricher_GetActiveSprintIssueKeys_Call struct {
 // GetActiveSprintIssueKeys is a helper method to define mock.On call
 //   - ctx context.Context
 //   - boardID int
-func (_e *MockTicketEnricher_Expecter) GetActiveSprintIssueKeys(ctx any, boardID any) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
-	return &MockTicketEnricher_GetActiveSprintIssueKeys_Call{Call: _e.mock.On("GetActiveSprintIssueKeys", ctx, boardID)}
+//   - forceRefresh bool
+func (_e *MockTicketEnricher_Expecter) GetActiveSprintIssueKeys(ctx any, boardID any, forceRefresh any) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
+	return &MockTicketEnricher_GetActiveSprintIssueKeys_Call{Call: _e.mock.On("GetActiveSprintIssueKeys", ctx, boardID, forceRefresh)}
 }
 
-func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Run(run func(ctx context.Context, boardID int)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
+func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Run(run func(ctx context.Context, boardID int, forceRefresh bool)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -87,9 +88,14 @@ func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Run(run func(ctx con
 		if args[1] != nil {
 			arg1 = args[1].(int)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -100,7 +106,7 @@ func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Return(strings []str
 	return _c
 }
 
-func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) RunAndReturn(run func(ctx context.Context, boardID int) ([]string, error)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
+func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) RunAndReturn(run func(ctx context.Context, boardID int, forceRefresh bool) ([]string, error)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
 	_c.Call.Return(run)
 	return _c
 }
