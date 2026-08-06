@@ -3,6 +3,8 @@
 *.db-journal
 *.db-shm
 *.db-wal
+*.db-fsqlite-ns-gate
+*.db-fsqlite-ns-use
 
 # Lock files
 *.lock
