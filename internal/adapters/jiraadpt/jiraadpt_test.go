@@ -64,7 +64,7 @@ const testCacheDir = "/cache"
 
 func newTestAdapter(t *testing.T, client jiraClient, ttl time.Duration) *JiraAdapter {
 	t.Helper()
-	return newTestAdapterWithConfig(t, client, Config{TTL: ttl})
+	return newTestAdapterWithConfig(t, client, Config{TTL: ttl, SprintCacheTTL: ttl})
 }
 
 func newTestAdapterWithConfig(t *testing.T, client jiraClient, cfg Config) *JiraAdapter {
@@ -145,13 +145,13 @@ func TestGetActiveSprintIssueKeys_LiveAndCached(t *testing.T) {
 	}
 	a := newTestAdapter(t, fc, time.Hour)
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys)
 	assert.Equal(t, 2, fc.calls) // GetActiveSprint + GetSprintIssueKeys
 
 	// second call must hit cache
-	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys2)
 	assert.Equal(t, 2, fc.calls, "expected cache hit")
@@ -162,9 +162,11 @@ func TestGetActiveSprintIssueKeys_CaseInsensitiveMatch_UppercasesKeys(t *testing
 		sprint:     &pkgjira.Sprint{ID: 42, Name: "Active Sprint"},
 		sprintKeys: []string{"od-10", "Od-11"},
 	}
-	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(true)})
+	a := newTestAdapterWithConfig(t, fc, Config{
+		TTL: time.Hour, SprintCacheTTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(true),
+	})
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys,
 		"sprint issue keys should be uppercased to match the shared TicketKeyMatcher's canonical output")
@@ -174,19 +176,22 @@ func TestGetActiveSprintIssueKeys_NoActiveSprint(t *testing.T) {
 	fc := &fakeClient{sprint: nil}
 	a := newTestAdapter(t, fc, time.Hour)
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 9, false)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 9)
 	require.NoError(t, err)
 	assert.Nil(t, keys)
 }
 
-func TestGetActiveSprintIssueKeys_ForceRefreshBypassesCache(t *testing.T) {
+func TestGetActiveSprintIssueKeys_RevalidatesIndependentlyOfGeneralTTL(t *testing.T) {
 	fc := &fakeClient{
 		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
 		sprintKeys: []string{issueKeyOD10},
 	}
-	a := newTestAdapter(t, fc, time.Hour)
+	// A long general TTL (issue-type, remote-link) alongside a SprintCacheTTL
+	// that is already expired: every ask must still revalidate the sprint
+	// cache, without the caller ever passing a forceRefresh flag.
+	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, SprintCacheTTL: -time.Second})
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10}, keys)
 	assert.Equal(t, 2, fc.calls)
@@ -194,17 +199,12 @@ func TestGetActiveSprintIssueKeys_ForceRefreshBypassesCache(t *testing.T) {
 	// simulate the upstream sprint rolling over between calls
 	fc.sprintKeys = []string{issueKeyOD11}
 
-	// forceRefresh must skip the cache and observe the new sprint's keys
-	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7, true)
+	// a plain ask must observe the new sprint's keys — SprintCacheTTL<=0 means
+	// the sprint cache is never trusted, independent of the hour-long TTL
+	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD11}, keys2)
-	assert.Equal(t, 4, fc.calls, "forceRefresh should hit the live client, not the cache")
-
-	// the forced fetch rewrites the cache, so a subsequent plain read sees the fresh value
-	keys3, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
-	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD11}, keys3)
-	assert.Equal(t, 4, fc.calls, "expected cache hit after forceRefresh rewrote the entry")
+	assert.Equal(t, 4, fc.calls, "expired SprintCacheTTL should hit the live client, not the cache")
 }
 
 func TestNew_BadCacheDir(t *testing.T) {

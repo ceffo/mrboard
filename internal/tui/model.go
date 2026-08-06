@@ -454,19 +454,20 @@ func (m Model) Init() tea.Cmd {
 		tickCmd(),
 		refreshTickCmd(m.refreshInterval, m.refreshGen),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
-		m.sprintFetchCmd(true),
+		m.sprintFetchCmd(),
 	)
 }
 
-// sprintFetchCmd returns a Cmd that (re)loads active-sprint issue keys, or nil
-// when no JIRA board is configured. forceRefresh bypasses the enricher's
-// cache, used at boot and on manual refresh so a sprint rollover upstream is
-// picked up instead of silently serving stale cached keys.
-func (m Model) sprintFetchCmd(forceRefresh bool) tea.Cmd {
+// sprintFetchCmd returns a Cmd that asks the enricher for current active-sprint
+// issue keys, or nil when no JIRA board is configured. It is called on every
+// trigger that should see a sprint rollover — boot, manual refresh, and the
+// periodic refresh tick — because the enricher itself (not this caller) owns
+// the policy for whether that ask reaches JIRA or is served from cache.
+func (m Model) sprintFetchCmd() tea.Cmd {
 	if m.ticketEnricher == nil || m.cfg.Jira.BoardID == 0 {
 		return nil
 	}
-	return makeSprintFetchCmd(m.baseCtx, m.ticketEnricher, m.cfg.Jira.BoardID, forceRefresh)
+	return makeSprintFetchCmd(m.baseCtx, m.ticketEnricher, m.cfg.Jira.BoardID)
 }
 
 // makeFetchCmd returns a Cmd that fetches all MRs and a cancel func to abort it.
@@ -594,19 +595,23 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 // Model.refreshGen belongs to a schedule a manual refresh has since
 // superseded; it is dropped without rescheduling, since the newer schedule
 // installed by the manual refresh is already driving the cadence. Otherwise
-// the next tick is always scheduled, but this tick's own fetch is skipped —
+// the next tick is always scheduled, but this tick's own MR fetch is skipped —
 // not queued — when one is already in flight: fetchTimeout and the default
-// interval are both 60s, so overlap is otherwise reachable.
+// interval are both 60s, so overlap is otherwise reachable. The sprint fetch
+// is independent of the MR fetch's in-flight state and always fires: it is
+// what lets sprintFetchCmd's own revalidation policy (not this caller) decide
+// whether a given tick actually reaches JIRA.
 func (m Model) handleRefreshTick(msg refreshTickMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.refreshGen {
 		return m, nil
 	}
 	next := refreshTickCmd(m.refreshInterval, m.refreshGen)
+	sprintCmd := m.sprintFetchCmd()
 	if m.isRefreshing {
-		return m, next
+		return m, tea.Batch(next, sprintCmd)
 	}
 	m.isRefreshing = true
-	return m, tea.Batch(next, m.startFetch())
+	return m, tea.Batch(next, sprintCmd, m.startFetch())
 }
 
 // dirtyKeys returns the keys of dirty as a slice, for passing to FetchOptions.ForceStale.
@@ -946,7 +951,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// timer" means (docs/adr/0005, "Refresh cadence").
 		m.refreshGen++
 		resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
-		sprintCmd := m.sprintFetchCmd(true)
+		sprintCmd := m.sprintFetchCmd()
 		if m.isRefreshing {
 			// A fetch is already in flight. Starting a second one would cancel
 			// it (startFetch cancels the previous context) and land a degraded
@@ -1541,13 +1546,11 @@ func makeTicketFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher,
 
 // makeSprintFetchCmd returns a Cmd that loads all issue keys for the active sprint
 // of the given JIRA board and wraps the result in a SprintIssueKeysMsg.
-func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, boardID int,
-	forceRefresh bool,
-) tea.Cmd {
+func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher, boardID int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
-		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID, forceRefresh)
+		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
 		return SprintIssueKeysMsg{Keys: keys, Err: err}
 	}
 }

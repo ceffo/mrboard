@@ -118,11 +118,12 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			APIToken:    j.APIToken,
 		})
 		adpt, err := jiraadpt.New(jiraClient, jiraadpt.Config{
-			FS:          afero.NewOsFs(),
-			CacheDir:    filepath.Join(config.XDGCacheDir(), "jira"),
-			TTL:         j.CacheTTL,
-			LinkIconURL: j.RemoteLinkIconURL,
-			KeyMatcher:  keyMatcher,
+			FS:             afero.NewOsFs(),
+			CacheDir:       filepath.Join(config.XDGCacheDir(), "jira"),
+			TTL:            j.CacheTTL,
+			SprintCacheTTL: j.SprintCacheTTL,
+			LinkIconURL:    j.RemoteLinkIconURL,
+			KeyMatcher:     keyMatcher,
 		}, logger)
 		if err != nil {
 			closer.Close()

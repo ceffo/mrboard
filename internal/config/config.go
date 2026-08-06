@@ -52,11 +52,16 @@ type Notifications struct {
 
 // Jira holds configuration for JIRA integration.
 type Jira struct {
-	InstanceURL    string            `mapstructure:"instance_url"`     // e.g. "https://northstar.atlassian.net"
-	Email          string            `mapstructure:"email"`            // Atlassian account email for Basic Auth
-	APIToken       string            `mapstructure:"api_token"`        // or $JIRA_TOKEN
-	BoardID        int               `mapstructure:"board_id"`         // optional; enables sprint filter (S key)
-	CacheTTL       time.Duration     `mapstructure:"cache_ttl"`        // default 24h
+	InstanceURL string        `mapstructure:"instance_url"` // e.g. "https://northstar.atlassian.net"
+	Email       string        `mapstructure:"email"`        // Atlassian account email for Basic Auth
+	APIToken    string        `mapstructure:"api_token"`    // or $JIRA_TOKEN
+	BoardID     int           `mapstructure:"board_id"`     // optional; enables sprint filter (S key)
+	CacheTTL    time.Duration `mapstructure:"cache_ttl"`    // default 24h
+	// SprintCacheTTL is the revalidation window for active-sprint membership,
+	// kept short since sprint rollovers should surface quickly (default 5m).
+	// Separate from CacheTTL, which governs the issue-type and remote-link
+	// caches and can stay long since those change rarely.
+	SprintCacheTTL time.Duration     `mapstructure:"sprint_cache_ttl"` // default 5m
 	IssueTypeIcons map[string]string `mapstructure:"issue_type_icons"` // override default emoji map
 	// RemoteLinkIconURL is a 16×16 icon URL shown on remote links in JIRA. Empty = no icon.
 	RemoteLinkIconURL string `mapstructure:"remote_link_icon_url"`
@@ -183,6 +188,7 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("lifetime_warn_after", "72h")
 	v.SetDefault("lifetime_error_after", "120h")
 	v.SetDefault("jira.cache_ttl", "24h")
+	v.SetDefault("jira.sprint_cache_ttl", "5m")
 	v.SetDefault("jira.case_insensitive_ticket_match", true)
 	v.SetDefault("refresh_interval", "60s")
 

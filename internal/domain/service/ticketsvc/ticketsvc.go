@@ -14,8 +14,10 @@ type TicketEnricher interface {
 
 	// GetActiveSprintIssueKeys returns all issue keys belonging to the active
 	// sprint for the given board ID. Returns nil when no active sprint exists.
-	// forceRefresh bypasses any cached result, so callers get a live read.
-	GetActiveSprintIssueKeys(ctx context.Context, boardID int, forceRefresh bool) ([]string, error)
+	// The adapter owns revalidation policy: callers ask for current data on
+	// every trigger that matters (boot, manual refresh, periodic tick) and the
+	// adapter decides whether its cache is fresh enough to skip a network call.
+	GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error)
 }
 
 // TicketLinker is the driven port for writing remote issue links.

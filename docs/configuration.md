@@ -84,6 +84,7 @@ jira:
   api_token: your-token        # or $JIRA_TOKEN
   board_id: 42                 # optional; enables the sprint filter
   cache_ttl: 24h
+  sprint_cache_ttl: 5m
   issue_type_icons:            # optional; overrides the default emoji map
     Bug: "🐛"
     Story: "📖"
@@ -98,7 +99,8 @@ jira:
 | `email` | — | Account email, used for Basic auth |
 | `api_token` | — | API token; or set `$JIRA_TOKEN` |
 | `board_id` | — | Board to read the active sprint from. Required for the sprint filter |
-| `cache_ttl` | `24h` | How long issue types are cached on disk |
+| `cache_ttl` | `24h` | How long issue types and remote links are cached on disk |
+| `sprint_cache_ttl` | `5m` | How long active-sprint membership is trusted before revalidating against JIRA |
 | `issue_type_icons` | built-in map | Issue type name (case-sensitive) → any single character |
 | `remote_link_icon_url` | — | Icon attached to the remote link mrboard creates |
 

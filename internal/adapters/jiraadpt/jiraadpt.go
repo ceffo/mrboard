@@ -40,8 +40,18 @@ type Config struct {
 	// supply an already-resolved path (e.g. config.XDGCacheDir()); this
 	// package applies no platform-specific defaulting of its own.
 	CacheDir string
-	// TTL is the cache lifetime. Zero or negative disables caching.
+	// TTL is the cache lifetime for issue-type and remote-link entries. Zero
+	// or negative disables caching. Kept long (default 24h): issue type and
+	// remote-link state rarely change.
 	TTL time.Duration
+	// SprintCacheTTL is the revalidation window for active-sprint membership.
+	// Kept short (default 5m) and separate from TTL: sprint membership must
+	// surface a rollover quickly, so every caller (boot, manual refresh, the
+	// periodic refresh tick) can simply ask for current data on every trigger
+	// without tracking a forceRefresh flag — this is the window that decides
+	// whether that ask reaches JIRA or is served from cache. Zero or negative
+	// disables caching, matching TTL's convention.
+	SprintCacheTTL time.Duration
 	// LinkIconURL is the URL of a 16×16 icon shown next to remote links in JIRA.
 	// Empty string omits the icon field from the payload.
 	LinkIconURL string
@@ -100,14 +110,15 @@ func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string
 }
 
 // GetActiveSprintIssueKeys implements ticketsvc.TicketEnricher.
-// Returns (nil, nil) when no active sprint exists for boardID. forceRefresh
-// skips the cache read and always fetches live, then rewrites the cache entry
-// with the fresh result (and a new expiry).
-func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int, forceRefresh bool) ([]string, error) {
+// Returns (nil, nil) when no active sprint exists for boardID. Revalidation
+// is governed by cfg.SprintCacheTTL, not by the caller: within that window a
+// cached result is served, past it the next call fetches live and rewrites
+// the cache entry with a fresh expiry.
+func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
 	key := sprintCacheKey(boardID)
 
 	var cached []string
-	if !forceRefresh && a.getCache(ctx, key, &cached) {
+	if a.getCacheTTL(ctx, a.cfg.SprintCacheTTL, key, &cached) {
 		a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(cached))
 		return cached, nil
 	}
@@ -128,7 +139,7 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int,
 		keys[i] = a.cfg.KeyMatcher.Normalize(k)
 	}
 
-	a.setCache(ctx, key, keys)
+	a.setCacheTTL(ctx, a.cfg.SprintCacheTTL, key, keys)
 	return keys, nil
 }
 
@@ -216,21 +227,33 @@ func (a *JiraAdapter) linkIcon() *pkgjira.RemoteLinkIcon {
 // corrupt entry, and caching disabled via cfg.TTL are all treated the same
 // way: return false so the caller falls back to a live fetch.
 func (a *JiraAdapter) getCache(ctx context.Context, key string, dest any) bool {
-	if a.cfg.TTL <= 0 {
-		return false
-	}
-	_, err := a.cache.Get(ctx, key, dest)
-	return err == nil
+	return a.getCacheTTL(ctx, a.cfg.TTL, key, dest)
 }
 
 // setCache writes value to the disk cache under key, honoring cfg.TTL. Write
 // failures are logged and otherwise ignored — callers already have the live
 // value in hand regardless of whether the cache write succeeds.
 func (a *JiraAdapter) setCache(ctx context.Context, key string, value any) {
-	if a.cfg.TTL <= 0 {
+	a.setCacheTTL(ctx, a.cfg.TTL, key, value)
+}
+
+// getCacheTTL is getCache parameterized by revalidation window, so callers
+// with their own policy (e.g. SprintCacheTTL) share the same expired/corrupt/
+// disabled-caching handling instead of duplicating it.
+func (a *JiraAdapter) getCacheTTL(ctx context.Context, ttl time.Duration, key string, dest any) bool {
+	if ttl <= 0 {
+		return false
+	}
+	_, err := a.cache.Get(ctx, key, dest)
+	return err == nil
+}
+
+// setCacheTTL is setCache parameterized by revalidation window; see getCacheTTL.
+func (a *JiraAdapter) setCacheTTL(ctx context.Context, ttl time.Duration, key string, value any) {
+	if ttl <= 0 {
 		return
 	}
-	if err := a.cache.Set(ctx, key, value, store.WithExpiration(a.cfg.TTL)); err != nil {
+	if err := a.cache.Set(ctx, key, value, store.WithExpiration(ttl)); err != nil {
 		a.logger.Warn("jiraadpt: cache write failed", "key", key, "err", err)
 	}
 }

@@ -15,6 +15,7 @@ const (
 	demoErrorAfter      = 120 * time.Hour
 	demoRefreshInterval = 60 * time.Second
 	demoTicketCacheTTL  = 24 * time.Hour
+	demoSprintCacheTTL  = 5 * time.Minute
 )
 
 // DemoConfig returns a fully-populated AppConfig for demo mode (--demo), built
@@ -56,6 +57,7 @@ func DemoConfig() *AppConfig {
 			APIToken:                   "demo-token-not-a-real-credential",
 			BoardID:                    1,
 			CacheTTL:                   demoTicketCacheTTL,
+			SprintCacheTTL:             demoSprintCacheTTL,
 			CaseInsensitiveTicketMatch: true,
 		},
 		Log: logSection{
