@@ -186,6 +186,49 @@ func TestModel_EscKey_ClosesDetailPanel(t *testing.T) {
 	assert.False(t, m3m.ShowDetail(), "expected showDetail=false after pressing esc")
 }
 
+// --- requireFocusedMR guard (mrr-arch-improve-2026-08-j83.2) ---
+
+func TestRequireFocusedMR_CallsFnWhenFocused(t *testing.T) {
+	m := makeModel(t, someMRs(), "")
+	require.NotNil(t, m.board.FocusedMR())
+
+	var got *domain.MergeRequest
+	_, _ = m.requireFocusedMR("test-action", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+		got = mr
+		return m, nil
+	})
+	assert.Equal(t, m.board.FocusedMR(), got, "expected fn to receive the focused MR")
+}
+
+func TestRequireFocusedMR_NoopWhenNotFocused(t *testing.T) {
+	m := makeModel(t, nil, "")
+	require.Nil(t, m.board.FocusedMR(), "expected an empty board to have no focused MR")
+
+	called := false
+	result, cmd := m.requireFocusedMR("test-action", func(_ *domain.MergeRequest) (tea.Model, tea.Cmd) {
+		called = true
+		return m, nil
+	})
+	assert.False(t, called, "fn must not run when no MR is focused")
+	assert.Nil(t, cmd)
+	assert.Equal(t, m, result.(Model))
+}
+
+// TestHandleKeyBoard_NotifyAndOpenTicket_NoFocusedMR covers the two guarded
+// cases with extra conditions beyond "is an MR focused" (Notify also checks
+// m.notifier, OpenTicket also checks the extracted ticket URL) — both must
+// still no-op safely on an empty board after routing through requireFocusedMR.
+func TestHandleKeyBoard_NotifyAndOpenTicket_NoFocusedMR(t *testing.T) {
+	m := makeModel(t, nil, "")
+	require.Nil(t, m.board.FocusedMR())
+
+	for _, key := range []string{"n", "J"} {
+		result, cmd := m.handleKeyBoard(tea.KeyPressMsg{Text: key, Code: rune(key[0])})
+		assert.Nil(t, cmd, "key %q: expected no Cmd with no MR focused", key)
+		assert.Equal(t, m, result.(Model), "key %q: expected an unchanged Model", key)
+	}
+}
+
 // --- ticket index ---
 
 const (

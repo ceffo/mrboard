@@ -894,6 +894,22 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleKeyBoard(msg)
 }
 
+// requireFocusedMR is the single guard for every keybinding that needs the
+// board's currently focused MR. When no MR is focused (e.g. an empty column)
+// it logs at Debug and no-ops instead of calling fn — the same shape as the
+// fix in 367c8bf ("launching command on empty column"), now shared by every
+// handler that needs it instead of re-derived per call site.
+func (m Model) requireFocusedMR(
+	action string, fn func(mr *domain.MergeRequest) (tea.Model, tea.Cmd),
+) (tea.Model, tea.Cmd) {
+	mr := m.board.FocusedMR()
+	if mr == nil {
+		m.logger.Debug("tui: action requires a focused MR but none is focused", "action", action)
+		return m, nil
+	}
+	return fn(mr)
+}
+
 // handleKeyDetail handles keys while the detail panel owns focus.
 func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
@@ -905,13 +921,13 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case m.detailKeys.ScrollDown.Match(msg):
 		m.detail.ScrollDown()
 	case m.detailKeys.Open.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("open", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, openBrowser(mr.WebURL)
-		}
+		})
 	case m.detailKeys.Diff.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("diff", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, m.openDiffView(mr)
-		}
+		})
 	}
 	return m, nil
 }
@@ -921,12 +937,9 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Custom commands sit above BoardCtx in the stack (see baseStack), so a
 	// match here takes priority over the static board bindings below.
 	if cmd, ok := m.matchCustomCommand(msg); ok {
-		mr := m.board.FocusedMR()
-		if mr == nil {
-			m.logger.Debug("tui: configured command matched but no MR focused", "command", cmd.Name)
-			return m, nil
-		}
-		return m, m.execCommandCmd(*mr, cmd)
+		return m.requireFocusedMR(cmd.Name, func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			return m, m.execCommandCmd(*mr, cmd)
+		})
 	}
 	switch {
 	case m.keys.Up.Match(msg):
@@ -986,41 +999,45 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.applyMRFilter()
 		m.saveState()
 	case m.keys.Open.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("open", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, openBrowser(mr.WebURL)
-		}
+		})
 	case m.keys.Detail.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("detail", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			m.openDetail(mr)
 			return m, m.fetchDetailCmd(mr)
-		}
+		})
 	case m.keys.Settings.Match(msg):
 		m.openSettings()
 		return m, nil
 	case m.keys.Reviewers.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("reviewers", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			siblings := m.SiblingMRs(m.keyMatcher.ExtractFromTitle(mr.Title))
 			m.reviewerEditor = newReviewerEditorWidget(
 				m.baseCtx, *mr, siblings, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster, m.keyMatcher,
 			)
 			m.overlay.openOverlay(overlayKindReviewerEditor)
 			return m, nil
-		}
+		})
 	case m.keys.Diff.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("diff", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, m.openDiffView(mr)
-		}
+		})
 	case m.keys.Notify.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil && m.notifier != nil {
+		return m.requireFocusedMR("notify", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			if m.notifier == nil {
+				return m, nil
+			}
 			m.logger.Info("tui: notify key pressed", "mr_iid", mr.IID, "mr_title", mr.Title)
 			return m, m.notifyCmd(mr)
-		}
+		})
 	case m.keys.OpenTicket.Match(msg):
-		if mr := m.board.FocusedMR(); mr != nil {
+		return m.requireFocusedMR("open-ticket", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			if url := domain.JiraIssueURL(m.ticketBaseURL, m.keyMatcher.ExtractFromTitle(mr.Title)); url != "" {
 				return m, openBrowser(url)
 			}
-		}
+			return m, nil
+		})
 	}
 	return m, nil
 }
