@@ -9,7 +9,6 @@ import (
 	lip "charm.land/lipgloss/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 // MembersLoadedMsg carries the result of a lazy project-member fetch.
@@ -38,6 +37,10 @@ type BatchReviewerEditorPreviewMsg struct {
 	Staged    []stagedReviewer
 	Siblings  []domain.MergeRequest // all MRs sharing the JIRA key, including FocusedMR
 	FocusedMR domain.MergeRequest
+	// KnownIDs is the editor's resolved username→userID map (see userIDByName),
+	// carried through so the eventual batch write reuses it instead of
+	// resolving IDs from scratch per target — see makeReviewerWriteCmd.
+	KnownIDs map[string]int64
 }
 
 const (
@@ -96,8 +99,7 @@ type reviewerEditorWidget struct {
 	keyMatcher domain.TicketKeyMatcher
 
 	// Staging buffer — local edits committed only on Enter.
-	staged        []stagedReviewer
-	origApprovers map[string]bool // approver usernames at open time; used to detect changes
+	staged []stagedReviewer
 
 	// Project members (lazy fetch for search and ID resolution at save time).
 	members        []domain.ProjectMember
@@ -143,7 +145,6 @@ func newReviewerEditorWidget(
 ) *reviewerEditorWidget {
 	// Build the initial staged list from the MR's current reviewers, excluding the author.
 	staged := make([]stagedReviewer, 0, len(mr.Reviewers))
-	origApprovers := make(map[string]bool)
 	for _, r := range mr.Reviewers {
 		if r.Username == mr.Author {
 			continue
@@ -154,23 +155,19 @@ func newReviewerEditorWidget(
 			State:      r.State,
 			IsApprover: r.IsApprover,
 		})
-		if r.IsApprover {
-			origApprovers[r.Username] = true
-		}
 	}
 	return &reviewerEditorWidget{
-		styles:        styles,
-		keys:          keys,
-		mr:            mr,
-		src:           src,
-		baseCtx:       baseCtx,
-		roster:        roster,
-		keyMatcher:    keyMatcher,
-		staged:        staged,
-		origApprovers: origApprovers,
-		userIDByName:  make(map[string]int64),
-		searchSel:     make(map[int64]bool),
-		siblings:      siblings,
+		styles:       styles,
+		keys:         keys,
+		mr:           mr,
+		src:          src,
+		baseCtx:      baseCtx,
+		roster:       roster,
+		keyMatcher:   keyMatcher,
+		staged:       staged,
+		userIDByName: make(map[string]int64),
+		searchSel:    make(map[int64]bool),
+		siblings:     siblings,
 	}
 }
 
@@ -313,9 +310,13 @@ func (w *reviewerEditorWidget) confirm() (tea.Model, tea.Cmd) { //nolint:ireturn
 	copy(staged, w.staged)
 	siblings := make([]domain.MergeRequest, len(w.siblings))
 	copy(siblings, w.siblings)
+	knownIDs := make(map[string]int64, len(w.userIDByName))
+	for k, v := range w.userIDByName {
+		knownIDs[k] = v
+	}
 	focusedMR := w.mr
 	return w, func() tea.Msg {
-		return BatchReviewerEditorPreviewMsg{Staged: staged, Siblings: siblings, FocusedMR: focusedMR}
+		return BatchReviewerEditorPreviewMsg{Staged: staged, Siblings: siblings, FocusedMR: focusedMR, KnownIDs: knownIDs}
 	}
 }
 
@@ -469,31 +470,11 @@ func (w *reviewerEditorWidget) fetchMembersCmd() tea.Cmd {
 	}
 }
 
+// saveCmd writes the staged edit to the focused MR via the shared reviewer-write
+// use case (see makeReviewerWriteCmd), seeding knownIDs from userIDByName so a
+// save that follows a completed member fetch never needs a redundant one.
 func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
-	src := w.src
-	projectID := int64(w.mr.ProjectID)
-	mrIID := int64(w.mr.IID)
-
-	// Snapshot staged state at call time so the closure captures stable data.
-	staged := make([]mrsvc.ReviewerEdit, len(w.staged))
-	for i, s := range w.staged {
-		staged[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
-	}
-	knownIDs := make(map[string]int64, len(w.userIDByName))
-	for k, v := range w.userIDByName {
-		knownIDs[k] = v
-	}
-	origApprovers := make(map[string]bool, len(w.origApprovers))
-	for k, v := range w.origApprovers {
-		origApprovers[k] = v
-	}
-
-	ctx, cancel := context.WithTimeout(w.baseCtx, fetchTimeout)
-	return func() tea.Msg {
-		defer cancel()
-		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, staged, knownIDs, origApprovers)
-		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
-	}
+	return makeReviewerWriteCmd(w.baseCtx, w.src, w.mr, w.staged, w.userIDByName)
 }
 
 // Hint lines for the reviewer-list and sibling panels. Kept as consts so the

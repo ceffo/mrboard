@@ -97,6 +97,20 @@ func TestReviewerEditorWidget_WithSiblings_ConfirmOpensPreview(t *testing.T) {
 	assert.Equal(t, focusedMR().IID, msg.FocusedMR.IID)
 }
 
+func TestReviewerEditorWidget_WithSiblings_ConfirmForwardsKnownIDs(t *testing.T) {
+	// The editor's own resolved IDs must reach the batch write path so it can
+	// reuse them instead of starting from an empty map per target — the
+	// divergence the shared write use case (makeReviewerWriteCmd) closes.
+	siblings := []domain.MergeRequest{focusedMR(), siblingMR(20, editorTestApprover)}
+	w := newTestReviewerEditor(siblings, nil)
+	w.SetMembers([]domain.ProjectMember{{UserID: 1, Username: editorTestApprover}}, nil)
+
+	_, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	msg, ok := cmd().(BatchReviewerEditorPreviewMsg)
+	require.True(t, ok, "expected BatchReviewerEditorPreviewMsg, got %T", cmd())
+	assert.Equal(t, map[string]int64{editorTestApprover: 1}, msg.KnownIDs)
+}
+
 // --- Sibling panel navigation ---
 
 func TestReviewerEditorWidget_Tab_TogglesPanel(t *testing.T) {
@@ -166,10 +180,56 @@ func TestNewBatchPreviewWidget_MarksSelfAndConflict(t *testing.T) {
 	siblings := []domain.MergeRequest{focused, siblingMR(20, editorTestApprover), siblingMR(30, editorTestOther)}
 	staged := []stagedReviewer{{Username: editorTestApprover, IsApprover: true}}
 
-	w := newBatchPreviewWidget(staged, siblings, focused, Styles{}, DefaultBatchPreviewKeyMap)
+	w := newBatchPreviewWidget(staged, siblings, focused, nil, Styles{}, DefaultBatchPreviewKeyMap)
 
 	assert.True(t, w.rows[0].isSelf, "expected the focused MR's row to be marked isSelf")
 	assert.False(t, w.rows[0].conflict, "the self row must never be flagged as conflicting")
 	assert.False(t, w.rows[1].conflict, "sibling with matching approvers must not be flagged as conflicting")
 	assert.True(t, w.rows[2].conflict, "sibling with different approvers must be flagged as conflicting")
+}
+
+// --- Shared reviewer-write use case (mrr-arch-improve-2026-08-j83.3) ---
+
+func TestMakeReviewerWriteCmd_ReusesSeededKnownIDs(t *testing.T) {
+	// A staged reviewer with an unresolved UserID must still avoid a
+	// GetProjectMembers call when the caller already seeded knownIDs for that
+	// username — this is the fix for the divergence where the batch-write path
+	// used to always start knownIDs empty, unlike the single-edit save path.
+	target := siblingMR(20, editorTestApprover)
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().SetReviewers(mock.Anything, int64(100), int64(20), []int64{1}).Return(nil).Once()
+	src.EXPECT().FetchMR(mock.Anything, int64(100), int64(20)).Return(target, nil).Once()
+
+	staged := []stagedReviewer{{Username: editorTestApprover, IsApprover: true}} // UserID unresolved
+	knownIDs := map[string]int64{editorTestApprover: 1}
+
+	cmd := makeReviewerWriteCmd(context.Background(), src, target, staged, knownIDs)
+	result := cmd()
+	msg, ok := result.(ReviewersSavedMsg)
+	require.True(t, ok, "expected ReviewersSavedMsg, got %T", result)
+	require.NoError(t, msg.Err)
+	// No GetProjectMembers expectation was registered above; an unexpected
+	// call on a mockery mock panics immediately, so the absence of a panic
+	// here is what proves it wasn't called.
+}
+
+func TestMakeReviewerWriteCmd_DerivesOrigApproversFromTarget(t *testing.T) {
+	// origApprovers must come from the target MR's own current reviewers, not
+	// from any editor-side snapshot — each target in a batch has its own
+	// approver set to compare against.
+	target := siblingMR(20, editorTestApprover) // approver: editorTestApprover
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().SetReviewers(mock.Anything, int64(100), int64(20), mock.Anything).Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, int64(100), int64(20), []int64{2}).Return(nil).Once()
+	src.EXPECT().FetchMR(mock.Anything, int64(100), int64(20)).Return(target, nil).Once()
+
+	// Staged approver differs from the target's own current approver.
+	staged := []stagedReviewer{{Username: editorTestOther, IsApprover: true, UserID: 2}}
+
+	cmd := makeReviewerWriteCmd(context.Background(), src, target, staged, nil)
+	result := cmd()
+	msg, ok := result.(ReviewersSavedMsg)
+	require.True(t, ok, "expected ReviewersSavedMsg, got %T", result)
+	require.NoError(t, msg.Err)
+	assert.True(t, msg.ApproversChanged, "expected a change against the target's own approver set")
 }

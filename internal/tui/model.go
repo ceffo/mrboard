@@ -1457,7 +1457,9 @@ func (m Model) handleDetailFetchResult(msg DetailFetchResultMsg) (tea.Model, tea
 }
 
 func (m Model) handleBatchEditorPreview(msg BatchReviewerEditorPreviewMsg) (tea.Model, tea.Cmd) {
-	m.batchPreview = newBatchPreviewWidget(msg.Staged, msg.Siblings, msg.FocusedMR, m.styles, m.batchPreviewKeys)
+	m.batchPreview = newBatchPreviewWidget(
+		msg.Staged, msg.Siblings, msg.FocusedMR, msg.KnownIDs, m.styles, m.batchPreviewKeys,
+	)
 	m.overlay.openOverlay(overlayKindBatchPreview)
 	return m, nil
 }
@@ -1469,25 +1471,42 @@ func (m Model) handleBatchPreviewConfirmed(msg BatchPreviewConfirmedMsg) (tea.Mo
 	}
 	cmds := make([]tea.Cmd, len(msg.Targets))
 	for i, mr := range msg.Targets {
-		cmds[i] = makeBatchWriteCmd(m.baseCtx, m.src, msg.Staged, mr)
+		cmds[i] = makeReviewerWriteCmd(m.baseCtx, m.src, mr, msg.Staged, msg.KnownIDs)
 	}
 	return m, tea.Batch(cmds...)
 }
 
-// makeBatchWriteCmd writes the staged reviewer list to a single target MR via the
-// shared mrsvc.ApplyReviewerChanges use case. The batch editor never pre-populates
-// UserID on its staged entries (they come from domain.ReviewerInfo, which carries no
-// user ID), so it always starts from an empty knownIDs map.
-func makeBatchWriteCmd(
+// makeReviewerWriteCmd is the single reviewer-write use case: it wraps
+// mrsvc.ApplyReviewerChanges with the snapshot + ID-resolution + origApprovers
+// setup shared by both the single-edit save path (reviewerEditorWidget.saveCmd)
+// and each per-target write in a batch apply (handleBatchPreviewConfirmed), so
+// that setup — previously duplicated and diverging between the two callers —
+// can no longer drift out of sync.
+//
+// knownIDs seeds already-resolved usernames, e.g. from the project-members
+// fetch the single-edit path ran against its own MR. GitLab user IDs are
+// global to the instance, so a seed resolved against one project remains
+// valid when writing to another target's project — it lets ApplyReviewerChanges
+// skip a redundant GetProjectMembers call for any target sharing a resolved user.
+func makeReviewerWriteCmd(
 	base context.Context,
-	src mrsvc.MergeRequestSource,
-	staged []stagedReviewer,
+	src reviewerWriter,
 	target domain.MergeRequest,
+	staged []stagedReviewer,
+	knownIDs map[string]int64,
 ) tea.Cmd {
 	projectID := int64(target.ProjectID)
 	mrIID := int64(target.IID)
 
-	// Build original approver set from the current MR state for change detection.
+	// Snapshot everything so the closure captures stable data.
+	edits := make([]mrsvc.ReviewerEdit, len(staged))
+	for i, s := range staged {
+		edits[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
+	}
+	ids := make(map[string]int64, len(knownIDs))
+	for k, v := range knownIDs {
+		ids[k] = v
+	}
 	origApprovers := make(map[string]bool, len(target.Reviewers))
 	for _, r := range target.Reviewers {
 		if r.IsApprover {
@@ -1495,18 +1514,10 @@ func makeBatchWriteCmd(
 		}
 	}
 
-	// Snapshot staged list so the closure captures stable data.
-	edits := make([]mrsvc.ReviewerEdit, len(staged))
-	for i, s := range staged {
-		edits[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
-	}
-
 	ctx, cancel := context.WithTimeout(base, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
-		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(
-			ctx, src, projectID, mrIID, edits, map[string]int64{}, origApprovers,
-		)
+		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, edits, ids, origApprovers)
 		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
 	}
 }

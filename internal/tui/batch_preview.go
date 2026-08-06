@@ -17,8 +17,9 @@ type BatchPreviewBackMsg struct{}
 // Targets contains only the sibling MRs that are both included and have a detected change.
 // The dispatch logic is wired in mrr-qtk.4.
 type BatchPreviewConfirmedMsg struct {
-	Staged  []stagedReviewer
-	Targets []domain.MergeRequest
+	Staged   []stagedReviewer
+	Targets  []domain.MergeRequest
+	KnownIDs map[string]int64 // see BatchReviewerEditorPreviewMsg.KnownIDs
 }
 
 const batchPreviewMaxVisible = 8
@@ -39,6 +40,7 @@ type batchPreviewWidget struct {
 	styles    Styles
 	keys      BatchPreviewKeyMap
 	staged    []stagedReviewer
+	knownIDs  map[string]int64
 	rows      []previewMRRow
 	cursor    int
 	scrollOff int
@@ -46,11 +48,13 @@ type batchPreviewWidget struct {
 
 // newBatchPreviewWidget builds the preview widget from the staged reviewer list
 // and the sibling MR slice (which includes focusedMR itself). Change detection
-// and conflict detection both run at construction time.
+// and conflict detection both run at construction time. knownIDs is carried
+// through unchanged to BatchPreviewConfirmedMsg — see its doc comment.
 func newBatchPreviewWidget(
 	staged []stagedReviewer,
 	siblings []domain.MergeRequest,
 	focusedMR domain.MergeRequest,
+	knownIDs map[string]int64,
 	styles Styles,
 	keys BatchPreviewKeyMap,
 ) *batchPreviewWidget {
@@ -66,10 +70,11 @@ func newBatchPreviewWidget(
 		}
 	}
 	return &batchPreviewWidget{
-		styles: styles,
-		keys:   keys,
-		staged: staged,
-		rows:   rows,
+		styles:   styles,
+		keys:     keys,
+		staged:   staged,
+		knownIDs: knownIDs,
+		rows:     rows,
 	}
 }
 
@@ -124,8 +129,12 @@ func (w *batchPreviewWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint
 		targets := w.collectTargets()
 		staged := make([]stagedReviewer, len(w.staged))
 		copy(staged, w.staged)
+		knownIDs := make(map[string]int64, len(w.knownIDs))
+		for k, v := range w.knownIDs {
+			knownIDs[k] = v
+		}
 		return w, func() tea.Msg {
-			return BatchPreviewConfirmedMsg{Staged: staged, Targets: targets}
+			return BatchPreviewConfirmedMsg{Staged: staged, Targets: targets, KnownIDs: knownIDs}
 		}
 	}
 	return w, nil
