@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Manual re-run for a tag whose push event never produced a run (e.g. an
+  # Actions outage). The tag must already exist; this never creates one.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. v0.10.3"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,9 +22,11 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
+      # On a tag push `inputs` is empty, so this falls back to github.ref.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-go@v5
         with:
