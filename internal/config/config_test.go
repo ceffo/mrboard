@@ -50,6 +50,39 @@ sources:
 	assert.Equal(t, 60*time.Second, cfg.RefreshInterval)
 }
 
+func TestLoadJiraCaseInsensitiveTicketMatchDefault(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.True(t, cfg.Jira.CaseInsensitiveTicketMatch, "want case-insensitive ticket matching by default")
+}
+
+func TestLoadJiraCaseInsensitiveTicketMatchDisabled(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+jira:
+  case_insensitive_ticket_match: false
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.False(t, cfg.Jira.CaseInsensitiveTicketMatch, "want case-insensitive ticket matching disabled when configured")
+}
+
 func TestLoadRefreshIntervalZeroDisables(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:

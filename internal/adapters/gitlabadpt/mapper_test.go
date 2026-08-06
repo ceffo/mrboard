@@ -302,6 +302,16 @@ func TestMapMR_IsApprover_NoApproversRule(t *testing.T) {
 	}
 }
 
+func TestMapMR_Approvers_IncludesNonReviewerEligibleApprovers(t *testing.T) {
+	// carol is eligible to approve per the rule but hasn't been added as a
+	// reviewer yet — Approvers must still include her, unlike IsApprover
+	// which only flags entries already present in Reviewers.
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice, "carol")}
+	result := MapMR(m, nil, approvals(), rules)
+	assert.ElementsMatch(t, []string{testUserAlice, "carol"}, result.Approvers)
+}
+
 func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
 	m := mr(basicUser(testUserAlice, testUserAliceName))
 	m.DetailedMergeStatus = detailedMergeStatusMergeable

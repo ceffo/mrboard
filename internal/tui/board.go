@@ -18,6 +18,7 @@ type boardWidget struct {
 	focusedCol   int
 	styles       Styles
 	iconResolver IssueTypeIconResolver
+	keyMatcher   domain.TicketKeyMatcher
 	width        int
 	height       int
 }
@@ -29,11 +30,13 @@ var phaseOrder = [4]domain.MRPhase{
 	domain.PhaseReadyToMerge,
 }
 
-func newBoardWidget(styles Styles, width, height int, iconResolver IssueTypeIconResolver) boardWidget {
-	b := boardWidget{styles: styles, iconResolver: iconResolver, width: width, height: height}
+func newBoardWidget(
+	styles Styles, width, height int, iconResolver IssueTypeIconResolver, keyMatcher domain.TicketKeyMatcher,
+) boardWidget {
+	b := boardWidget{styles: styles, iconResolver: iconResolver, keyMatcher: keyMatcher, width: width, height: height}
 	widths := columnWidths(width)
 	for i, phase := range phaseOrder {
-		b.columns[i] = newColumnWidget(phase, styles, widths[i], height, iconResolver)
+		b.columns[i] = newColumnWidget(phase, styles, widths[i], height, iconResolver, keyMatcher)
 		b.columns[i].SetActive(true)
 	}
 	b.columns[0].SetFocused(true)

@@ -88,6 +88,12 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		return nil, err
 	}
 
+	// keyMatcher is the single source of truth for ticket-key extraction and
+	// case normalization, shared by every consumer that parses or matches a
+	// ticket key (jiraadpt here, and internal/tui independently builds its
+	// own equal-by-construction matcher from the same cfg.Jira setting).
+	keyMatcher := domain.NewTicketKeyMatcher(cfg.Jira.CaseInsensitiveTicketMatch)
+
 	var notifier domain.Notifier
 	if teamsCfg := cfg.Notifications.Teams; teamsCfg.WebhookURL != "" {
 		notifier = teamsnotify.New(teamsnotify.Config{
@@ -95,6 +101,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			UserMappings:  teamsCfg.UserMappings,
 			UserIDs:       teamsCfg.UserIDs,
 			TicketBaseURL: cfg.Jira.InstanceURL,
+			KeyMatcher:    keyMatcher,
 		}, logger)
 	}
 
@@ -115,6 +122,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			CacheDir:    filepath.Join(config.XDGCacheDir(), "jira"),
 			TTL:         j.CacheTTL,
 			LinkIconURL: j.RemoteLinkIconURL,
+			KeyMatcher:  keyMatcher,
 		}, logger)
 		if err != nil {
 			closer.Close()

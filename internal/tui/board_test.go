@@ -10,7 +10,7 @@ import (
 )
 
 func newTestBoard() boardWidget {
-	return newBoardWidget(Styles{}, 80, 24, IssueTypeIconResolver{})
+	return newBoardWidget(Styles{}, 80, 24, IssueTypeIconResolver{}, domain.NewTicketKeyMatcher(false))
 }
 
 // TestBoardWidget_SetMRs_SameIIDDifferentProject_NoCollision is the bug

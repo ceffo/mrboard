@@ -85,6 +85,7 @@ merge_requests:
     source_branch: ops-12-dark-mode
     created_ago: 9h37m
     updated_ago: 2h3m
+    approvers: [ada, margaret]
     reviewers:
       - {username: ada, state: not_started, waiting_ago: 9h37m}
     description: |-
@@ -292,6 +293,7 @@ merge_requests:
     created_ago: 6d2h
     updated_ago: 5d1h
     open_threads: 1
+    approvers: [ada, margaret]
     reviewers:
       - {username: margaret, approver: true, state: commented, waiting_ago: 5d1h}
     description: |-

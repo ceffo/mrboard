@@ -290,6 +290,7 @@ type Model struct {
 	notifier           domain.Notifier
 	alerts             toast.Model
 	ticketBaseURL      string
+	keyMatcher         domain.TicketKeyMatcher          // shared ticket-key extraction, see cfg.Jira
 	ticketEnricher     ticketsvc.TicketEnricher         // nil when the issue tracker is not configured
 	ticketLinker       ticketsvc.TicketLinker           // nil when the issue tracker is not configured
 	iconResolver       IssueTypeIconResolver            // maps issue type names to emoji
@@ -370,11 +371,12 @@ func New(
 	}
 
 	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
+	km := domain.NewTicketKeyMatcher(cfg.Jira.CaseInsensitiveTicketMatch)
 
 	m := Model{
 		state:              stateLoading,
 		header:             newHeaderWidget(styles),
-		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir),
+		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir, km),
 		footer:             newFooterWidget(styles, version),
 		helpModal:          newHelpModalWidget(styles),
 		sp:                 newSpinnerWidget(),
@@ -405,6 +407,7 @@ func New(
 		snapshotStore:      snapStore,
 		notifier:           notifier,
 		ticketBaseURL:      cfg.Jira.InstanceURL,
+		keyMatcher:         km,
 		ticketEnricher:     ticketEnricher,
 		ticketLinker:       ticketLinker,
 		ticketDescLinked:   make(map[ticketDescLinkKey]bool),
@@ -991,9 +994,9 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.keys.Reviewers.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
-			siblings := m.SiblingMRs(domain.ExtractJiraID(mr.Title))
+			siblings := m.SiblingMRs(m.keyMatcher.ExtractFromTitle(mr.Title))
 			m.reviewerEditor = newReviewerEditorWidget(
-				m.baseCtx, *mr, siblings, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster,
+				m.baseCtx, *mr, siblings, m.styles, m.reviewerEditorKeys, m.src, m.teamRoster, m.keyMatcher,
 			)
 			m.overlay.openOverlay(overlayKindReviewerEditor)
 			return m, nil
@@ -1009,7 +1012,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case m.keys.OpenTicket.Match(msg):
 		if mr := m.board.FocusedMR(); mr != nil {
-			if url := domain.JiraIssueURL(m.ticketBaseURL, domain.ExtractJiraID(mr.Title)); url != "" {
+			if url := domain.JiraIssueURL(m.ticketBaseURL, m.keyMatcher.ExtractFromTitle(mr.Title)); url != "" {
 				return m, openBrowser(url)
 			}
 		}
@@ -1221,7 +1224,7 @@ func (m *Model) updateTicketKey() {
 	if mr != nil {
 		m.selected = mr.Key()
 	}
-	enabled := m.ticketBaseURL != "" && mr != nil && domain.ExtractJiraID(mr.Title) != ""
+	enabled := m.ticketBaseURL != "" && mr != nil && m.keyMatcher.ExtractFromTitle(mr.Title) != ""
 	m.keys.OpenTicket.SetEnabled(enabled)
 }
 
@@ -1409,7 +1412,7 @@ func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd
 		return m, nil
 	}
 	for i := range m.allMRs {
-		if domain.ExtractJiraID(m.allMRs[i].Title) == msg.IssueKey {
+		if m.keyMatcher.ExtractFromTitle(m.allMRs[i].Title) == msg.IssueKey {
 			m.allMRs[i].JiraIssueType = msg.IssueType
 		}
 	}
@@ -1512,7 +1515,7 @@ func (m *Model) makeTicketEnrichCmds() tea.Cmd {
 	seen := make(map[string]struct{})
 	var cmds []tea.Cmd
 	for _, mr := range m.allMRs {
-		if issueKey := domain.ExtractJiraID(mr.Title); issueKey != "" {
+		if issueKey := m.keyMatcher.ExtractFromTitle(mr.Title); issueKey != "" {
 			if _, ok := seen[issueKey]; !ok {
 				seen[issueKey] = struct{}{}
 				cmds = append(cmds, makeTicketFetchCmd(m.baseCtx, m.ticketEnricher, issueKey))
@@ -1557,7 +1560,7 @@ func (m *Model) makeTicketLinkCmds() tea.Cmd {
 	}
 	var cmds []tea.Cmd
 	for _, mr := range m.allMRs {
-		issueKey := domain.ExtractJiraID(mr.Title)
+		issueKey := m.keyMatcher.ExtractFromTitle(mr.Title)
 		if issueKey == "" || mr.WebURL == "" {
 			continue
 		}
@@ -1617,7 +1620,7 @@ func (m *Model) makeTicketDescriptionLinkCmds() tea.Cmd {
 	}
 	var cmds []tea.Cmd
 	for _, mr := range m.allMRs {
-		issueKey := domain.ExtractJiraID(mr.Title)
+		issueKey := m.keyMatcher.ExtractFromTitle(mr.Title)
 		if issueKey == "" {
 			continue
 		}
@@ -1735,6 +1738,7 @@ func (m *Model) applyMRFilter() {
 		Reviewers:    m.filter.Reviewers,
 		SprintFilter: m.sprintFilterActive,
 		SprintKeys:   m.sprintIssueKeys,
+		KeyMatcher:   m.keyMatcher,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
@@ -1752,7 +1756,7 @@ func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
 func (m *Model) buildTicketIndex() {
 	idx := make(map[string][]domain.MergeRequest, len(m.allMRs))
 	for _, mr := range m.allMRs {
-		if key := domain.ExtractJiraID(mr.Title); key != "" {
+		if key := m.keyMatcher.ExtractFromTitle(mr.Title); key != "" {
 			idx[key] = append(idx[key], mr)
 		}
 	}

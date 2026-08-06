@@ -28,6 +28,9 @@ type FilterOptions struct {
 	// SprintKeys is the set of JIRA issue keys belonging to the active sprint.
 	// Applied only when SprintFilter is true and the set is non-empty.
 	SprintKeys map[string]bool
+	// KeyMatcher extracts an MR's ticket key from its title before matching
+	// it against SprintKeys. The zero value is case-sensitive.
+	KeyMatcher domain.TicketKeyMatcher
 }
 
 // FilterAndSort applies all active filters and then sorts the slice.
@@ -91,7 +94,7 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 	if opts.SprintFilter && len(opts.SprintKeys) > 0 {
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
-			if k := domain.ExtractJiraID(mr.Title); k != "" && opts.SprintKeys[k] {
+			if k := opts.KeyMatcher.ExtractFromTitle(mr.Title); k != "" && opts.SprintKeys[k] {
 				filtered = append(filtered, mr)
 			}
 		}

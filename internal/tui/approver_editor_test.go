@@ -24,6 +24,7 @@ func focusedMR() domain.MergeRequest {
 	return domain.MergeRequest{
 		ID: 1, IID: 10, ProjectID: 100, Author: "carol", ProjectPath: editorTestRepo,
 		Title:     "feat(OD-1): change",
+		Approvers: []string{editorTestApprover},
 		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover, IsApprover: true}},
 	}
 }
@@ -35,13 +36,14 @@ func siblingMR(iid int, approverUsernames ...string) domain.MergeRequest {
 	}
 	return domain.MergeRequest{
 		ID: iid, IID: iid, ProjectID: 100, ProjectPath: editorTestRepo,
-		Title: "feat(OD-1): related change", Reviewers: reviewers,
+		Title: "feat(OD-1): related change", Approvers: approverUsernames, Reviewers: reviewers,
 	}
 }
 
 func newTestReviewerEditor(siblings []domain.MergeRequest, src *mocks.MockMergeRequestSource) *reviewerEditorWidget {
 	return newReviewerEditorWidget(
 		context.Background(), focusedMR(), siblings, Styles{}, DefaultReviewerEditorKeyMap, src, nil,
+		domain.NewTicketKeyMatcher(false),
 	)
 }
 

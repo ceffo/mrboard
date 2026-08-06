@@ -319,6 +319,24 @@ func TestFilterAndSort_SprintFilter_IncludesOnlySprintMRs(t *testing.T) {
 	assert.Len(t, got, 2)
 }
 
+func TestFilterAndSort_SprintFilter_CaseInsensitiveMatchesRegardlessOfTitleCase(t *testing.T) {
+	mrs := []domain.MergeRequest{{ID: 1, IID: 1, Title: "fix(od-500): lowercase title key"}}
+	sprintKeys := map[string]bool{"OD-500": true}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{
+		SprintFilter: true, SprintKeys: sprintKeys, KeyMatcher: domain.NewTicketKeyMatcher(true),
+	})
+	assert.Len(t, got, 1, "lowercase title key should match the uppercase sprint key")
+}
+
+func TestFilterAndSort_SprintFilter_CaseSensitiveRequiresExactCase(t *testing.T) {
+	mrs := []domain.MergeRequest{{ID: 1, IID: 1, Title: "fix(od-500): lowercase title key"}}
+	sprintKeys := map[string]bool{"OD-500": true}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{
+		SprintFilter: true, SprintKeys: sprintKeys, KeyMatcher: domain.NewTicketKeyMatcher(false),
+	})
+	assert.Empty(t, got, "a differently-cased title key must not match when case-sensitive")
+}
+
 func TestFilterAndSort_SprintFilter_OffShowsAll(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		{ID: 1, IID: 1, Title: "feat(OD-100): in sprint"},

@@ -160,6 +160,13 @@ type MergeRequest struct {
 	TargetBranch        string // raw value from GitLab's target_branch field
 	Reviewers           []ReviewerInfo
 
+	// Approvers is the full membership of the "Approvers" approval rule —
+	// usernames eligible to approve, regardless of whether they are
+	// currently assigned as a reviewer on this MR. Distinct from
+	// ReviewerInfo.IsApprover, which only flags entries already present
+	// in Reviewers.
+	Approvers []string
+
 	CreatedAt         time.Time
 	UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, approvals, reviewer changes, title/draft edits
 	NonDraftSince     time.Time

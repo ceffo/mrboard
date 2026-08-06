@@ -87,12 +87,13 @@ type reviewerWriter interface {
 // When the MR shares a JIRA key with other open MRs, it also shows a sibling panel
 // so the same reviewer/approver edit can be applied to them — see siblings.
 type reviewerEditorWidget struct {
-	styles  Styles
-	keys    ReviewerEditorKeyMap
-	mr      domain.MergeRequest
-	src     reviewerWriter
-	baseCtx context.Context
-	roster  []domain.User // team roster from startup resolution (T action)
+	styles     Styles
+	keys       ReviewerEditorKeyMap
+	mr         domain.MergeRequest
+	src        reviewerWriter
+	baseCtx    context.Context
+	roster     []domain.User // team roster from startup resolution (T action)
+	keyMatcher domain.TicketKeyMatcher
 
 	// Staging buffer — local edits committed only on Enter.
 	staged        []stagedReviewer
@@ -128,8 +129,8 @@ type reviewerEditorWidget struct {
 // newReviewerEditorWidget creates a staged-buffer editor for the given MR.
 // roster is the resolved team from startup (may be nil for group-only configs).
 // siblings is every MR sharing the same JIRA key as mr, including mr itself
-// (e.g. Model.SiblingMRs(domain.ExtractJiraID(mr.Title))); nil or a single-element
-// slice means mr has no siblings to offer a batch apply to.
+// (e.g. Model.SiblingMRs(m.keyMatcher.ExtractFromTitle(mr.Title))); nil or a
+// single-element slice means mr has no siblings to offer a batch apply to.
 func newReviewerEditorWidget(
 	baseCtx context.Context,
 	mr domain.MergeRequest,
@@ -138,6 +139,7 @@ func newReviewerEditorWidget(
 	keys ReviewerEditorKeyMap,
 	src reviewerWriter,
 	roster []domain.User,
+	keyMatcher domain.TicketKeyMatcher,
 ) *reviewerEditorWidget {
 	// Build the initial staged list from the MR's current reviewers, excluding the author.
 	staged := make([]stagedReviewer, 0, len(mr.Reviewers))
@@ -163,6 +165,7 @@ func newReviewerEditorWidget(
 		src:           src,
 		baseCtx:       baseCtx,
 		roster:        roster,
+		keyMatcher:    keyMatcher,
 		staged:        staged,
 		origApprovers: origApprovers,
 		userIDByName:  make(map[string]int64),
@@ -522,7 +525,7 @@ func (w *reviewerEditorWidget) render() string {
 	// Line 2: MR title
 	line2 := w.styles.PopupItem.Render(w.mr.Title)
 	sb.WriteString(line1 + "\n" + line2 + "\n")
-	if key := domain.ExtractJiraID(w.mr.Title); key != "" && len(w.siblings) > 1 {
+	if key := w.keyMatcher.ExtractFromTitle(w.mr.Title); key != "" && len(w.siblings) > 1 {
 		sb.WriteString(w.styles.PopupHint.Render(fmt.Sprintf("🎫 %s · %d linked MRs", key, len(w.siblings))) + "\n")
 	}
 	sb.WriteString("\n")
@@ -578,7 +581,7 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 }
 
 // renderSiblings shows the read-only list of MRs sharing mr's JIRA key. Each
-// row is flagged with a conflict badge when its current approver set differs
+// row is flagged with a conflict badge when its "Approvers" rule differs
 // from mr's — a warning, not a block: the write still applies to it on
 // confirm (via the batch preview screen) unless the user excludes it there.
 func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {

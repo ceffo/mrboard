@@ -138,9 +138,10 @@ func TestOffsetsAreWholeMinutes(t *testing.T) {
 func TestTicketedMRsCarryBackLinkMarker(t *testing.T) {
 	a := newTestAdapter(t)
 
+	km := domain.NewTicketKeyMatcher(false)
 	ticketed := 0
 	for _, mr := range a.ds.all() {
-		if domain.ExtractJiraID(mr.Title) == "" {
+		if km.ExtractFromTitle(mr.Title) == "" {
 			continue
 		}
 		ticketed++
@@ -317,9 +318,10 @@ func TestSprintFilterNarrowsTheBoard(t *testing.T) {
 	for _, k := range a.ds.sprintKeys {
 		inSprint[k] = true
 	}
+	km := domain.NewTicketKeyMatcher(false)
 	var matched int
 	for _, mr := range a.ds.all() {
-		if inSprint[domain.ExtractJiraID(mr.Title)] {
+		if inSprint[km.ExtractFromTitle(mr.Title)] {
 			matched++
 		}
 	}

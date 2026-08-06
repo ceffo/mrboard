@@ -1,6 +1,7 @@
 package gitlabadpt
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -223,6 +224,20 @@ func applyApproverFlag(reviewers []domain.ReviewerInfo, approvers map[string]boo
 	return reviewers
 }
 
+// sortedUsernames returns the set's members sorted, for a deterministic
+// domain.MergeRequest.Approvers slice.
+func sortedUsernames(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	usernames := make([]string, 0, len(set))
+	for u := range set {
+		usernames = append(usernames, u)
+	}
+	sort.Strings(usernames)
+	return usernames
+}
+
 // MapMR converts raw GitLab API responses into a domain.MergeRequest.
 func MapMR(
 	mr *gl.BasicMergeRequest,
@@ -250,7 +265,8 @@ func MapMR(
 	}
 	events := normalizeDiscussionEventsREST(discussions)
 	reviewers := domain.DeriveReviewerInfos(refs, events, approvedBy, mrCreatedAt)
-	reviewers = applyApproverFlag(reviewers, approverSetFromRESTRules(approvalRules))
+	approverSet := approverSetFromRESTRules(approvalRules)
+	reviewers = applyApproverFlag(reviewers, approverSet)
 	openThreads := countOpenThreads(restThreadStates(discussions))
 
 	domainMR := domain.MergeRequest{
@@ -263,6 +279,7 @@ func MapMR(
 		TargetBranch:   mr.TargetBranch,
 		ProjectPath:    projectPathFromRef(mr.References),
 		Reviewers:      reviewers,
+		Approvers:      sortedUsernames(approverSet),
 		CreatedAt:      mrCreatedAt,
 		UpdatedAt:      mrUpdatedAt,
 		OpenThreads:    openThreads,
@@ -352,7 +369,8 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 
 	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
 	reviewers := domain.DeriveReviewerInfos(refs, events, approvedBy, createdAt)
-	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalState.Rules))
+	approverSet := approverSetFromGQLRules(mr.ApprovalState.Rules)
+	reviewers = applyApproverFlag(reviewers, approverSet)
 	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{
@@ -367,6 +385,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		AuthorName:     mr.Author.Name,
 		ProjectPath:    mr.Project.FullPath,
 		Reviewers:      reviewers,
+		Approvers:      sortedUsernames(approverSet),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    openThreads,
@@ -395,19 +414,21 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 // discussions were fetched, so there is no fresher data for them. Every other
 // field is phase-1's freshly-fetched value, including DetailedMergeStatus,
 // which is not covered by updatedAt and can silently change (mergeable ->
-// conflict) without a discussions fetch. IsApprover is recomputed from phase-1's
-// always-fresh approvalState.rules — that resolver deliberately isn't cached
-// (see the ADR) — but reviewer State/WaitingSince/ApprovedAt come from cached,
-// since GitLab bumps updatedAt on every note, approval, and reviewer change, so
-// a real updatedAt match means those can't have moved. Phase, WaitingSince, and
-// ReadyToMergeSince are re-derived from the merged result so a changed
-// DetailedMergeStatus still moves the MR between board columns.
+// conflict) without a discussions fetch. IsApprover and Approvers are
+// recomputed from phase-1's always-fresh approvalState.rules — that resolver
+// deliberately isn't cached (see the ADR) — but reviewer State/WaitingSince/
+// ApprovedAt come from cached, since GitLab bumps updatedAt on every note,
+// approval, and reviewer change, so a real updatedAt match means those can't
+// have moved. Phase, WaitingSince, and ReadyToMergeSince are re-derived from
+// the merged result so a changed DetailedMergeStatus still moves the MR
+// between board columns.
 func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest) domain.MergeRequest {
 	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
 	updatedAt, _ := time.Parse(time.RFC3339, mr.UpdatedAt) //nolint:errcheck
 
+	approverSet := approverSetFromGQLRules(mr.ApprovalState.Rules)
 	reviewers := append([]domain.ReviewerInfo(nil), cached.Reviewers...)
-	reviewers = applyApproverFlag(reviewers, approverSetFromGQLRules(mr.ApprovalState.Rules))
+	reviewers = applyApproverFlag(reviewers, approverSet)
 
 	domainMR := domain.MergeRequest{
 		ID:             parseGIDNumericSafe(mr.ID),
@@ -421,6 +442,7 @@ func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest
 		AuthorName:     mr.Author.Name,
 		ProjectPath:    mr.Project.FullPath,
 		Reviewers:      reviewers,
+		Approvers:      sortedUsernames(approverSet),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    cached.OpenThreads,

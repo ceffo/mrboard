@@ -26,18 +26,21 @@ type columnWidget struct {
 	scrollOffset int
 	styles       Styles
 	iconResolver IssueTypeIconResolver
+	keyMatcher   domain.TicketKeyMatcher
 	width        int
 	height       int
 }
 
 func newColumnWidget(
-	phase domain.MRPhase, styles Styles, width, height int, iconResolver IssueTypeIconResolver,
+	phase domain.MRPhase, styles Styles, width, height int,
+	iconResolver IssueTypeIconResolver, keyMatcher domain.TicketKeyMatcher,
 ) columnWidget {
 	return columnWidget{
 		phase:        phase,
 		name:         phaseName(phase),
 		styles:       styles,
 		iconResolver: iconResolver,
+		keyMatcher:   keyMatcher,
 		width:        width,
 		height:       height,
 	}
@@ -85,7 +88,7 @@ func (c *columnWidget) SetCards(mrs []domain.MergeRequest) {
 	c.cards = make([]cardWidget, len(mrs))
 	c.cardHeights = make([]int, len(mrs))
 	for i, mr := range mrs {
-		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth, c.iconResolver)
+		c.cards[i] = newCardWidget(mr, c.styles, c.width-colBorderWidth, c.iconResolver, c.keyMatcher)
 		c.cardHeights[i] = c.cards[i].measureHeight(c.width - colBorderWidth)
 	}
 	c.scrollOffset = 0

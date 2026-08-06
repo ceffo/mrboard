@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ceffo/mrboard/internal/domain"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
 
@@ -59,9 +60,18 @@ func (f *fakeClient) CreateOrUpdateRemoteLink(_ context.Context, _ string, _ pkg
 	return f.createRemoteErr
 }
 
+const testCacheDir = "/cache"
+
 func newTestAdapter(t *testing.T, client jiraClient, ttl time.Duration) *JiraAdapter {
 	t.Helper()
-	a, err := New(client, Config{FS: afero.NewMemMapFs(), CacheDir: "/cache", TTL: ttl}, slog.Default())
+	return newTestAdapterWithConfig(t, client, Config{TTL: ttl})
+}
+
+func newTestAdapterWithConfig(t *testing.T, client jiraClient, cfg Config) *JiraAdapter {
+	t.Helper()
+	cfg.FS = afero.NewMemMapFs()
+	cfg.CacheDir = testCacheDir
+	a, err := New(client, cfg, slog.Default())
 	require.NoError(t, err)
 	return a
 }
@@ -104,6 +114,30 @@ func TestGetIssueType_NotFound(t *testing.T) {
 	assert.Empty(t, typ)
 }
 
+func TestGetIssueType_CaseInsensitiveMatch_SharesCacheAcrossCase(t *testing.T) {
+	fc := &fakeClient{issue: &pkgjira.Issue{Key: "OD-3", Type: "Task"}}
+	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(true)})
+
+	_, err := a.GetIssueType(context.Background(), "od-3")
+	require.NoError(t, err)
+
+	// a subsequent lookup in a different case must hit the same cache entry
+	_, err = a.GetIssueType(context.Background(), "OD-3")
+	require.NoError(t, err)
+	assert.Equal(t, 1, fc.calls, "differently-cased lookups of the same key should share one cache entry")
+}
+
+func TestGetIssueType_CaseSensitive_KeepsKeyAsIs(t *testing.T) {
+	fc := &fakeClient{issue: &pkgjira.Issue{Key: "od-4", Type: "Task"}}
+	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(false)})
+
+	_, err := a.GetIssueType(context.Background(), "od-4")
+	require.NoError(t, err)
+	_, err = a.GetIssueType(context.Background(), "OD-4")
+	require.NoError(t, err)
+	assert.Equal(t, 2, fc.calls, "differently-cased lookups must not share a cache entry when case-sensitive")
+}
+
 func TestGetActiveSprintIssueKeys_LiveAndCached(t *testing.T) {
 	fc := &fakeClient{
 		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
@@ -121,6 +155,19 @@ func TestGetActiveSprintIssueKeys_LiveAndCached(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys2)
 	assert.Equal(t, 2, fc.calls, "expected cache hit")
+}
+
+func TestGetActiveSprintIssueKeys_CaseInsensitiveMatch_UppercasesKeys(t *testing.T) {
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: "Active Sprint"},
+		sprintKeys: []string{"od-10", "Od-11"},
+	}
+	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(true)})
+
+	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys,
+		"sprint issue keys should be uppercased to match the shared TicketKeyMatcher's canonical output")
 }
 
 func TestGetActiveSprintIssueKeys_NoActiveSprint(t *testing.T) {

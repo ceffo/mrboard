@@ -28,13 +28,17 @@ type cardWidget struct {
 	mr            domain.MergeRequest
 	styles        Styles
 	iconResolver  IssueTypeIconResolver
+	keyMatcher    domain.TicketKeyMatcher
 	focused       bool
 	focusInactive bool // focused but board does not own the keyboard (detail panel open)
 	width         int
 }
 
-func newCardWidget(mr domain.MergeRequest, styles Styles, width int, iconResolver IssueTypeIconResolver) cardWidget {
-	return cardWidget{mr: mr, styles: styles, width: width, iconResolver: iconResolver}
+func newCardWidget(
+	mr domain.MergeRequest, styles Styles, width int,
+	iconResolver IssueTypeIconResolver, keyMatcher domain.TicketKeyMatcher,
+) cardWidget {
+	return cardWidget{mr: mr, styles: styles, width: width, iconResolver: iconResolver, keyMatcher: keyMatcher}
 }
 
 func (c *cardWidget) SetFocused(v bool)       { c.focused = v }
@@ -55,7 +59,7 @@ func (c cardWidget) measureHeight(w int) int {
 	nTitle := len(wrapLines(c.mr.Title, innerWidth, cardTitleLines))
 	nPills := len(c.wrapPills(now, innerWidth))
 	nTicket := 0
-	if domain.ExtractJiraID(c.mr.Title) != "" {
+	if c.keyMatcher.ExtractFromTitle(c.mr.Title) != "" {
 		nTicket = 1
 	}
 
@@ -175,7 +179,7 @@ const iconDisplayCols = 2
 // Returns "" when the MR title contains no extractable JIRA key.
 // Uses 🎫 as a loading placeholder until JiraIssueType is populated.
 func (c cardWidget) renderLine3() string {
-	key := domain.ExtractJiraID(c.mr.Title)
+	key := c.keyMatcher.ExtractFromTitle(c.mr.Title)
 	if key == "" {
 		return ""
 	}

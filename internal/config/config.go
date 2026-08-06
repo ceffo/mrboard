@@ -60,6 +60,10 @@ type Jira struct {
 	IssueTypeIcons map[string]string `mapstructure:"issue_type_icons"` // override default emoji map
 	// RemoteLinkIconURL is a 16×16 icon URL shown on remote links in JIRA. Empty = no icon.
 	RemoteLinkIconURL string `mapstructure:"remote_link_icon_url"`
+	// CaseInsensitiveTicketMatch controls whether ticket keys (e.g. sprint issue
+	// keys fetched from JIRA vs. keys parsed out of MR titles) are matched
+	// case-insensitively. Default true; set false to require an exact-case match.
+	CaseInsensitiveTicketMatch bool `mapstructure:"case_insensitive_ticket_match"`
 }
 
 // Command is a user-configured external command launched against a selected MR card
@@ -179,6 +183,7 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("lifetime_warn_after", "72h")
 	v.SetDefault("lifetime_error_after", "120h")
 	v.SetDefault("jira.cache_ttl", "24h")
+	v.SetDefault("jira.case_insensitive_ticket_match", true)
 	v.SetDefault("refresh_interval", "60s")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.

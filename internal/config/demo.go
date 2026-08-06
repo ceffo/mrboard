@@ -51,11 +51,12 @@ func DemoConfig() *AppConfig {
 		LifetimeErrorAfter: demoErrorAfter,
 		RefreshInterval:    demoRefreshInterval,
 		Jira: Jira{
-			InstanceURL: "https://tickets.demo.invalid",
-			Email:       "demo@demo.invalid",
-			APIToken:    "demo-token-not-a-real-credential",
-			BoardID:     1,
-			CacheTTL:    demoTicketCacheTTL,
+			InstanceURL:                "https://tickets.demo.invalid",
+			Email:                      "demo@demo.invalid",
+			APIToken:                   "demo-token-not-a-real-credential",
+			BoardID:                    1,
+			CacheTTL:                   demoTicketCacheTTL,
+			CaseInsensitiveTicketMatch: true,
 		},
 		Log: logSection{
 			Path:  filepath.Join(os.TempDir(), "mrboard-demo.log"),

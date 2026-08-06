@@ -7,11 +7,7 @@ import (
 )
 
 func mrWithApprovers(usernames ...string) MergeRequest {
-	reviewers := make([]ReviewerInfo, len(usernames))
-	for i, u := range usernames {
-		reviewers[i] = ReviewerInfo{Username: u, IsApprover: true}
-	}
-	return MergeRequest{Reviewers: reviewers}
+	return MergeRequest{Approvers: usernames}
 }
 
 func TestApproversConflict_SameSet_NoConflict(t *testing.T) {
@@ -33,16 +29,25 @@ func TestApproversConflict_DifferentSize_Conflict(t *testing.T) {
 }
 
 func TestApproversConflict_BothEmpty_NoConflict(t *testing.T) {
-	a := MergeRequest{Reviewers: []ReviewerInfo{{Username: "dave"}}} // reviewer, not approver
+	a := MergeRequest{Reviewers: []ReviewerInfo{{Username: "dave"}}} // reviewer, no approver rule
 	b := MergeRequest{}
-	assert.False(t, ApproversConflict(a, b), "MRs with no designated approvers should not conflict")
+	assert.False(t, ApproversConflict(a, b), "MRs with no eligible approvers should not conflict")
 }
 
-func TestApproversConflict_NonApproverReviewersIgnored(t *testing.T) {
-	a := MergeRequest{Reviewers: []ReviewerInfo{
-		{Username: "alice", IsApprover: true},
-		{Username: "eve", IsApprover: false},
-	}}
-	b := mrWithApprovers("alice")
-	assert.False(t, ApproversConflict(a, b), "a non-approver reviewer must not affect the approver-set comparison")
+func TestApproversConflict_ReviewerRosterIgnored(t *testing.T) {
+	// Regression test: two MRs sharing the identical "Approvers" rule must not
+	// be flagged as conflicting just because they currently have a different
+	// subset of that rule's members added as reviewers.
+	a := MergeRequest{
+		Approvers: []string{testUsername, testOther},
+		Reviewers: []ReviewerInfo{{Username: testUsername, IsApprover: true}},
+	}
+	b := MergeRequest{
+		Approvers: []string{testUsername, testOther},
+		Reviewers: []ReviewerInfo{
+			{Username: testUsername, IsApprover: true},
+			{Username: testOther, IsApprover: true},
+		},
+	}
+	assert.False(t, ApproversConflict(a, b), "a differing reviewer roster must not affect the approver-rule comparison")
 }

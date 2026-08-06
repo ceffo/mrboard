@@ -1,13 +1,15 @@
 package domain
 
-// ApproversConflict reports whether two MRs' current approver sets differ.
-// Only usernames flagged IsApprover are compared — reviewer state, waiting
-// time, and any other field are irrelevant. Used to warn (never block) when
-// editing reviewers across a group of sibling MRs that share a JIRA key but
-// started out with different approver rosters.
+// ApproversConflict reports whether two MRs' "Approvers" rule memberships
+// differ. Compares MergeRequest.Approvers — the full eligible-approver
+// roster — not who currently happens to be assigned as a reviewer, so two
+// sibling MRs with an identical approval rule but different reviewers
+// added so far are correctly reported as not conflicting. Used to warn
+// (never block) when editing reviewers across a group of sibling MRs that
+// share a JIRA key but started out with different approver rules.
 func ApproversConflict(a, b MergeRequest) bool {
-	setA := approverSet(a)
-	setB := approverSet(b)
+	setA := stringSet(a.Approvers)
+	setB := stringSet(b.Approvers)
 	if len(setA) != len(setB) {
 		return true
 	}
@@ -19,13 +21,10 @@ func ApproversConflict(a, b MergeRequest) bool {
 	return false
 }
 
-// approverSet returns the set of usernames flagged IsApprover on the MR.
-func approverSet(mr MergeRequest) map[string]bool {
-	set := make(map[string]bool, len(mr.Reviewers))
-	for _, r := range mr.Reviewers {
-		if r.IsApprover {
-			set[r.Username] = true
-		}
+func stringSet(usernames []string) map[string]bool {
+	set := make(map[string]bool, len(usernames))
+	for _, u := range usernames {
+		set[u] = true
 	}
 	return set
 }

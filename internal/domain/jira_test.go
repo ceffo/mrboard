@@ -6,6 +6,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	jiraKeyUppercase = "OD-3345"
+	jiraKeyLowercase = "od-3345"
+)
+
+func TestTicketKeyMatcher_ExtractFromTitle(t *testing.T) {
+	tests := []struct {
+		name            string
+		title           string
+		caseInsensitive bool
+		want            string
+	}{
+		{name: "case-sensitive recognizes an uppercase key", title: "feat(OD-3345): x", want: jiraKeyUppercase},
+		{name: "case-sensitive does not recognize a lowercase key", title: "fix(od-3345): x", want: ""},
+		{
+			name:  "case-insensitive upper-cases a lowercase key",
+			title: "fix(od-3345): x", caseInsensitive: true, want: jiraKeyUppercase,
+		},
+		{
+			name:  "case-insensitive leaves an uppercase key unchanged",
+			title: "feat(OD-3345): x", caseInsensitive: true, want: jiraKeyUppercase,
+		},
+		{name: "no key found returns empty regardless of mode", title: "chore: bump deps", caseInsensitive: true, want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewTicketKeyMatcher(tc.caseInsensitive)
+			assert.Equal(t, tc.want, m.ExtractFromTitle(tc.title), "ExtractFromTitle(%q)", tc.title)
+		})
+	}
+}
+
+func TestTicketKeyMatcher_Normalize(t *testing.T) {
+	assert.Equal(t, jiraKeyUppercase, NewTicketKeyMatcher(true).Normalize(jiraKeyLowercase),
+		"case-insensitive matcher should upper-case an already-known key")
+	assert.Equal(t, jiraKeyLowercase, NewTicketKeyMatcher(false).Normalize(jiraKeyLowercase),
+		"case-sensitive matcher should leave an already-known key unchanged")
+}
+
+func TestTicketKeyMatcher_ZeroValueIsCaseSensitive(t *testing.T) {
+	var m TicketKeyMatcher
+	assert.Equal(t, jiraKeyUppercase, m.ExtractFromTitle("feat(OD-3345): x"), "zero value should recognize an exact key")
+	assert.Empty(t, m.ExtractFromTitle("fix(od-3345): x"), "zero value should not recognize a lowercase key")
+}
+
 func TestHasJiraLink(t *testing.T) {
 	tests := []struct {
 		name        string

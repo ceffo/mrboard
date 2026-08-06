@@ -15,6 +15,7 @@ import (
 	"github.com/eko/gocache/lib/v4/store"
 	"github.com/spf13/afero"
 
+	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/pkg/diskstore"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
@@ -44,6 +45,10 @@ type Config struct {
 	// LinkIconURL is the URL of a 16×16 icon shown next to remote links in JIRA.
 	// Empty string omits the icon field from the payload.
 	LinkIconURL string
+	// KeyMatcher normalizes issue keys (both incoming lookups and keys
+	// returned from JIRA) so they agree with every other consumer of ticket
+	// keys across the system, e.g. MR-title extraction in internal/tui.
+	KeyMatcher domain.TicketKeyMatcher
 }
 
 // JiraAdapter implements ticketsvc.TicketEnricher and ticketsvc.TicketLinker backed
@@ -73,6 +78,7 @@ func New(client jiraClient, cfg Config, logger *slog.Logger) (*JiraAdapter, erro
 // GetIssueType implements ticketsvc.TicketEnricher.
 // Returns ("", nil) when the issue is not found.
 func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string, error) {
+	issueKey = a.cfg.KeyMatcher.Normalize(issueKey)
 	key := issueTypeCacheKey(issueKey)
 
 	var cached string
@@ -117,6 +123,9 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int,
 	keys, err := a.client.GetSprintIssueKeys(ctx, sprint.ID)
 	if err != nil {
 		return nil, fmt.Errorf("jiraadpt: get sprint %d issue keys: %w", sprint.ID, err)
+	}
+	for i, k := range keys {
+		keys[i] = a.cfg.KeyMatcher.Normalize(k)
 	}
 
 	a.setCache(ctx, key, keys)

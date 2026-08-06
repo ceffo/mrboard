@@ -97,6 +97,7 @@ type fixtureMR struct {
 	RoundTrips     int               `yaml:"round_trips"`
 	ReviewerSource bool              `yaml:"reviewer_source"`
 	Description    string            `yaml:"description"`
+	Approvers      []string          `yaml:"approvers"`
 	Reviewers      []fixtureReviewer `yaml:"reviewers"`
 	Threads        []fixtureThread   `yaml:"threads"`
 	Diff           *fixtureDiff      `yaml:"diff"`
@@ -292,7 +293,7 @@ func buildMR(
 		WebURL:              fmt.Sprintf("%s/%s/-/merge_requests/%d", strings.TrimRight(baseURL, "/"), path, fm.IID),
 		DetailedMergeStatus: fm.MergeStatus,
 		SourceBranch:        fm.SourceBranch, TargetBranch: target,
-		Reviewers: reviewers,
+		Reviewers: reviewers, Approvers: fm.Approvers,
 		CreatedAt: createdAt, UpdatedAt: updatedAt,
 		OpenThreads: fm.OpenThreads, RoundTripCount: fm.RoundTrips,
 		ReviewerSource: fm.ReviewerSource,
