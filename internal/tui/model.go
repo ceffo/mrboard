@@ -1367,7 +1367,7 @@ func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd
 	}
 	for i := range m.allMRs {
 		if m.keyMatcher.ExtractFromTitle(m.allMRs[i].Title) == msg.IssueKey {
-			m.allMRs[i].JiraIssueType = msg.IssueType
+			m.allMRs[i].IssueType = msg.IssueType
 		}
 	}
 	m.applyMRFilter()

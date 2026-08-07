@@ -177,13 +177,13 @@ const iconDisplayCols = 2
 
 // renderLine3 builds the optional JIRA line: icon + issue key.
 // Returns "" when the MR title contains no extractable JIRA key.
-// Uses 🎫 as a loading placeholder until JiraIssueType is populated.
+// Uses 🎫 as a loading placeholder until IssueType is populated.
 func (c cardWidget) renderLine3() string {
 	key := c.keyMatcher.ExtractFromTitle(c.mr.Title)
 	if key == "" {
 		return ""
 	}
-	icon := c.iconResolver.Resolve(c.mr.JiraIssueType)
+	icon := c.iconResolver.Resolve(c.mr.IssueType)
 	if lip.Width(icon) < iconDisplayCols {
 		icon += " "
 	}
