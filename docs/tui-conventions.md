@@ -117,6 +117,7 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `help_modal.go` | `?` help modal — centered contextual card built from the context stack |
 | `styles.go` | All lipgloss styles — one `Styles` struct, nowhere else |
 | `model.go` | Root `tea.Model` — program state, child composition, message routing |
+| `dirtyset.go` | `dirtySet` — write-race guard for local writes racing a landing fetch (docs/adr/0005) |
 | `board.go` | Board widget — column layout, cross-column focus |
 | `column.go` | Column widget — one per `MRPhase`, owns its card list |
 | `card.go` | Card widget — renders one `domain.MergeRequest` |

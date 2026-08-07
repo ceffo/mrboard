@@ -299,7 +299,7 @@ type Model struct {
 	sprintFilterActive bool                             // true when S-key sprint filter is toggled on
 	ticketIndex        map[string][]domain.MergeRequest // MRs by extracted issue key; rebuilt on every allMRs change
 	ticketDescLinked   map[ticketDescLinkKey]bool       // description back-link dedup, this session only
-	dirty              map[domain.MRKey]time.Time       // locally-written MRs unconfirmed by a fetch, see docs/adr/0005
+	dirty              dirtySet                         // locally-written MRs unconfirmed by a fetch, see docs/adr/0005
 	refreshInterval    time.Duration                    // auto-refresh cadence; <= 0 disables it, see docs/adr/0005
 	refreshGen         int                              // bumped on manual refresh to invalidate pending ticks
 }
@@ -411,7 +411,7 @@ func New(
 		ticketEnricher:     ticketEnricher,
 		ticketLinker:       ticketLinker,
 		ticketDescLinked:   make(map[ticketDescLinkKey]bool),
-		dirty:              make(map[domain.MRKey]time.Time),
+		dirty:              newDirtySet(),
 		refreshInterval:    cfg.RefreshInterval,
 		iconResolver:       ir,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
@@ -534,7 +534,7 @@ func (m *Model) startFetch() tea.Cmd {
 	src := m.src
 	includeReviewerMRs := m.includeReviewerMRs
 	previous := m.allMRs
-	forceStale := dirtyKeys(m.dirty)
+	forceStale := m.dirty.Keys()
 	fetchStartedAt := time.Now()
 	return func() tea.Msg {
 		defer cancel()
@@ -560,8 +560,7 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.state = stateBoard
 	m.isRefreshing = false
-	m.allMRs = m.applyFetchResult(msg)
-	m.clearResolvedDirty(msg)
+	m.allMRs = m.dirty.Resolve(m.allMRs, msg.MRs, msg.FetchStartedAt)
 	m.errors = msg.Errors
 	m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
 	// Only a wholly clean fetch may overwrite the cache. A partial or total
@@ -612,73 +611,6 @@ func (m Model) handleRefreshTick(msg refreshTickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.isRefreshing = true
 	return m, tea.Batch(next, sprintCmd, m.startFetch())
-}
-
-// dirtyKeys returns the keys of dirty as a slice, for passing to FetchOptions.ForceStale.
-func dirtyKeys(dirty map[domain.MRKey]time.Time) []domain.MRKey {
-	if len(dirty) == 0 {
-		return nil
-	}
-	keys := make([]domain.MRKey, 0, len(dirty))
-	for k := range dirty {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// applyFetchResult merges a landing FetchResultMsg into m.allMRs. For every
-// dirty key whose write happened after this fetch started, the landing entry
-// is stale relative to that write: the current local entry is kept in place
-// instead (docs/adr/0005, "The write race that ungating creates"). Every
-// other key — clean, or dirty but confirmed by this fetch — takes the
-// landing snapshot's value, matching the pre-dirty-set behavior of a
-// wholesale replace.
-func (m Model) applyFetchResult(msg FetchResultMsg) []domain.MergeRequest {
-	if len(m.dirty) == 0 {
-		return msg.MRs
-	}
-
-	oldByKey := make(map[domain.MRKey]domain.MergeRequest, len(m.allMRs))
-	for _, mr := range m.allMRs {
-		oldByKey[mr.Key()] = mr
-	}
-
-	seen := make(map[domain.MRKey]bool, len(msg.MRs))
-	result := make([]domain.MergeRequest, 0, len(msg.MRs))
-	for _, mr := range msg.MRs {
-		key := mr.Key()
-		seen[key] = true
-		if writeAt, dirty := m.dirty[key]; dirty && msg.FetchStartedAt.Before(writeAt) {
-			if old, ok := oldByKey[key]; ok {
-				result = append(result, old)
-				continue
-			}
-		}
-		result = append(result, mr)
-	}
-	// A dirty-and-stale key can be absent from the landing snapshot entirely
-	// (e.g. a concurrent phase-1 hiccup) — keep the local entry rather than
-	// silently dropping it.
-	for key, writeAt := range m.dirty {
-		if seen[key] || !msg.FetchStartedAt.Before(writeAt) {
-			continue
-		}
-		if old, ok := oldByKey[key]; ok {
-			result = append(result, old)
-		}
-	}
-	return result
-}
-
-// clearResolvedDirty drops every dirty entry confirmed by msg — one whose
-// fetch started at or after the write landed, so its value in msg.MRs (or
-// its absence, if the MR left the listing) reflects that write.
-func (m *Model) clearResolvedDirty(msg FetchResultMsg) {
-	for key, writeAt := range m.dirty {
-		if !msg.FetchStartedAt.Before(writeAt) {
-			delete(m.dirty, key)
-		}
-	}
 }
 
 // Update handles all incoming messages, driving toast alert animation for every tick.
@@ -1381,7 +1313,7 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 			break
 		}
 	}
-	m.dirty[updatedMR.Key()] = time.Now()
+	m.dirty.Mark(updatedMR.Key(), time.Now())
 	m.applyMRFilter()
 	m.updateTicketKey()
 
@@ -1699,7 +1631,7 @@ func makeTicketDescriptionLinkCmd(
 // complete per docs/adr/0005 and forces a fresh phase-2 fetch for the MR.
 func (m Model) handleTicketDescriptionLinkResult(msg TicketDescriptionLinkResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err == nil {
-		m.dirty[domain.MRKey{ProjectID: msg.ProjectID, IID: msg.MRIID}] = time.Now()
+		m.dirty.Mark(domain.MRKey{ProjectID: msg.ProjectID, IID: msg.MRIID}, time.Now())
 		return m, nil
 	}
 	delete(m.ticketDescLinked, ticketDescLinkKey{projectID: msg.ProjectID, mrIID: msg.MRIID})
