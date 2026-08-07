@@ -33,11 +33,11 @@ func TestMatchCustomCommand(t *testing.T) {
 	}
 	m := makeModelWithCommands(t, cmds)
 
-	got, ok := m.matchCustomCommand(tea.KeyPressMsg{Text: "H", Code: 'H'})
+	got, ok := m.customCommands.Resolve(tea.KeyPressMsg{Text: "H", Code: 'H'})
 	require.True(t, ok, "expected the configured 'H' key to match")
 	assert.Equal(t, "hunk view", got.Name)
 
-	_, ok = m.matchCustomCommand(tea.KeyPressMsg{Text: "z", Code: 'z'})
+	_, ok = m.customCommands.Resolve(tea.KeyPressMsg{Text: "z", Code: 'z'})
 	assert.False(t, ok, "an unconfigured key must not match")
 }
 

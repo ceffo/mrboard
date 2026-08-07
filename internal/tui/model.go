@@ -267,7 +267,7 @@ type Model struct {
 	errors             []error
 	errMsg             string
 	cfg                *config.Config
-	customCommandsCtx  *Context // user-configured external commands, see docs/adr/0004
+	customCommands     *CustomCommands // user-configured external commands, see docs/adr/0004
 	src                mrsvc.MergeRequestSource
 	store              domain.StateStore
 	allMRs             []domain.MergeRequest
@@ -393,7 +393,7 @@ func New(
 		themeMode:          themeMode,
 		hasDarkBg:          initialDark,
 		cfg:                cfg,
-		customCommandsCtx:  BuildCustomCommandsContext(cfg.Commands),
+		customCommands:     BuildCustomCommands(cfg.Commands),
 		src:                src,
 		store:              store,
 		currentUser:        cfg.CurrentUser,
@@ -754,7 +754,7 @@ func (m Model) baseStack() []*Context {
 	if m.showDetail {
 		return append(stack, DetailCtx)
 	}
-	return append(stack, BoardCtx, m.customCommandsCtx)
+	return append(stack, BoardCtx, m.customCommands.Context())
 }
 
 // contextStack is baseStack plus the help modal context when it is open.
@@ -868,7 +868,7 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Custom commands sit above BoardCtx in the stack (see baseStack), so a
 	// match here takes priority over the static board bindings below.
-	if cmd, ok := m.matchCustomCommand(msg); ok {
+	if cmd, ok := m.customCommands.Resolve(msg); ok {
 		return m.requireFocusedMR(cmd.Name, func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, m.execCommandCmd(*mr, cmd)
 		})
@@ -1125,16 +1125,6 @@ func (m Model) handleNotifyResult(msg NotifyResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.logger.Info("tui: notification delivered")
 	return m, m.toast(toast.InfoAlert, "Teams notified ✓")
-}
-
-// matchCustomCommand returns the configured command bound to msg's key, if any.
-func (m Model) matchCustomCommand(msg tea.KeyPressMsg) (config.Command, bool) {
-	for i, a := range m.customCommandsCtx.actions {
-		if a.Match(msg) {
-			return m.cfg.Commands[i], true
-		}
-	}
-	return config.Command{}, false
 }
 
 // execCommandCmd resolves cmd's argv against mr and returns a Cmd that

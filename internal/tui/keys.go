@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/ceffo/mrboard/internal/config"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/ceffo/mrboard/internal/config"
+)
 
 // This file is the single source of truth for every keybinding in mrboard:
 // each action is defined exactly once as an Action and registered into a
@@ -266,17 +270,45 @@ var BatchPreviewCtx = NewContext("batch-preview", "Batch preview", &DefaultBatch
 	WithFooterGroup("↑↓", "move", &DefaultBatchPreviewKeyMap.Up, &DefaultBatchPreviewKeyMap.Down),
 )
 
-// BuildCustomCommandsContext builds the context for user-configured external
-// commands (docs/adr/0004-external-command-launcher.md). Every configured
+// CustomCommands owns resolving a keypress to its configured external
+// command end to end (docs/adr/0004-external-command-launcher.md): Context
+// exposes the keybinding context for the stack, footer, and help modal;
+// Resolve finds the config.Command a keypress runs. Both are derived from the
+// same construction pass, so no caller re-derives the correspondence between
+// an Action and its config.Command (e.g. by re-deriving a shared slice index).
+type CustomCommands struct {
+	ctx      *Context
+	byAction map[*Action]config.Command
+}
+
+// BuildCustomCommands builds a CustomCommands from cmds. Every configured
 // command is PriorityModal (never competes for footer space) and CategoryAct
 // (grouped with refresh/open MR/reviewers/diff in the '?' help modal). Callers
-// push the returned context above BoardCtx so a configured key colliding with
-// a board default shadows it via the existing stacking rule.
-func BuildCustomCommandsContext(cmds []config.Command) *Context {
+// push Context() above BoardCtx so a configured key colliding with a board
+// default shadows it via the existing stacking rule.
+func BuildCustomCommands(cmds []config.Command) *CustomCommands {
 	actions := make([]*Action, 0, len(cmds))
+	byAction := make(map[*Action]config.Command, len(cmds))
 	for _, cmd := range cmds {
 		a := Act(cmd.Key, cmd.Name, PriorityModal, CategoryAct)
 		actions = append(actions, &a)
+		byAction[&a] = cmd
 	}
-	return NewDynamicContext("custom-commands", "Commands", actions)
+	return &CustomCommands{
+		ctx:      NewDynamicContext("custom-commands", "Commands", actions),
+		byAction: byAction,
+	}
+}
+
+// Context returns the keybinding context for the board stack.
+func (c *CustomCommands) Context() *Context { return c.ctx }
+
+// Resolve returns the configured command bound to msg's key, if any.
+func (c *CustomCommands) Resolve(msg tea.KeyPressMsg) (config.Command, bool) {
+	for _, a := range c.ctx.actions {
+		if a.Match(msg) {
+			return c.byAction[a], true
+		}
+	}
+	return config.Command{}, false
 }

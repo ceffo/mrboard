@@ -132,7 +132,7 @@ func TestBuildCustomCommandsContext(t *testing.T) {
 		{Name: "code review", Key: "R", Binary: "tuicr"},
 		{Name: "refresh via tool", Key: "r", Binary: "hunk"}, // collides with Board's "r" refresh
 	}
-	ctx := BuildCustomCommandsContext(cmds)
+	ctx := BuildCustomCommands(cmds).Context()
 
 	assert.Empty(t, ctx.footerItems(), "configured commands must never appear in the footer")
 

@@ -103,13 +103,18 @@ definitions; a lint-style test enforces this (grep-test over the package).
 User-defined commands from `mrboard.yaml`'s `commands:` list (see
 `mrboard.yaml.example` and [ADR-0004](adr/0004-external-command-launcher.md))
 become a keybinding context at runtime, built by
-`BuildCustomCommandsContext(cfg.Commands)` in `keys.go`. Unlike every other
-context, its `Action`s are not declared as struct fields — the set of commands
-is only known once config is loaded — so it is built via
+`BuildCustomCommands(cfg.Commands) *CustomCommands` in `keys.go`.
+`CustomCommands.Context()` returns the context; unlike every other context,
+its `Action`s are not declared as struct fields — the set of commands is only
+known once config is loaded — so it is built via
 `NewDynamicContext(name, title string, actions []*Action, opts ...ContextOpt)`
 in `keymap.go`, a slice-based sibling to the reflection-based `NewContext`.
 Downstream machinery (footer fill, help modal, shadowing) is unchanged, since
 none of it depends on how a context's `actions` were populated.
+`CustomCommands.Resolve(msg) (config.Command, bool)` is the other half: it
+maps a matched `Action` straight back to the `config.Command` it was built
+from (recorded at construction time), so dispatch never re-derives that
+correspondence from a shared slice index.
 
 The resulting context is pushed only in the `[Base, Board]` stack —
 `[Base, Board, Commands]` — never in Detail or an overlay. Sitting above
@@ -205,7 +210,7 @@ Sort mode and view mode move out of key labels into the header stats area:
 | File | Role |
 |---|---|
 | `internal/tui/keymap.go` | `Action`, `Category`, `Priority`, `Context`, `NewContext` (reflection + conflict panic), `NewDynamicContext` (slice-based, for configured commands), registry |
-| `internal/tui/keys.go` | **Only** place where `key.NewBinding` appears: all context definitions, plus `BuildCustomCommandsContext` |
+| `internal/tui/keys.go` | **Only** place where `key.NewBinding` appears: all context definitions, plus `CustomCommands`/`BuildCustomCommands` |
 | `internal/tui/footer.go` | Priority-fill renderer; version pinned right |
 | `internal/tui/help_modal.go` | `?` modal widget |
 | `internal/tui/keymap_test.go` | conflict test + single-definition-site test |
