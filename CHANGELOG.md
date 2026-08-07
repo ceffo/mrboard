@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.10.4] - 2026-08-06
+
+### Fixed
+- Batch reviewer edits could diverge from single-card edits: the batch path always started from an empty known-reviewers set instead of reusing IDs the editor had already resolved. Both paths now share one write command.
+- The JIRA sprint cache went stale on every scheduled auto-refresh because the periodic tick silently skipped the force-refresh signal. Sprint data now revalidates on every refresh tick.
+
+### Changed
+- Consolidated custom-command resolution in the TUI into a single code path.
+- Renamed the domain type `JiraIssueType` to `IssueType`.
+- Moved write-race dirty-set tracking into its own module.
+- Unified the keybinding guard used for focused-MR actions.
+
+## [0.10.3] - 2026-08-06
+
+### Fixed
+- Sibling MRs sharing a JIRA key were flagged "approvers differ" whenever their currently-assigned reviewers happened to differ, even when the actual approver rule was identical. The conflict check now compares approver-rule membership directly instead of reviewers.
+- Ticket-key matching was case-sensitive in some places and case-normalized in others, so the same JIRA key could be treated as different keys depending on where it was checked (cards, sibling grouping, sprint filter, JIRA/Teams links). All of these now share one canonical key matcher.
+
+## [0.10.2] - 2026-08-05
+
+### Fixed
+- Sprint membership was only fetched once at startup and cached for 24h, so an upstream sprint rollover could go unnoticed until well after the standup it was meant to inform. Sprint data is now force-refreshed on boot and on manual refresh.
+
 ## [0.10.1] - 2026-08-03
 
 ### Fixed
