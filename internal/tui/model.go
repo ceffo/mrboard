@@ -1368,7 +1368,7 @@ func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd
 func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
-		return m, nil
+		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
 	}
 	if len(msg.Keys) == 0 {
 		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.
