@@ -79,12 +79,14 @@ func TestAppendJiraLink(t *testing.T) {
 		{
 			name:        "empty description",
 			description: "",
-			want:        "---\n🎫 [OD-123](https://jira.example.com/browse/OD-123) <!-- mrboard -->",
+			want: "---\n<!-- mrboard: automated back-link below — do not edit or remove -->\n" +
+				"🎫 [OD-123](https://jira.example.com/browse/OD-123) <!-- mrboard -->",
 		},
 		{
 			name:        "non-empty description",
 			description: "some body",
-			want:        "some body\n---\n🎫 [OD-123](https://jira.example.com/browse/OD-123) <!-- mrboard -->",
+			want: "some body\n\n---\n<!-- mrboard: automated back-link below — do not edit or remove -->\n" +
+				"🎫 [OD-123](https://jira.example.com/browse/OD-123) <!-- mrboard -->",
 		},
 	}
 	for _, tc := range tests {

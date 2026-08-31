@@ -73,18 +73,27 @@ func JiraIssueURL(instanceURL, issueID string) string {
 // injected into an MR description. Its presence means the link was already written.
 const jiraLinkMarker = "<!-- mrboard -->"
 
+// jiraLinkAgentNotice is an HTML comment warning coding agents editing the MR
+// description not to touch the automated back-link below it. HTML comments
+// are invisible in rendered markdown, so this has no visual effect.
+const jiraLinkAgentNotice = "<!-- mrboard: automated back-link below — do not edit or remove -->"
+
 // HasJiraLink reports whether an MR description already carries the mrboard
 // back-link marker, per ADR-0003's idempotency rule.
 func HasJiraLink(description string) bool {
 	return strings.Contains(description, jiraLinkMarker)
 }
 
-// AppendJiraLink returns description with a JIRA back-link line appended:
-// existing body + "\n---\n🎫 [KEY](url) <!-- mrboard -->".
+// AppendJiraLink returns description with a JIRA back-link footer appended:
+// existing body + "\n\n---\n<agent notice>\n🎫 [KEY](url) <!-- mrboard -->".
+// The blank line before "---" is load-bearing: without it, GFM parses "---"
+// as a setext heading underline for the description's last line instead of
+// a thematic break, turning that line into a heading.
 func AppendJiraLink(description, instanceURL, issueKey string) string {
-	suffix := fmt.Sprintf("---\n🎫 [%s](%s) %s", issueKey, JiraIssueURL(instanceURL, issueKey), jiraLinkMarker)
+	suffix := fmt.Sprintf("---\n%s\n🎫 [%s](%s) %s",
+		jiraLinkAgentNotice, issueKey, JiraIssueURL(instanceURL, issueKey), jiraLinkMarker)
 	if description == "" {
 		return suffix
 	}
-	return description + "\n" + suffix
+	return description + "\n\n" + suffix
 }
