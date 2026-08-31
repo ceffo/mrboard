@@ -39,7 +39,7 @@ type MergeRequestSource interface {
 	// FetchMR fetches a single MR by project ID and MR IID.
 	FetchMR(ctx context.Context, projectID int64, mrIID int64) (domain.MergeRequest, error)
 
-	// GetProjectMembers returns all project members with Developer (40) or higher access.
+	// GetProjectMembers returns all project members.
 	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
 
 	// SaveApprovers writes the "Approvers" approval rule with the given user IDs.

@@ -411,8 +411,8 @@ func (a *GitLabAdapter) GetProjectMembers(ctx context.Context, projectID int64) 
 	logger := ilog.FromContext(ctx)
 	start := time.Now()
 	logger.Info("gitlab: get project members", "project_id", projectID)
-	const developerLevel = 40
-	members, err := a.client.GetProjectMembers(ctx, projectID, developerLevel)
+	const anyAccessLevel = 0
+	members, err := a.client.GetProjectMembers(ctx, projectID, anyAccessLevel)
 	if err != nil {
 		return nil, err
 	}

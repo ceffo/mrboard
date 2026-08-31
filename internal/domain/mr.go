@@ -90,7 +90,7 @@ type User struct {
 	Name     string
 }
 
-// ProjectMember is a GitLab project member (Developer or higher access level).
+// ProjectMember is a GitLab project member.
 type ProjectMember struct {
 	UserID   int64
 	Username string
