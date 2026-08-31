@@ -1591,8 +1591,10 @@ func (m *Model) makeTicketDescriptionLinkCmds() tea.Cmd {
 }
 
 // makeTicketDescriptionLinkCmd returns a Cmd that reads the MR description,
-// appends a ticket back-link if domain.HasJiraLink reports it's absent, and
-// writes it back via the generic mrsvc.MergeRequestSource.UpdateDescription.
+// ensures its back-link footer matches issueKey via domain.EnsureJiraLink —
+// appending it if absent, replacing it if the MR was retitled onto a
+// different ticket, leaving it untouched if already current — and writes any
+// change back via the generic mrsvc.MergeRequestSource.UpdateDescription.
 func makeTicketDescriptionLinkCmd(
 	base context.Context, src mrsvc.MergeRequestSource, ticketBaseURL string, projectID, mrIID int, issueKey string,
 ) tea.Cmd {
@@ -1603,10 +1605,10 @@ func makeTicketDescriptionLinkCmd(
 		if err != nil {
 			return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey, Err: err}
 		}
-		if domain.HasJiraLink(desc) {
+		newDesc, changed := domain.EnsureJiraLink(desc, ticketBaseURL, issueKey)
+		if !changed {
 			return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey}
 		}
-		newDesc := domain.AppendJiraLink(desc, ticketBaseURL, issueKey)
 		err = src.UpdateDescription(ctx, int64(projectID), int64(mrIID), newDesc)
 		return TicketDescriptionLinkResultMsg{ProjectID: projectID, MRIID: mrIID, IssueKey: issueKey, Err: err}
 	}

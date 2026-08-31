@@ -78,10 +78,21 @@ const jiraLinkMarker = "<!-- mrboard -->"
 // are invisible in rendered markdown, so this has no visual effect.
 const jiraLinkAgentNotice = "<!-- mrboard: automated back-link below — do not edit or remove -->"
 
-// HasJiraLink reports whether an MR description already carries the mrboard
-// back-link marker, per ADR-0003's idempotency rule.
-func HasJiraLink(description string) bool {
-	return strings.Contains(description, jiraLinkMarker)
+// jiraFooterPattern matches the mrboard-authored back-link footer built by
+// AppendJiraLink, anchored to the end of the description. The agent-notice
+// line and the blank line before "---" are both optional in the pattern so a
+// footer written before either was introduced is still recognized.
+var jiraFooterPattern = regexp.MustCompile(
+	`\n*---\n(?:<!--[^\n]*-->\n)?🎫 \[([A-Za-z]+-\d+)\]\([^)]*\) <!-- mrboard -->\s*$`)
+
+// ExtractLinkedTicketKey returns the ticket key already recorded in an MR
+// description's mrboard back-link footer, and whether a footer was found.
+func ExtractLinkedTicketKey(description string) (key string, ok bool) {
+	match := jiraFooterPattern.FindStringSubmatch(description)
+	if match == nil {
+		return "", false
+	}
+	return match[jiraIDSubmatch], true
 }
 
 // AppendJiraLink returns description with a JIRA back-link footer appended:
@@ -96,4 +107,20 @@ func AppendJiraLink(description, instanceURL, issueKey string) string {
 		return suffix
 	}
 	return description + "\n\n" + suffix
+}
+
+// EnsureJiraLink returns description with its mrboard back-link footer set to
+// issueKey, and whether the result differs from description. A missing
+// footer is appended; a footer already linking issueKey is returned
+// untouched; a footer linking a different key — e.g. the MR was retitled
+// onto a different ticket — is replaced rather than duplicated.
+func EnsureJiraLink(description, instanceURL, issueKey string) (string, bool) {
+	loc := jiraFooterPattern.FindStringSubmatchIndex(description)
+	if loc == nil {
+		return AppendJiraLink(description, instanceURL, issueKey), true
+	}
+	if description[loc[2]:loc[3]] == issueKey {
+		return description, false
+	}
+	return AppendJiraLink(description[:loc[0]], instanceURL, issueKey), true
 }

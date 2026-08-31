@@ -145,8 +145,8 @@ func TestTicketedMRsCarryBackLinkMarker(t *testing.T) {
 			continue
 		}
 		ticketed++
-		assert.True(t, domain.HasJiraLink(mr.Description),
-			"MR !%d has a ticket key but no back-link marker in its description", mr.IID)
+		_, ok := domain.ExtractLinkedTicketKey(mr.Description)
+		assert.True(t, ok, "MR !%d has a ticket key but no back-link marker in its description", mr.IID)
 	}
 	assert.Positive(t, ticketed, "the demo must show some ticketed MRs")
 }

@@ -51,19 +51,32 @@ func TestTicketKeyMatcher_ZeroValueIsCaseSensitive(t *testing.T) {
 	assert.Empty(t, m.ExtractFromTitle("fix(od-3345): x"), "zero value should not recognize a lowercase key")
 }
 
-func TestHasJiraLink(t *testing.T) {
+func TestExtractLinkedTicketKey(t *testing.T) {
 	tests := []struct {
 		name        string
 		description string
-		want        bool
+		wantKey     string
+		wantOK      bool
 	}{
-		{name: "marker present", description: "existing body\n---\n🎫 [OD-1](url) <!-- mrboard -->", want: true},
-		{name: "marker absent", description: "some description", want: false},
-		{name: "empty description", description: "", want: false},
+		{
+			name: "current footer format",
+			description: "body\n\n---\n<!-- mrboard: automated back-link below — do not edit or remove -->\n" +
+				"🎫 [OD-1](url) <!-- mrboard -->",
+			wantKey: "OD-1", wantOK: true,
+		},
+		{
+			name:        "pre-fix footer format (single newline, no agent notice)",
+			description: "existing body\n---\n🎫 [OD-1](url) <!-- mrboard -->",
+			wantKey:     "OD-1", wantOK: true,
+		},
+		{name: "marker absent", description: "some description", wantOK: false},
+		{name: "empty description", description: "", wantOK: false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, HasJiraLink(tc.description), "HasJiraLink(%q)", tc.description)
+			key, ok := ExtractLinkedTicketKey(tc.description)
+			assert.Equal(t, tc.wantOK, ok, "ExtractLinkedTicketKey(%q) ok", tc.description)
+			assert.Equal(t, tc.wantKey, key, "ExtractLinkedTicketKey(%q) key", tc.description)
 		})
 	}
 }
@@ -93,7 +106,43 @@ func TestAppendJiraLink(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := AppendJiraLink(tc.description, instanceURL, issueKey)
 			assert.Equal(t, tc.want, got, "AppendJiraLink()")
-			assert.True(t, HasJiraLink(got), "AppendJiraLink() result does not satisfy HasJiraLink: %q", got)
+			key, ok := ExtractLinkedTicketKey(got)
+			assert.True(t, ok, "ExtractLinkedTicketKey() could not find a footer in AppendJiraLink() result: %q", got)
+			assert.Equal(t, issueKey, key, "ExtractLinkedTicketKey() key")
 		})
 	}
+}
+
+func TestEnsureJiraLink(t *testing.T) {
+	const instanceURL = "https://jira.example.com"
+
+	t.Run("no footer appends one", func(t *testing.T) {
+		got, changed := EnsureJiraLink("some body", instanceURL, "OD-1")
+		assert.True(t, changed, "EnsureJiraLink() changed")
+		assert.Equal(t, AppendJiraLink("some body", instanceURL, "OD-1"), got, "EnsureJiraLink() result")
+	})
+
+	t.Run("footer already links the current key is left untouched", func(t *testing.T) {
+		description := AppendJiraLink("some body", instanceURL, "OD-1")
+		got, changed := EnsureJiraLink(description, instanceURL, "OD-1")
+		assert.False(t, changed, "EnsureJiraLink() changed")
+		assert.Equal(t, description, got, "EnsureJiraLink() result")
+	})
+
+	t.Run("footer linking a different key is replaced, body preserved", func(t *testing.T) {
+		description := AppendJiraLink("some body", instanceURL, "OD-1")
+		got, changed := EnsureJiraLink(description, instanceURL, "OD-2")
+		assert.True(t, changed, "EnsureJiraLink() changed")
+		assert.Equal(t, AppendJiraLink("some body", instanceURL, "OD-2"), got, "EnsureJiraLink() result")
+		key, ok := ExtractLinkedTicketKey(got)
+		assert.True(t, ok, "ExtractLinkedTicketKey() could not find a footer in EnsureJiraLink() result: %q", got)
+		assert.Equal(t, "OD-2", key, "ExtractLinkedTicketKey() key")
+	})
+
+	t.Run("pre-fix footer format is replaced with the current format", func(t *testing.T) {
+		description := "some body\n---\n🎫 [OD-1](url) <!-- mrboard -->"
+		got, changed := EnsureJiraLink(description, instanceURL, "OD-2")
+		assert.True(t, changed, "EnsureJiraLink() changed")
+		assert.Equal(t, AppendJiraLink("some body", instanceURL, "OD-2"), got, "EnsureJiraLink() result")
+	})
 }
