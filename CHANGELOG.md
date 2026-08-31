@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.6] - 2026-08-31
+
+### Added
+- MR descriptions whose JIRA back-link footer points at a stale ticket key (e.g. after the MR was retitled onto a different ticket) now get the footer corrected automatically instead of keeping the old link forever.
+
+### Fixed
+- The automated JIRA back-link footer appended to MR descriptions could turn the description's last line into a heading, because GitHub-Flavored Markdown treats a `---` line with no blank line before it as a heading underline rather than a separator.
+
+## [0.10.5] - 2026-08-19
+
+### Fixed
+- Sprint-fetch failures during a background refresh used to fail silently; they're now surfaced as a toast alert.
+
 ## [0.10.4] - 2026-08-06
 
 ### Fixed
