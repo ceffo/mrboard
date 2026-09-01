@@ -84,11 +84,13 @@ func TestDeriveReviewerInfos_SingleReviewer(t *testing.T) {
 			wantState: ReviewerNotStarted,
 		},
 		{
-			name: "re-review only → re-review requested",
+			// GitLab's "requested review from @X" note fires on initial assignment
+			// too, so a request with no prior comment must not read as a re-review.
+			name: "re-review only, never commented → not started",
 			events: []DiscussionEvent{
 				{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT1},
 			},
-			wantState: ReviewerReReviewRequested,
+			wantState: ReviewerNotStarted,
 		},
 		{
 			name:      "events from non-reviewer are ignored",
@@ -138,6 +140,7 @@ func TestDeriveReviewerInfos_MultipleReviewers(t *testing.T) {
 
 func TestDeriveReviewerInfos_WaitingSince_ReReviewRequested(t *testing.T) {
 	events := []DiscussionEvent{
+		{AuthorUsername: testUsername, Kind: KindComment, Timestamp: evT1},
 		{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT2},
 	}
 	result := DeriveReviewerInfos(singleReviewer(), events, nil, evT0)

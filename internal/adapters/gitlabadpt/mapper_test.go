@@ -100,6 +100,17 @@ func TestDeriveReviewerStates_NotStarted(t *testing.T) {
 	assert.Equal(t, domain.ReviewerNotStarted, result[0].State)
 }
 
+func TestDeriveReviewerStates_NewlyAssignedNoComment(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	discussions := []*gl.Discussion{
+		discussion(systemNote("requested review from @alice", t1)),
+	}
+
+	result := DeriveReviewerStates(m, discussions, approvals())
+
+	assert.Equal(t, domain.ReviewerNotStarted, result[0].State)
+}
+
 func TestDeriveReviewerStates_Commented(t *testing.T) {
 	m := mr(basicUser(testUserAlice, testUserAliceName))
 	discussions := []*gl.Discussion{

@@ -106,14 +106,20 @@ func CountRoundTrips(events []DiscussionEvent) int {
 
 // deriveReviewerState classifies a single reviewer's state from their timestamp
 // extremes and the authoritative approved flag.
+//
+// GitLab emits the same "requested review from @X" system note both when a
+// reviewer is first assigned and when the author genuinely re-requests review.
+// A re-review request only counts once the reviewer has actually commented —
+// otherwise a freshly assigned reviewer would be misclassified as waiting to
+// re-review something they never looked at.
 func deriveReviewerState(approved bool, lastComment, lastReReview time.Time) ReviewerState {
 	if approved {
 		return ReviewerApproved
 	}
-	if lastComment.IsZero() && lastReReview.IsZero() {
+	if lastComment.IsZero() {
 		return ReviewerNotStarted
 	}
-	if !lastReReview.IsZero() && (lastComment.IsZero() || lastReReview.After(lastComment)) {
+	if !lastReReview.IsZero() && lastReReview.After(lastComment) {
 		return ReviewerReReviewRequested
 	}
 	return ReviewerCommented
