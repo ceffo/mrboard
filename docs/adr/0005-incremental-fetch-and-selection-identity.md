@@ -149,6 +149,18 @@ This confirms the epic's central claim end-to-end, not just per-phase: a warm ca
 into ~0.6s, a 6–14x improvement, with the two-phase split fetching every MR's discussions exactly once
 per real change rather than once per fetch.
 
+### Phase-2 batch size ceiling
+
+GitLab enforces a per-request GraphQL query complexity limit (250). Each aliased MR sub-query in the
+phase-2 discussions request costs a fixed amount of that budget (measured: 16 MRs = complexity 256),
+so a single request cannot carry an unbounded number of changed MRs — a large simultaneous change set
+(a cold cache with many MRs, or many real changes landing between refreshes) would otherwise fail the
+whole batch at once. `enrichStage` (`gitlabadpt.go`) splits `changedGQL` into fixed-size chunks
+(`gqlDiscussionsBatchSize`, currently 12) via `chunkGQLMRs` and issues one aliased request per chunk,
+concurrently. This trades a few extra round trips in the (uncommon) large-batch case for never hitting
+the ceiling; the steady-state warm-cache path (0–3 changed MRs) is unaffected — it still fits in one
+chunk.
+
 ### Cache ownership: passed in, not held (resolved 2026-07-30)
 
 `GitLabAdapter` is stateless today — `New(client, cfg)`, with every method a pure function of its

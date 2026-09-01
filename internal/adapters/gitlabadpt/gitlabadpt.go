@@ -20,6 +20,13 @@ import (
 // enrichConcurrency caps the number of MRs being enriched simultaneously.
 const enrichConcurrency = 10
 
+// gqlDiscussionsBatchSize caps how many MRs go into one aliased phase-2
+// discussions query. GitLab enforces a per-query GraphQL complexity ceiling
+// of 250; each aliased MR sub-query costs ~16 complexity (measured: 16 MRs =
+// complexity 256), so this stays safely under the limit with margin for the
+// query's fixed overhead.
+const gqlDiscussionsBatchSize = 12
+
 // Config holds the adapter-specific configuration.
 type Config struct {
 	Sources           []mrsvc.Source
@@ -227,24 +234,26 @@ func (a *GitLabAdapter) enrichStage(
 	}
 	offset += len(unchangedGQL)
 
-	if len(changedGQL) > 0 {
+	for _, chunk := range chunkGQLMRs(changedGQL, gqlDiscussionsBatchSize) {
+		chunk, chunkOffset := chunk, offset
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			batchStart := time.Now()
-			enriched, err := a.enrichGQLMRsBatch(ctx, changedGQL)
+			enriched, err := a.enrichGQLMRsBatch(ctx, chunk)
 			logger.Info("gitlab: phase-2 batch discussions done",
-				"changed", len(changedGQL), "duration", ilog.FmtDur(time.Since(batchStart)))
+				"changed", len(chunk), "duration", ilog.FmtDur(time.Since(batchStart)))
 			if err != nil {
-				for i := range changedGQL {
-					results[offset+i] = result{err: err}
+				for i := range chunk {
+					results[chunkOffset+i] = result{err: err}
 				}
 				return
 			}
 			for i, domainMR := range enriched {
-				results[offset+i] = result{mr: domainMR}
+				results[chunkOffset+i] = result{mr: domainMR}
 			}
 		}()
+		offset += len(chunk)
 	}
 	wg.Wait()
 

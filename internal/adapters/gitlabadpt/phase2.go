@@ -13,8 +13,8 @@ import (
 // diffGQLStage splits phase-1 GraphQL survivors into unchanged (their
 // updatedAt matches the previous snapshot and the key wasn't forced stale) and
 // changed. A nil previous snapshot means every MR is changed — an
-// unconditional full fetch, which is what mrboard fetch (the CLI JSON dump)
-// gets since it always passes a nil Previous. See docs/adr/0005, "Two-phase
+// unconditional full fetch, which is what a cold cache (no snapshot file yet,
+// or `mrboard fetch --cold`) produces. See docs/adr/0005, "Two-phase
 // conditional fetch".
 func diffGQLStage(
 	toEnrichGQL []pkggitlab.GQLMergeRequest, previous []domain.MergeRequest, forceStale map[mrKey]bool,
@@ -35,6 +35,25 @@ func diffGQLStage(
 		changed = append(changed, mr)
 	}
 	return unchanged, changed, cachedByKey
+}
+
+// chunkGQLMRs splits mrs into groups of at most size, preserving order. Used
+// to keep each aliased phase-2 discussions query under GitLab's per-request
+// GraphQL complexity ceiling (see gqlDiscussionsBatchSize).
+func chunkGQLMRs(mrs []pkggitlab.GQLMergeRequest, size int) [][]pkggitlab.GQLMergeRequest {
+	if len(mrs) == 0 {
+		return nil
+	}
+	chunks := make([][]pkggitlab.GQLMergeRequest, 0, (len(mrs)+size-1)/size)
+	for len(mrs) > 0 {
+		n := size
+		if n > len(mrs) {
+			n = len(mrs)
+		}
+		chunks = append(chunks, mrs[:n])
+		mrs = mrs[n:]
+	}
+	return chunks
 }
 
 // enrichGQLMRsBatch completes N phase-1 thin GraphQL MRs with their
