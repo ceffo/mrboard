@@ -15,16 +15,40 @@ import (
 )
 
 func buildFetchCmd() *cobra.Command {
-	return &cobra.Command{
+	var reviewerMRs bool
+	var cold bool
+	cmd := &cobra.Command{
 		Use:   "fetch",
-		Short: "Fetch MRs and print as JSON",
+		Short: "Fetch MRs and print as JSON, mirroring the TUI's own fetch",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return execFetch(cmd.Context())
+			opts := fetchCmdOptions{cold: cold}
+			if cmd.Flags().Changed("reviewer-mrs") {
+				opts.reviewerMRsOverride = &reviewerMRs
+			}
+			return execFetch(cmd.Context(), opts)
 		},
 	}
+	cmd.Flags().BoolVar(&reviewerMRs, "reviewer-mrs", false,
+		"include reviewer-sourced MRs (default: the TUI's saved setting)")
+	cmd.Flags().BoolVar(&cold, "cold", false,
+		"ignore the on-disk snapshot and recompute every MR from scratch, "+
+			"bypassing incremental fetch (docs/adr/0005)")
+	return cmd
 }
 
-func execFetch(ctx context.Context) error {
+// fetchCmdOptions controls how closely this one-shot dump mirrors the TUI's
+// own fetch, so reviewer-state and other discussion-derived bugs can be
+// reproduced from the CLI without driving the interactive board.
+type fetchCmdOptions struct {
+	// reviewerMRsOverride, when set, replaces the TUI's saved IncludeReviewerMRs
+	// setting for this run.
+	reviewerMRsOverride *bool
+	// cold, when true, fetches with no Previous snapshot — every MR is
+	// recomputed from scratch instead of reusing the on-disk cache.
+	cold bool
+}
+
+func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 
 	const defaultTimeout = 30 * time.Second
@@ -35,7 +59,27 @@ func execFetch(ctx context.Context) error {
 	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{})
+	state, err := c.StateStore.Load()
+	if err != nil {
+		return fmt.Errorf("mrboard: loading app state: %w", err)
+	}
+	includeReviewerMRs := state.IncludeReviewerMRs
+	if opts.reviewerMRsOverride != nil {
+		includeReviewerMRs = *opts.reviewerMRsOverride
+	}
+
+	var previous []domain.MergeRequest
+	if !opts.cold {
+		previous, _, err = c.SnapshotStore.Load()
+		if err != nil {
+			return fmt.Errorf("mrboard: loading snapshot: %w", err)
+		}
+	}
+
+	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{
+		IncludeReviewerMRs: includeReviewerMRs,
+		Previous:           previous,
+	})
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}

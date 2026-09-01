@@ -171,9 +171,12 @@ changes invalidate it. Config changes need **no** invalidation mechanism: the sn
 lookup table keyed by MRs that phase 1 returned, so removing a source means its MRs are never looked
 up and disappear naturally.
 
-`mrboard fetch` (the CLI JSON dump) passes `FetchOptions{}` with a nil `Previous`, which is naturally
-a full unconditional fetch — no flag needed. It does **not** write the snapshot: it fetches without
-reviewer MRs, so its result is not a valid cache for the TUI.
+`mrboard fetch` (the CLI JSON dump) mirrors the TUI's own fetch by default — same saved
+`IncludeReviewerMRs` setting, same on-disk `Previous` snapshot — so discussion-derived bugs
+(reviewer state, round trips) can be reproduced from the CLI without driving the interactive board.
+`--cold` forces a nil `Previous` for a full unconditional recompute of every MR; `--reviewer-mrs`
+overrides the saved setting. It never writes the snapshot itself, so it cannot corrupt the TUI's
+cache no matter which flags are used.
 
 ### Non-blocking refresh (resolved 2026-07-30)
 
