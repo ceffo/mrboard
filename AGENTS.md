@@ -32,6 +32,21 @@ just check      # fmt + lint + build + test
 just generate   # regenerate all mocks (run after changing any interface in internal/service)
 ```
 
+## End of session checklist
+
+Before ending a coding session on this repo:
+- If a valid mrboard config is reachable (`./mrboard.toml`, `$MRBOARD_CONFIG`, or the XDG default
+  at `~/.config/mrboard/mrboard.yaml`), offer to test the change against real data before reporting
+  the task done — `agent-tui` for TUI changes, `mrboard fetch` (see the parity rule below) for
+  anything else. A green `just check` proves the code compiles and the unit tests pass; it does not
+  prove the change behaves correctly against a real board.
+- Offer to update the architecture docs (`docs/architecture.md`, `docs/domain-model.md`,
+  `docs/tui-conventions.md`, `docs/adr/`) if the change affected behavior, data flow, or a decision
+  any of them describe.
+
+Both are offers, not silent actions: get the user's go-ahead before running a real-data test or
+editing a doc, same as for any other non-trivial action.
+
 ## MANDATORY: TUI testing with agent-tui
 
 **Every TUI change MUST be verified with agent-tui before the task is considered done.**
@@ -53,6 +68,18 @@ Key facts for testing:
 - Use `agent-tui press Enter/Escape/ArrowUp/ArrowDown` for special keys
 - Always re-screenshot after each action; element refs go stale after any UI change
 - Check counts, labels, and visible state changes — not just "no crash"
+
+## MANDATORY: keep `mrboard fetch` at parity with the TUI
+
+Whenever a change touches how the TUI fetches or derives MR data — `mrsvc.FetchOptions`, the fetch
+commands in `internal/tui/model.go`, or anything in `internal/adapters/gitlabadpt` the TUI's fetch
+path exercises — update `internal/cmd/mrboard/fetch.go` so `mrboard fetch` keeps behaving the same
+way: same saved settings it reads, same snapshot/cache semantics, same flags to override them.
+
+`mrboard fetch` exists so discussion-derived bugs (reviewer state, round trips, open threads, etc.)
+can be reproduced and verified against real GitLab data from the command line, without driving the
+interactive TUI through agent-tui. Letting it drift out of parity removes that capability silently
+— the next debugging session won't know it's gone until it needs it.
 
 ## Writing tests
 
@@ -335,5 +362,16 @@ A resolved architectural/design decision goes into `docs/adr/` as a numbered ADR
 `docs/adr/0003-jira-remote-links.md`). One ADR per feature area, with `## Decision` subsections
 appended as sub-decisions resolve — not one ADR per ticket. Beads tickets close with a short
 `--reason`, nothing more; engram memory stays for session continuity, not decision content.
+
+### Documentation style
+
+Write and edit documentation (`docs/`, ADRs, README) from the reader's position, describing the
+system's **current** state — not the session, task, or history that produced it. Never narrate
+your own process ("I changed X because...", "this fixes the bug where...", "as discussed above",
+"previously this was..."). If a fact needs a *why*, give the durable reason (an invariant, an
+external constraint, a tradeoff) rather than the conversation that surfaced it. A reader opening
+the doc cold, with no memory of any session, should not be able to tell it was just edited.
+
+This is the "Code comments" rule from the global CLAUDE.md, applied to documentation.
 
 <!-- end-bv-agent-instructions -->

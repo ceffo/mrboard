@@ -17,14 +17,20 @@ const (
 
 ### State derivation (from GitLab discussion timeline)
 
-For each formally assigned reviewer, scan discussions chronologically:
+For each formally assigned reviewer, scan discussions chronologically and evaluate
+these conditions in order — the first match wins:
 
 | Condition | State |
 |---|---|
 | Reviewer has approved | `Approved` |
 | Reviewer has never commented | `NotStarted` |
-| Reviewer's last comment timestamp > last "requested review from @X" note | `Commented` |
 | Last "requested review from @X" note timestamp > reviewer's last comment | `ReReviewRequested` |
+| otherwise (reviewer's last comment is the most recent activity) | `Commented` |
+
+"Reviewer has never commented" takes priority over the re-review check: GitLab
+emits the identical "requested review from @X" note both when a reviewer is
+first assigned and when the author genuinely re-requests review, so a request
+note alone — with no comment ever recorded — must not be read as a re-review.
 
 System note text to match (case-insensitive): `"requested review from @<username>"`
 Draft toggle note to match: `"marked as ready"`
