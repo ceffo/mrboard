@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.8] - 2026-09-01
+
+### Added
+- `mrboard fetch` now has parity with the TUI's own fetch path: it reads the same saved reviewer-MR setting and on-disk snapshot, with `--reviewer-mrs` and `--cold` flags to override them, and never writes the snapshot back so it can't corrupt the TUI's cache.
+
+### Fixed
+- A freshly assigned reviewer with no comment was wrongly shown as waiting to re-review, because GitLab emits the same "requested review" note for initial assignment and genuine re-requests.
+- A single GraphQL discussions request covering many changed MRs could exceed GitLab's per-request complexity ceiling and fail outright; large batches are now split into fixed-size chunks.
+
+## [0.10.7] - 2026-08-31
+
+### Fixed
+- Reviewers without merge rights were dropped from a card on save and excluded from reviewer search, because member lookups were filtered to maintainer access level.
+
 ## [0.10.6] - 2026-08-31
 
 ### Added
