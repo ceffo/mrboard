@@ -126,8 +126,9 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
 | `approver_editor.go` | Reviewer/approver editor overlay (`v`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs |
 | `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — include/exclude toggle + change/conflict indicators |
-| `filter_popup.go` | Filter popup overlay (`f`) |
-| `theme_picker.go` | Theme picker overlay (`t`) |
+| `settings_widget.go` | Settings overlay (`,`) — Filters/Sorting/Theme tabs |
+| `overlay_router.go` | `overlayKind` — which exclusive overlay owns key input and rendering focus |
+| `jira_icons.go` | Issue-type icon lookup for JIRA-linked MR titles |
 | `footer.go` | Footer bar — priority-filled keybinding hints + version pinned right |
 | `header.go` | Header bar — title + MR stats |
 | `spinner.go` | Loading overlay |

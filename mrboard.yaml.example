@@ -1,7 +1,6 @@
 gitlab:
   url: https://gitlab.example.com
   token: glpat-xxx        # or set $GITLAB_TOKEN env var
-  required_approvals: 2   # default: 2
   timeout: 30s            # default: 30s
 
 sources:

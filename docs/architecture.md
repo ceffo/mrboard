@@ -5,26 +5,34 @@
 Ports-and-adapters (hexagonal) layout. Dependency arrows point inward — outer layers depend on
 inner abstractions, never the reverse.
 
+```mermaid
+graph TD
+    A["cmd/mrboard/main.go"] --> B["internal/cmd/mrboard<br>Cobra commands; boots core, launches TUI"]
+    B --> C["internal/core<br>composition root"]
+    C --> D["internal/config"]
+    C --> E["pkg/gitlab<br>REST + GQL client"]
+    C --> F["internal/adapters/gitlabadpt<br>implements mrsvc.MergeRequestSource"]
+    C --> J["internal/adapters/jiraadpt<br>implements ticketsvc ports"]
+    C --> K["internal/adapters/teamsnotify<br>implements domain.Notifier"]
+    B --> G["internal/tui<br>Bubble Tea; only layer importing charmbracelet"]
+    G --> H["internal/domain/service/mrsvc<br>ports owned by business layer"]
+    G --> L["internal/domain/service/ticketsvc<br>ports owned by business layer"]
 ```
-cmd/mrboard/main.go
-  └── internal/cmd/mrboard      (Cobra commands; boots core, launches TUI)
-        ├── internal/core        (composition root — wires config → adapters → stores)
-        │     ├── internal/config
-        │     ├── pkg/gitlab                (REST + GQL client; no domain imports)
-        │     └── internal/adapters/gitlabadpt   (implements mrsvc.MergeRequestSource)
-        └── internal/tui         (Bubble Tea TUI — only layer that imports charmbracelet)
-              └── internal/domain/service/mrsvc  (port interfaces owned by business layer)
 
-internal/domain                  (stdlib only — zero non-stdlib imports)
-internal/domain/service/mrsvc    (port interfaces; imports only internal/domain)
-pkg/gitlab                       (REST + GQL client; imports only stdlib + net/http libs)
-internal/adapters/gitlabadpt     (implements mrsvc; imports pkg/gitlab + internal/domain)
-internal/adapters/statestore     (implements domain.StateStore; stdlib + file I/O)
-internal/adapters/snapshotstore  (implements domain.SnapshotStore; stdlib + file I/O)
-internal/adapters/demoadpt       (implements every driven port from an embedded fixture; see adr/0006)
-internal/core                    (composition root; no TUI imports)
-internal/tui                     (charmbracelet v2; depends on mrsvc interfaces, never on adapters)
-```
+| Package | Import constraint |
+| --- | --- |
+| `internal/domain` | stdlib only — zero non-stdlib imports |
+| `internal/domain/service/mrsvc` | port interfaces; imports only `internal/domain` |
+| `internal/domain/service/ticketsvc` | port interfaces; imports only `internal/domain` |
+| `pkg/gitlab` | REST + GQL client; imports only stdlib + `net/http` libs |
+| `internal/adapters/gitlabadpt` | implements `mrsvc`; imports `pkg/gitlab` + `internal/domain` |
+| `internal/adapters/jiraadpt` | implements `ticketsvc` via `pkg/jira`, disk-cached |
+| `internal/adapters/teamsnotify` | implements `domain.Notifier` for Microsoft Teams |
+| `internal/adapters/statestore` | implements `domain.StateStore`; stdlib + file I/O |
+| `internal/adapters/snapshotstore` | implements `domain.SnapshotStore`; stdlib + file I/O |
+| `internal/adapters/demoadpt` | implements every driven port from an embedded fixture; see adr/0006 |
+| `internal/core` | composition root; no TUI imports |
+| `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc` interfaces, never on adapters |
 
 `internal/tui` depends on `mrsvc.MergeRequestSource` (the port), not on any adapter directly.
 This keeps every backend swappable and makes the TUI fully unit-testable with generated mocks.
@@ -39,13 +47,12 @@ name the capability, not the vendor — see AGENTS.md rule 7 for the full statem
 
 ## Data flow
 
-```
-cmd/mrboard/main.go
-  → config.Load()                         reads mrboard.yaml / $MRBOARD_CONFIG
-  → core.New(ctx, cfg)                    wires logger → pkg/gitlab.Client → gitlabadpt →
-                                             statestore → snapshotstore
-  → tui.New(ctx, cfg, core.MRSource, core.StateStore, core.SnapshotStore, ...)
-  → tea.NewProgram(model).Run()
+```mermaid
+graph TD
+    A["cmd/mrboard/main.go"] --> B["config.Load()<br>reads mrboard.yaml: XDG default,<br>./mrboard.yaml, or --config path"]
+    B --> C["core.New(ctx, cfg)<br>wires logger, pkg/gitlab.Client, gitlabadpt,<br>jiraadpt, teamsnotify, statestore, snapshotstore"]
+    C --> D["tui.New(ctx, cfg, core.MRSource, ...)"]
+    D --> E["tea.NewProgram(model).Run()"]
 ```
 
 On startup the TUI boots from `domain.SnapshotStore.Load()` (see
@@ -58,6 +65,12 @@ for unchanged MRs. Every landed `FetchResultMsg` is persisted via `SnapshotStore
 refresh (`r`) and the `refresh_interval` timer both repeat the same cycle; a tick is skipped while
 a fetch is already in flight.
 
+Each landed fetch also drives, in order: ticket enrichment and the JIRA description back-link via
+`ticketsvc.TicketEnricher`/`TicketLinker` (`docs/adr/0003-jira-remote-links.md`), then
+`mrsvc.AutoAssignReviewers` for newly opened, ticket-linked MRs with no reviewers yet, gated by
+`auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard update` runs
+the same auto-assign step as a standalone command, outside the TUI.
+
 Detail panel (`↵`) calls `MergeRequestSource.GetDetail(ctx, projectID, mrIID)`.
 
 Diff view (`d`) calls `MergeRequestSource.GetDiff(ctx, projectID, mrIID)`, then lazily calls
@@ -65,6 +78,9 @@ Diff view (`d`) calls `MergeRequestSource.GetDiff(ctx, projectID, mrIID)`, then 
 
 Approver editor (`a`) calls `GetProjectMembers` / `SaveApprovers` and re-fetches the affected
 MR via `FetchMR` after a successful write.
+
+The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
+for Microsoft Teams.
 
 ## File layout
 
@@ -74,26 +90,38 @@ mrboard/
     main.go                # Signal handling; calls mrboardcmd.Execute
   internal/
     cmd/mrboard/
-      root.go              # Cobra root command; boots core, passes to board
-      board.go             # `mrboard run` subcommand
-      fetch.go             # Background fetch loop
+      root.go              # Cobra root command; boots core, launches the board by default
+      board.go             # execBoard — launches the TUI
+      fetch.go             # `mrboard fetch` — one-shot JSON dump, mirrors the TUI's read path
+      update.go            # `mrboard update` — one-shot auto-assign-reviewers write (adr/0009)
       version.go           # `mrboard version` subcommand
     config/
       config.go            # AppConfig, Load(), typed sub-config accessors
+      demo.go              # DemoConfig() — in-memory config for --demo, no file/network needed
     core/
       core.go              # Composition root — builds and wires all dependencies
+      demo.go              # NewDemo() — wires Core against demoadpt instead of real adapters
     domain/
       mr.go                # All domain types (see domain-model.md)
       state.go             # StateStore + SnapshotStore interfaces
       service/mrsvc/
         mrsvc.go           # MergeRequestSource port + SourceType, Source, Config
         filter.go          # MR filtering helpers
+        auto_assign.go     # AutoAssignReviewers eligibility + write (adr/0009)
+        reviewer_writes.go # ApplyReviewerChanges — shared reviewer/approver write path
+        mocks/             # mockery-generated doubles
+      service/ticketsvc/
+        ticketsvc.go       # Vendor-neutral TicketEnricher/TicketLinker ports
         mocks/             # mockery-generated doubles
     adapters/
       gitlabadpt/
         gitlabadpt.go      # MergeRequestSource implementation (REST + GQL)
         mapper.go          # Maps pkg/gitlab types → domain.MergeRequest
         dedup.go           # Cross-source deduplication
+      jiraadpt/
+        jiraadpt.go        # ticketsvc.TicketEnricher + TicketLinker via pkg/jira, disk-cached
+      teamsnotify/
+        teamsnotify.go     # domain.Notifier for Microsoft Teams via a Power Automate webhook
       statestore/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
       snapshotstore/
@@ -104,17 +132,23 @@ mrboard/
     log/
       log.go               # slog wrapper (file + stderr)
     tui/
-      keys.go              # All KeyMap types — keybindings live here only
+      keys.go              # Concrete KeyMap structs + per-context bindings — keybindings live here only
+      keymap.go            # Action/Context/Category primitives + Act() — generic keybinding infra
       styles.go            # Styles struct — all lipgloss styles live here only
       model.go             # Root tea.Model — program state, message routing
+      dirtyset.go          # dirtySet — guards in-flight local edits against a stale fetch overwrite
       board.go             # Board widget — column layout, cross-column focus
       column.go            # Column widget — one per MRPhase
       card.go              # MR card widget — one per domain.MergeRequest
       detail.go            # Detail panel widget — description + discussion threads
       diff_view.go         # Full-screen diff view widget (press d)
       approver_editor.go   # Approver editor overlay (press a)
-      filter_popup.go      # Filter popup overlay (press f)
-      theme_picker.go      # Theme picker overlay (press t)
+      batch_preview.go     # Preview overlay for a batch reviewer edit
+      settings_widget.go   # Settings overlay (press ,) — Filters/Sorting/Theme tabs
+      overlay_router.go    # overlayKind — which exclusive overlay owns input focus
+      help_modal.go        # Full keybinding help modal (press ?)
+      command_argv.go      # Resolves external-command argv templates against MR metadata (adr/0004)
+      jira_icons.go        # Issue-type icon lookup for JIRA-linked MR titles
       footer.go            # Help/keybinding bar
       header.go            # Header bar (title + stats)
       spinner.go           # Loading overlay
@@ -127,6 +161,7 @@ mrboard/
       client.go            # Authenticated REST + GQL client
       graphql.go           # GraphQL query helpers
       config.go            # pkg/gitlab.Config
+    jira/                  # JIRA REST client, used by internal/adapters/jiraadpt
     theme/
       model.go             # Theme model
       theme.go             # Token → color resolution
@@ -134,10 +169,14 @@ mrboard/
     architecture.md        # This file
     domain-model.md
     tui-conventions.md
+    configuration.md
+    theme-format.md
+    keybindings.md
     clean_architecture.md
     adr/                   # Architecture Decision Records
+    agents/                # Pointer docs for agent workflow (issue tracker, triage labels, domain docs)
   mrboard.yaml.example
-  CLAUDE.md
+  AGENTS.md                # Symlinked as CLAUDE.md
 ```
 
 ## Dependencies
@@ -153,8 +192,9 @@ mrboard/
 
 ## Config
 
-Loaded from `~/.config/mrboard/mrboard.yaml` (XDG), `./mrboard.yaml`, or path in `$MRBOARD_CONFIG`.
-`$GITLAB_TOKEN` overrides `gitlab.token` from the config file.
+Loaded from `~/.config/mrboard/mrboard.yaml` (XDG default), `./mrboard.yaml`, or a path given
+with `--config`/`-c`. `$GITLAB_TOKEN` overrides `gitlab.token` and `$JIRA_TOKEN` overrides
+`jira.api_token`, both from the config file.
 
 ```yaml
 gitlab:

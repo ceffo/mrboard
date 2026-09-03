@@ -89,15 +89,16 @@ approval, reviewer change, and title/draft edit. Two known gaps are handled expl
 
 `detailedMergeStatus` is **not** covered by `updated_at`: an MR can go from `mergeable` to
 `conflict` (someone merged into the target branch) or from `ci_still_running` to `mergeable` with no
-`updated_at` movement. That field drives the Ready to Merge column via `ClassifyPhase`. It is also a
-cheap scalar that phase 1 returns for free.
+`updated_at` movement. That field tints the Approved column's card title green/red (it no longer
+gates `ClassifyPhase` itself — see `docs/adr/0001`'s reversal to approver-based gating). It is also
+a cheap scalar that phase 1 returns for free.
 
 Therefore, on an `updatedAt` match the cached MR answers **only** for the discussion-derived fields
 — `Reviewers`, `OpenThreads`, `RoundTripCount` — and phase 1's freshly-fetched values always
 overwrite `Title`, `Draft`, `DetailedMergeStatus`, `Assignee`/`AssigneeName`, the reviewer
 reference list, `approvedBy`, and `UpdatedAt`. `ClassifyPhase`, `DeriveWaitingSince`, and
-`deriveReadyToMergeSince` then re-run against the merged result. A card can never sit in the wrong
-column because of a stale merge status.
+`deriveReadyToMergeSince` then re-run against the merged result. A card can never show a stale
+merge-status tint.
 
 `approvalState.rules` stays in phase 1 rather than moving to the cached phase 2, deliberately:
 `SaveApprovers` writes a *separate* GitLab resource (the MR approval rule), which almost certainly

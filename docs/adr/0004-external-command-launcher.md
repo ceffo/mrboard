@@ -37,7 +37,7 @@ given MR's project — that remains the user's own configured command's responsi
 mrboard's keybinding system (`docs/keybindings.md`, `internal/tui/keymap.go`/`keys.go`) requires
 every binding to be a static `Act(...)` registration in `keys.go`, enforced by
 `TestBindingsDefinedOnlyInKeys` — a grep over call *sites*, not over whether arguments are
-compile-time literals. This effort's commands are configured by the user in `mrboard.toml` at
+compile-time literals. This effort's commands are configured by the user in `mrboard.yaml` at
 runtime, with an a-priori-unknown count and set of keys — incompatible with `NewContext`'s
 existing reflection-over-a-fixed-struct registration path, but not actually in conflict with the
 "single builder function" invariant itself.
@@ -51,7 +51,8 @@ Resolution:
    is reused unchanged, since none of it depends on how `actions`/`byKey` were populated.
 2. **Construction call site.** Each configured command's `Action` is built via the existing
    `Act(cmd.Key, cmd.Name, PriorityModal, CategoryAct)`, called from a new wrapper function that
-   lives in `keys.go` (e.g. `BuildCustomCommandsContext(cmds []config.Command) *Context`) —
+   lives in `keys.go` (e.g. `BuildCustomCommands(cmds []config.Command) *CustomCommands`, whose
+   `.Context() *Context` method returns the pushed context) —
    satisfying `TestBindingsDefinedOnlyInKeys` with zero changes to that test, since it checks call
    site, not argument literalness.
 3. **Stack placement.** The resulting context is pushed only when `contextStack()` would return
@@ -102,8 +103,8 @@ Resolution:
    MR fields — the same kind of straight vendor-shaped passthrough as the existing
    `DetailedMergeStatus` field.
 2. **A named projection, not a reflected struct dump.** Template variables are a stable contract
-   the user's `mrboard.toml` depends on; reflecting `domain.MergeRequest` directly would turn every
-   future domain field addition (it gains fields regularly — `JiraIssueType`, `ReviewerSource`,
+   the user's `mrboard.yaml` depends on; reflecting `domain.MergeRequest` directly would turn every
+   future domain field addition (it gains fields regularly — `IssueType`, `ReviewerSource`,
    etc.) into an implicit, unversioned change to that contract. Execution work defines a small,
    explicitly-named template-data type independent of `domain.MergeRequest`'s exact shape, built by
    whichever package ends up constructing the child process's argv.
@@ -124,7 +125,7 @@ reuses that pattern rather than inventing a new one.
 Resolution:
 
 1. **Startup check is advisory, not blocking.** Unlike the duplicate-key case (a static,
-   unambiguous user mistake in `mrboard.toml`), binary presence is an environment condition:
+   unambiguous user mistake in `mrboard.yaml`), binary presence is an environment condition:
    `exec.LookPath` at config-load time can legitimately disagree with what's on `PATH` when the
    command actually runs (shell init order, tools installed after mrboard started, etc.). A missing
    binary at startup logs a warning and leaves the command enabled — it does not refuse to start.

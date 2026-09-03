@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.0] - 2026-09-02
+
+### Added
+- MRs authored by a team member, with a ticket key in the title and no reviewers yet, now get the whole team auto-assigned as reviewers so review can start without someone remembering to add them. Off by default (`auto_assign_reviewers.enabled`); runs on every TUI fetch, or on demand via the new `mrboard update` command.
+
 ## [0.10.8] - 2026-09-01
 
 ### Added

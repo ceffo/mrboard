@@ -54,11 +54,15 @@ const (
 ### Phase classification rules (evaluated in order)
 
 1. `PhaseDraft` — if GitLab `draft: true`
-2. `PhaseReadyToMerge` — if GitLab `detailed_merge_status == "mergeable"` (authoritative; covers approvals, threads, CI, branch protection, and any other project rules)
+2. `PhaseReadyToMerge` (labeled "Approved" in the TUI) — if there is at least one designated
+   **Approver** among the reviewers and every one of them has approved
 3. `PhaseNeedsAuthorAction` — if ANY active reviewer is `Commented`
-4. `PhaseNeedsReview` — otherwise (all reviewers are NotStarted or ReReviewRequested, or no reviewers)
+4. `PhaseNeedsReview` — otherwise (all reviewers are NotStarted or ReReviewRequested, no
+   reviewers, or there are no designated Approvers at all)
 
 Rule 3 takes precedence over rule 4 in mixed states (some commented, some re-requested).
+`detailed_merge_status` does not gate this classification — it only tints an Approved card green
+(mergeable) or red (something still blocks it); see `DetailedMergeStatus` below.
 
 ## MRKey
 
@@ -77,25 +81,44 @@ docs/adr/0005-incremental-fetch-and-selection-identity.md). `MergeRequest.Key()`
 
 ```go
 type MergeRequest struct {
-    ID         int
-    IID        int    // per-project MR number
-    ProjectID  int
-    Title      string
-    Author     string
-    WebURL     string
+    ID           int
+    IID          int    // per-project MR number
+    ProjectID    int
+    Title        string
+    Author       string // GitLab username — canonical ID
+    AuthorName   string // display name; falls back to Author if empty
+    Assignee     string // GitLab username of the current assignee
+    AssigneeName string // display name; falls back to Assignee if empty
+    WebURL       string
+    ProjectPath  string // namespace/project without domain, e.g. "group/repo"
+    Description  string
 
-    Phase             MRPhase
-    Reviewers         []ReviewerInfo  // Approvers appear first; distinguished by IsApprover
+    Phase               MRPhase
+    DetailedMergeStatus string // raw value from GitLab's detailed_merge_status field — tints the
+                                // Approved card green/red only, does not gate Phase (see above)
+    SourceBranch        string
+    TargetBranch        string
+    Reviewers           []ReviewerInfo // Approvers appear first; distinguished by IsApprover
+
+    // Approvers is the full membership of the "Approvers" approval rule — usernames eligible to
+    // approve, regardless of whether they are currently assigned as a reviewer on this MR.
+    // Distinct from ReviewerInfo.IsApprover, which only flags entries already present in Reviewers.
+    Approvers []string
 
     CreatedAt         time.Time
     UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, approvals, reviewer
-                                // changes, title/draft edits — the version marker the snapshot
-                                // cache diffs against (docs/adr/0005)
+                                 // changes, title/draft edits — the version marker the snapshot
+                                 // cache diffs against (docs/adr/0005)
     NonDraftSince     time.Time // "marked as ready" note, or CreatedAt if never a draft
     WaitingSince      time.Time // when current phase started
+    ReadyToMergeSince time.Time // when the phase most recently became PhaseReadyToMerge
 
-    OpenThreads       int
-    RoundTripCount    int // total "requested review from @X" notes across all reviewers
+    OpenThreads    int
+    RoundTripCount int // total "requested review from @X" notes across all reviewers
+
+    ReviewerSource bool // true when this MR came only from a reviewer-source fetch
+
+    IssueType string // populated asynchronously; "" means not yet fetched or no linked ticket
 }
 
 // Approval counts are derived at render time from Reviewers:

@@ -24,6 +24,18 @@ in a kanban board. Primary use: team daily standups.
 - [`docs/clean_architecture.md`](docs/clean_architecture.md) — generic principles for building a (micro) service in go following a ports-and-adapters architecture. Use that when you need to redesign a significant part of the architecture or when evaluating architectural improvements.
 - [`docs/adr/`](docs/adr/) — numbered Architecture Decision Records, one per feature area. The durable record of *why* a design was chosen, including decisions reached via a `/wayfinder` ticket.
 
+## Branching
+
+`main` is protected — new work always starts on a branch, never on `main` directly.
+
+Before making any change, create a branch from `main` named `type/name-of-the-feature`,
+where `type` is a conventional-commit type (`feat`, `fix`, `chore`, `docs`, `refactor`,
+`test`, `perf`, `ci`, `build` — see [Commit message rules](#commit-message-rules)) and
+`name-of-the-feature` is a short kebab-case description of the work.
+
+If the purpose of the work isn't clear enough to derive a branch name from, ask the user
+what to call it rather than guessing.
+
 ## Quality gates
 
 Every bead must pass before closing (use the justfile — never bare `go` commands):
@@ -35,11 +47,11 @@ just generate   # regenerate all mocks (run after changing any interface in inte
 ## End of session checklist
 
 Before ending a coding session on this repo:
-- If a valid mrboard config is reachable (`./mrboard.toml`, `$MRBOARD_CONFIG`, or the XDG default
-  at `~/.config/mrboard/mrboard.yaml`), offer to test the change against real data before reporting
-  the task done — `agent-tui` for TUI changes, `mrboard fetch` (see the parity rule below) for
-  anything else. A green `just check` proves the code compiles and the unit tests pass; it does not
-  prove the change behaves correctly against a real board.
+- If a valid mrboard config is reachable (`./mrboard.yaml`, a path given to `--config`/`-c`, or
+  the XDG default at `~/.config/mrboard/mrboard.yaml`), offer to test the change against real data
+  before reporting the task done — `agent-tui` for TUI changes, `mrboard fetch` (see the parity
+  rule below) for anything else. A green `just check` proves the code compiles and the unit tests
+  pass; it does not prove the change behaves correctly against a real board.
 - Offer to update the architecture docs (`docs/architecture.md`, `docs/domain-model.md`,
   `docs/tui-conventions.md`, `docs/adr/`) if the change affected behavior, data flow, or a decision
   any of them describe.
@@ -167,18 +179,19 @@ agent-tui screenshot       # inspect layout
 agent-tui kill             # always clean up
 ```
 
-The script at `scripts/run-tui.sh` `cd`s to the project root and execs `./bin/mrboard run`,
-so the binary finds `mrboard.yaml`. **Never point agent-tui at the binary directly** — it
-won't find the config file.
+The script at `scripts/run-tui.sh` `cd`s to the project root and execs `./bin/mrboard` with no
+arguments (the root command launches the board directly — there is no `run` subcommand), so the
+binary finds `mrboard.yaml`. **Never point agent-tui at the binary directly** — it won't find
+the config file.
 
 ## Non-negotiable rules
 
 1. `internal/domain` — stdlib only. No exceptions.
-2. `internal/config` and `internal/gitlab` — no charmbracelet imports.
+2. `internal/config` and `pkg/gitlab` — no charmbracelet imports.
 3. All keybindings defined in `internal/tui/keys.go` as `Act(...)` actions registered in contexts (see `docs/keybindings.md`). No hardcoded key strings or `key.NewBinding` elsewhere — enforced by tests.
 4. All lipgloss styles defined in `internal/tui/styles.go`. No inline `lipgloss.NewStyle()` calls in widgets.
 5. Every TUI widget is a self-contained struct with its own `Init`, `Update`, `View`. No monolithic root Update.
-6. Config loaded from `./mrboard.toml` or `$MRBOARD_CONFIG`. PAT also overridable via `$GITLAB_TOKEN`.
+6. Config loaded from `./mrboard.yaml`, the XDG default, or a path given to `--config`/`-c`. PAT also overridable via `$GITLAB_TOKEN`.
 7. **No vendor bleeding.** A concrete vendor name (`Jira`, `GitLab`, `Teams`, ...) may appear as a Go identifier
    (type, interface, field, function, message name) in exactly three places:
    - that vendor's own adapter package (e.g. `internal/adapters/jiraadpt`, `internal/adapters/gitlabadpt`) —
