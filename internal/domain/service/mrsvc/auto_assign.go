@@ -14,10 +14,8 @@ type autoAssignReviewerStore interface {
 }
 
 // AutoAssignReviewers writes reviewers to a single MR, given the team members
-// domain.AutoAssignCandidates has already selected (docs/adr/0009). This is
-// the one place, shared by the TUI and mrboard update, that turns an
-// eligibility decision into the actual GitLab write — src only ever executes
-// the plain write it's told to make.
+// domain.AutoAssignCandidates has already selected (docs/adr/0009). src only
+// ever executes the plain write it is told to make.
 //
 // A nil or empty reviewers list is a no-op: SetReviewers treats an empty ID
 // slice as "clear all reviewers," so calling through with nothing to assign

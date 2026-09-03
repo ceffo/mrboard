@@ -23,11 +23,9 @@ func buildUpdateCmd() *cobra.Command {
 	}
 }
 
-// execUpdate fetches the same way mrboard fetch does, then runs the same
-// mrsvc.AutoAssignReviewers write the TUI performs automatically on every
-// fetch — respecting auto_assign_reviewers.enabled exactly like the TUI does,
-// so this command reproduces what the TUI would do rather than offering a way
-// to bypass the config toggle (docs/adr/0009).
+// execUpdate fetches every configured MR and applies mrsvc.AutoAssignReviewers
+// to each one that qualifies. It respects auto_assign_reviewers.enabled rather
+// than writing unconditionally (docs/adr/0009).
 func execUpdate(ctx context.Context) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 	logger := c.Logger

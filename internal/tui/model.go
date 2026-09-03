@@ -1677,12 +1677,11 @@ func makeAutoAssignReviewersCmd(
 }
 
 // handleAutoAssignResult logs and toasts every auto-assignment outcome,
-// success or failure — unlike the silent-on-success JIRA link writes, this
-// action notifies the whole team on GitLab and the person watching the board
-// should see it happen (docs/adr/0009). A successful write marks the MR dirty
-// so a landing snapshot started before this write completed doesn't undo it,
-// and forces a fresh phase-2 fetch to pick up the real reviewer state
-// (docs/adr/0005).
+// success or failure, since the write notifies the whole team on GitLab and
+// should be visible as it happens (docs/adr/0009). A successful write marks
+// the MR dirty so a landing snapshot started before this write completed
+// doesn't undo it, and forces a fresh phase-2 fetch to pick up the real
+// reviewer state (docs/adr/0005).
 func (m Model) handleAutoAssignResult(msg AutoAssignResultMsg) (tea.Model, tea.Cmd) {
 	mrRef := fmt.Sprintf("!%d", msg.MRIID)
 	if msg.Err != nil {

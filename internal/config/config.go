@@ -112,8 +112,8 @@ type AppConfig struct {
 }
 
 // TeamUsernames returns every username listed by a "user"-type source — the
-// roster the reviewer editor, and auto-assign reviewers (docs/adr/0009), both
-// treat as "the team." Returns nil when no such source is configured.
+// definition of "the team" used throughout mrboard (docs/adr/0009). Returns
+// nil when no such source is configured.
 func TeamUsernames(sources []Source) []string {
 	var usernames []string
 	for _, s := range sources {

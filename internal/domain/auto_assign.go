@@ -7,9 +7,9 @@ package domain
 // the ticket key that made it eligible, with ok set to true.
 //
 // ok is also false when mr meets all four criteria but teamRoster contains
-// nothing besides mr's own author: SetReviewers treats an empty ID slice as
-// "clear all reviewers," so returning an empty, non-nil slice here would turn
-// a no-op into a destructive write.
+// nothing besides mr's own author: an empty-but-non-nil reviewers slice reads
+// as "clear every reviewer" rather than "nothing to add," so returning true
+// here would turn a no-op into a destructive write.
 func AutoAssignCandidates(
 	mr MergeRequest, teamRoster []User, matcher TicketKeyMatcher,
 ) (reviewers []User, issueKey string, ok bool) {
