@@ -45,7 +45,8 @@ Any token you omit falls back to the built-in default theme's value for that tok
     "success":      { "dark": "#a6e3a1", "light": "#40a02b" },
     "warning":      { "dark": "#fab387", "light": "#fe640b" },
     "danger":       { "dark": "#f38ba8", "light": "#d20f39" },
-    "info":         { "dark": "#89dceb", "light": "#04a5e5" }
+    "info":         { "dark": "#89dceb", "light": "#04a5e5" },
+    "color-approver": { "dark": "#f9e2af", "light": "#df8e1d" }
   }
 }
 ```
@@ -67,3 +68,4 @@ Any token you omit falls back to the built-in default theme's value for that tok
 | `warning` | Pending / needs attention state |
 | `danger` | Blocked / rejected state |
 | `info` | Informational / neutral highlights |
+| `color-approver` | Name of a reviewer who is a designated approver |

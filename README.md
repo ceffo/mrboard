@@ -79,6 +79,25 @@ truth, and the footer always shows the most useful ones for where you are.
 The four worth knowing up front: `↵` opens the detail pane, `d` the diff view, `v` the reviewer
 editor, and `,` the settings panel.
 
+## CLI commands
+
+Alongside the interactive board, `mrboard` has two one-shot commands for scripting and automation:
+
+```bash
+mrboard fetch    # fetch every configured MR and print it as JSON
+mrboard update   # run mrboard's automatic write actions once, outside the TUI
+```
+
+`fetch` mirrors exactly what the TUI fetches — same saved settings, same on-disk snapshot — and
+never writes to GitLab. `--reviewer-mrs` overrides the saved "include reviewer-sourced MRs"
+setting; `--cold` ignores the snapshot and recomputes every MR from scratch.
+
+`update` runs mrboard's automatic write actions (currently: auto-assigning the team as reviewers
+on newly opened, ticket-linked MRs — see `auto_assign_reviewers` in
+[docs/configuration.md](docs/configuration.md)) as a standalone step, useful for a cron job when
+nobody has the TUI open. It is a no-op unless `auto_assign_reviewers.enabled` is set. `--dry-run`
+logs what would be assigned without writing to GitLab.
+
 ## Documentation
 
 | | |

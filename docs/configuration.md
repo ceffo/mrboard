@@ -91,6 +91,7 @@ jira:
     Task: "✅"
     Epic: "⚡"
   remote_link_icon_url: https://…/icon.png   # optional; icon for the created remote link
+  case_insensitive_ticket_match: true        # optional; match ticket keys regardless of case
 ```
 
 | Key | Default | Meaning |
@@ -103,6 +104,7 @@ jira:
 | `sprint_cache_ttl` | `5m` | How long active-sprint membership is trusted before revalidating against JIRA |
 | `issue_type_icons` | built-in map | Issue type name (case-sensitive) → any single character |
 | `remote_link_icon_url` | — | Icon attached to the remote link mrboard creates |
+| `case_insensitive_ticket_match` | `true` | Match a ticket key (e.g. in the MR title, sprint filter, auto-assign eligibility) regardless of case; set `false` to require an exact-case match |
 
 A ticket key is recognised when it appears **in parentheses** in the MR title, e.g.
 `feat(OD-2400): …`. Issue types are fetched in the background; a `🎫` placeholder shows while
@@ -111,6 +113,22 @@ one is loading or when the type has no icon mapping.
 Back-link injection appends a ticket link to the MR description unless the description already
 contains the `<!-- mrboard -->` marker, which makes it idempotent. See
 [adr/0003-jira-remote-links.md](adr/0003-jira-remote-links.md).
+
+## Auto-assign reviewers
+
+Optional; off by default. When enabled, an MR authored by a team member — a username listed
+under a `sources: type: user` entry — with a ticket key in its title, no reviewers yet, and not
+a draft gets the whole team roster (minus the author) assigned as reviewers.
+
+```yaml
+auto_assign_reviewers:
+  enabled: true
+```
+
+Runs automatically after every TUI fetch, and on demand via `mrboard update`. There is no
+per-MR opt-out short of removing the ticket key from the title, keeping the MR in draft, or
+disabling the feature entirely. See
+[adr/0009-auto-assign-reviewers.md](adr/0009-auto-assign-reviewers.md).
 
 ## Notifications
 
@@ -149,8 +167,9 @@ design and its non-goals.
 
 ## Themes
 
-Five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`. Press `t` for a
-live picker; your choice is saved automatically, as is the light/dark/auto mode.
+Five built-in themes: `default`, `dracula`, `nord`, `tokyo-night`, `monokai`. Press `,` to open
+Settings, then the Theme tab, for a live picker; your choice is saved automatically, as is the
+light/dark/auto mode.
 
 Per-session overrides, which are not saved:
 
