@@ -116,6 +116,13 @@ with no config file, credentials, or network access required.`,
 		return bootCore(cmd)
 	}
 	root.AddCommand(fetchCmd)
+
+	updateCmd := buildUpdateCmd()
+	updateCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		return bootCore(cmd)
+	}
+	root.AddCommand(updateCmd)
+
 	root.AddCommand(buildVersionCmd())
 
 	return root

@@ -71,6 +71,13 @@ type Jira struct {
 	CaseInsensitiveTicketMatch bool `mapstructure:"case_insensitive_ticket_match"`
 }
 
+// AutoAssignReviewers holds configuration for automatic reviewer assignment
+// (docs/adr/0009). Disabled by default: assigning the whole team as reviewers
+// is a write a user must opt into, not a default behavior.
+type AutoAssignReviewers struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 // Command is a user-configured external command launched against a selected MR card
 // (see docs/adr/0004-external-command-launcher.md). Args is an argv template: each
 // element may contain Go template placeholders (e.g. "{{.ProjectPath}}") resolved
@@ -100,7 +107,21 @@ type AppConfig struct {
 	Commands           []Command     `mapstructure:"commands"`
 	// RefreshInterval is the auto-refresh cadence (docs/adr/0005, "Refresh
 	// cadence"); default 60s, 0 disables the timer entirely.
-	RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+	RefreshInterval     time.Duration       `mapstructure:"refresh_interval"`
+	AutoAssignReviewers AutoAssignReviewers `mapstructure:"auto_assign_reviewers"`
+}
+
+// TeamUsernames returns every username listed by a "user"-type source — the
+// roster the reviewer editor, and auto-assign reviewers (docs/adr/0009), both
+// treat as "the team." Returns nil when no such source is configured.
+func TeamUsernames(sources []Source) []string {
+	var usernames []string
+	for _, s := range sources {
+		if s.Type == "user" {
+			usernames = append(usernames, s.IDs...)
+		}
+	}
+	return usernames
 }
 
 // Config is a backward-compatible alias for AppConfig.
@@ -191,6 +212,7 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("jira.sprint_cache_ttl", "5m")
 	v.SetDefault("jira.case_insensitive_ticket_match", true)
 	v.SetDefault("refresh_interval", "60s")
+	v.SetDefault("auto_assign_reviewers.enabled", false)
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {
@@ -246,6 +268,10 @@ func validate(cfg *AppConfig) ([]string, error) {
 	warnings, err := validateCommands(cfg.Commands)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.AutoAssignReviewers.Enabled && len(TeamUsernames(cfg.Sources)) == 0 {
+		warnings = append(warnings, "config: auto_assign_reviewers.enabled is true but no \"user\"-type "+
+			"source is configured, so there is no team roster to assign — auto-assign will never match any MR")
 	}
 	return warnings, nil
 }

@@ -222,6 +222,16 @@ type TicketDescriptionLinkResultMsg struct {
 	Err       error
 }
 
+// AutoAssignResultMsg carries the outcome of auto-assigning reviewers to a
+// single MR (docs/adr/0009).
+type AutoAssignResultMsg struct {
+	ProjectID int
+	MRIID     int
+	IssueKey  string
+	Reviewers []domain.User // team members the reviewer set was written with
+	Err       error
+}
+
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
 type TeamResolvedMsg struct {
 	Roster           []domain.User
@@ -489,12 +499,7 @@ func makeFetchCmd(base context.Context, src mrsvc.MergeRequestSource, includeRev
 // makeResolveTeamCmd resolves team usernames (from type:user sources) to GitLab user IDs.
 // Returns nil if there are no user-type sources (empty team is valid).
 func makeResolveTeamCmd(base context.Context, src mrsvc.MergeRequestSource, cfg *config.Config) tea.Cmd {
-	var usernames []string
-	for _, s := range cfg.Sources {
-		if s.Type == "user" {
-			usernames = append(usernames, s.IDs...)
-		}
-	}
+	usernames := config.TeamUsernames(cfg.Sources)
 	if len(usernames) == 0 {
 		return nil
 	}
@@ -578,7 +583,10 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	m.applyTheme()
 	m.applyMRFilter()
 	m.updateTicketKey()
-	cmds := []tea.Cmd{m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds()}
+	cmds := []tea.Cmd{
+		m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds(),
+		m.makeAutoAssignReviewersCmds(),
+	}
 	if len(m.dirty) > 0 {
 		// Landing snapshot was stale relative to one or more local writes;
 		// issue an immediate targeted refetch instead of waiting for the
@@ -710,6 +718,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
+
+	case AutoAssignResultMsg:
+		return m.handleAutoAssignResult(msg)
 
 	case tickMsg:
 		return m, tickCmd()
@@ -1629,6 +1640,61 @@ func (m Model) handleTicketDescriptionLinkResult(msg TicketDescriptionLinkResult
 	delete(m.ticketDescLinked, ticketDescLinkKey{projectID: msg.ProjectID, mrIID: msg.MRIID})
 	m.logger.Warn("tui: ticket description link failed", "issueKey", msg.IssueKey, "err", msg.Err)
 	return m, m.toast(toast.ErrorAlert, "JIRA back-link failed: "+msg.IssueKey)
+}
+
+// makeAutoAssignReviewersCmds returns one reviewer-assignment command per MR
+// meeting all four auto-assign criteria (docs/adr/0009). Returns nil when the
+// feature is disabled or no MRs qualify.
+func (m *Model) makeAutoAssignReviewersCmds() tea.Cmd {
+	if !m.cfg.AutoAssignReviewers.Enabled {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, mr := range m.allMRs {
+		reviewers, issueKey, ok := domain.AutoAssignCandidates(mr, m.teamRoster, m.keyMatcher)
+		if !ok {
+			continue
+		}
+		cmds = append(cmds, makeAutoAssignReviewersCmd(m.baseCtx, m.src, mr, issueKey, reviewers))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// makeAutoAssignReviewersCmd returns a Cmd that writes reviewers to a single
+// MR via mrsvc.AutoAssignReviewers.
+func makeAutoAssignReviewersCmd(
+	base context.Context, src mrsvc.MergeRequestSource, mr domain.MergeRequest, issueKey string, reviewers []domain.User,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
+		defer cancel()
+		err := mrsvc.AutoAssignReviewers(ctx, src, int64(mr.ProjectID), int64(mr.IID), reviewers)
+		return AutoAssignResultMsg{ProjectID: mr.ProjectID, MRIID: mr.IID, IssueKey: issueKey, Reviewers: reviewers, Err: err}
+	}
+}
+
+// handleAutoAssignResult logs and toasts every auto-assignment outcome,
+// success or failure — unlike the silent-on-success JIRA link writes, this
+// action notifies the whole team on GitLab and the person watching the board
+// should see it happen (docs/adr/0009). A successful write marks the MR dirty
+// so a landing snapshot started before this write completed doesn't undo it,
+// and forces a fresh phase-2 fetch to pick up the real reviewer state
+// (docs/adr/0005).
+func (m Model) handleAutoAssignResult(msg AutoAssignResultMsg) (tea.Model, tea.Cmd) {
+	mrRef := fmt.Sprintf("!%d", msg.MRIID)
+	if msg.Err != nil {
+		m.logger.Warn("tui: auto-assign reviewers failed",
+			"project_id", msg.ProjectID, "mr_iid", msg.MRIID, "ticket", msg.IssueKey, "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, "Auto-assign failed: "+mrRef)
+	}
+	m.dirty.Mark(domain.MRKey{ProjectID: msg.ProjectID, IID: msg.MRIID}, time.Now())
+	m.logger.Info("tui: auto-assigned reviewers",
+		"project_id", msg.ProjectID, "mr_iid", msg.MRIID, "ticket", msg.IssueKey,
+		"reviewers", domain.Usernames(msg.Reviewers))
+	return m, m.toast(toast.InfoAlert, "Auto-assigned team on "+mrRef)
 }
 
 // handleDiffFetchResult delegates the fetched MRDiff to diffView and updates
