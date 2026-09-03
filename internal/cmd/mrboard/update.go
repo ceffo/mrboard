@@ -14,19 +14,32 @@ import (
 )
 
 func buildUpdateCmd() *cobra.Command {
-	return &cobra.Command{
+	var dryRun bool
+	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Run mrboard's automatic write actions (currently: auto-assign reviewers)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return execUpdate(cmd.Context())
+			return execUpdate(cmd.Context(), updateCmdOptions{dryRun: dryRun})
 		},
 	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
+		"log what would be assigned without writing reviewers to GitLab")
+	return cmd
+}
+
+// updateCmdOptions controls execUpdate's behavior independently of config,
+// mirroring fetchCmdOptions's role for the fetch command.
+type updateCmdOptions struct {
+	// dryRun, when true, evaluates and logs eligible MRs without calling
+	// mrsvc.AutoAssignReviewers, so a run's effect can be previewed before
+	// it writes to GitLab.
+	dryRun bool
 }
 
 // execUpdate fetches every configured MR and applies mrsvc.AutoAssignReviewers
 // to each one that qualifies. It respects auto_assign_reviewers.enabled rather
 // than writing unconditionally (docs/adr/0009).
-func execUpdate(ctx context.Context) error {
+func execUpdate(ctx context.Context, opts updateCmdOptions) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 	logger := c.Logger
 
@@ -68,6 +81,12 @@ func execUpdate(ctx context.Context) error {
 		if !ok {
 			continue
 		}
+		if opts.dryRun {
+			assigned++
+			logger.Info("mrboard: would auto-assign reviewers (dry run)",
+				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "reviewers", domain.Usernames(reviewers))
+			continue
+		}
 		writeErr := mrsvc.AutoAssignReviewers(updateCtx, c.MRSource, int64(mr.ProjectID), int64(mr.IID), reviewers)
 		if writeErr != nil {
 			logger.Warn("mrboard: auto-assign reviewers failed",
@@ -77,6 +96,10 @@ func execUpdate(ctx context.Context) error {
 		assigned++
 		logger.Info("mrboard: auto-assigned reviewers",
 			"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "reviewers", domain.Usernames(reviewers))
+	}
+	if opts.dryRun {
+		logger.Info("mrboard: dry run complete", "mrs", len(mrs), "would_assign", assigned)
+		return nil
 	}
 	logger.Info("mrboard: update complete", "mrs", len(mrs), "assigned", assigned)
 	return nil
