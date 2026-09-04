@@ -1,3 +1,6 @@
+# beads db 
+.beads/beads.db*
+
 bin/
 
 mrboard.yml 
