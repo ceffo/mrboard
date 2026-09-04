@@ -254,78 +254,39 @@ Tokens are scarce and costly. You should do your best not to squander them.
 IMPORTANT: Do your best not to bother the user with constant need for authorizing commands.
 DO NOT go for ad-hoc python commands whenever you feel so. If you need more tooling, propose to build them once in scripts and/or skills to be able to reuse them.
 
-<!-- bv-agent-instructions-v2 -->
+<!-- br-agent-instructions-v1 -->
 
 ---
 
 ## Beads Workflow Integration
 
-This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`) for issue tracking and [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) (`bv`) for graph-aware triage. Issues are stored in `.beads/` and tracked in git.
+This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`/`bd`) for issue tracking. Issues are stored in `.beads/` and tracked in git.
 
-### Using bv as an AI sidecar
-
-bv is a graph-aware triage engine for Beads projects (.beads/beads.jsonl). Instead of parsing JSONL or hallucinating graph traversal, use robot flags for deterministic, dependency-aware outputs with precomputed metrics (PageRank, betweenness, critical path, cycles, HITS, eigenvector, k-core).
-
-**Scope boundary:** bv handles *what to work on* (triage, priority, planning). `br` handles creating, modifying, and closing beads.
-
-**CRITICAL: Use ONLY --robot-* flags. Bare bv launches an interactive TUI that blocks your session.**
-
-#### The Workflow: Start With Triage
-
-**`bv --robot-triage` is your single entry point.** It returns everything you need in one call:
-- `quick_ref`: at-a-glance counts + top 3 picks
-- `recommendations`: ranked actionable items with scores, reasons, unblock info
-- `quick_wins`: low-effort high-impact items
-- `blockers_to_clear`: items that unblock the most downstream work
-- `project_health`: status/type/priority distributions, graph metrics
-- `commands`: copy-paste shell commands for next steps
+### Essential Commands
 
 ```bash
-bv --robot-triage | toon       # THE MEGA-COMMAND: start here
-bv --robot-next | toon         # Minimal: just the single top pick + claim command
-```
+# View ready issues (open, unblocked, not deferred)
+br ready              # or: bd ready
 
-#### Other bv Commands
+# List and search
+br list --status=open # All open issues
+br show <id>          # Full issue details with dependencies
+br search "keyword"   # Full-text search
 
-| Command | Returns |
-|---------|---------|
-| `--robot-plan` | Parallel execution tracks with unblocks lists |
-| `--robot-priority` | Priority misalignment detection with confidence |
-| `--robot-insights` | Full metrics: PageRank, betweenness, HITS, eigenvector, critical path, cycles, k-core |
-| `--robot-alerts` | Stale issues, blocking cascades, priority mismatches |
-| `--robot-suggest` | Hygiene: duplicates, missing deps, label suggestions, cycle breaks |
-| `--robot-diff --diff-since <ref>` | Changes since ref: new/closed/modified issues |
-| `--robot-graph [--graph-format=json\|dot\|mermaid]` | Dependency graph export |
-
-#### Scoping & Filtering
-
-```bash
-bv --robot-plan --label backend              # Scope to label's subgraph
-bv --robot-insights --as-of HEAD~30          # Historical point-in-time
-bv --recipe actionable --robot-plan          # Pre-filter: ready to work (no blockers)
-bv --recipe high-impact --robot-triage       # Pre-filter: top PageRank scores
-```
-
-### br Commands for Issue Management
-
-```bash
-br ready --format toon              # Show issues ready to work (no blockers)
-br list --status=open --format toon # All open issues
-br list --status=in_progress --format toon # Issues in progress
-br show <id> --format toon          # Full issue details with dependencies
-br create --title="..." --type=task --priority=2
-br create --title="..." --type=task --priority=2 --parent <epic-id>  # child task of an epic
-br dep add <child> <epic> --type parent-child  # link existing task to epic as child (NOT blocks)
-br update <id> --status=in_progress # claim a task
+# Create and update
+br create --title="..." --description="..." --type=task --priority=2
+br update <id> --status=in_progress
 br close <id> --reason="Completed"
 br close <id1> <id2>  # Close multiple issues at once
-br epic close-eligible # 
+
+# Sync with git
 br sync --flush-only  # Export DB to JSONL
+br sync --status      # Check sync status
 ```
 
 ### Workflow Pattern
 
-1. **Triage**: Run `bv --robot-triage` to find the highest-impact actionable work
+1. **Start**: Run `br ready` to find actionable work
 2. **Claim**: Use `br update <id> --status=in_progress`
 3. **Work**: Implement the task
 4. **Complete**: Use `br close <id>`
@@ -333,58 +294,29 @@ br sync --flush-only  # Export DB to JSONL
 
 ### Key Concepts
 
-- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
+- **Dependencies**: Issues can block other issues. `br ready` shows only open, unblocked work.
 - **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
 - **Types**: task, bug, feature, epic, chore, docs, question
 - **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
 
 ### Session Protocol
 
+**Before ending any session, run this checklist:**
+
 ```bash
 git status              # Check what changed
 git add <files>         # Stage code changes
 br sync --flush-only    # Export beads changes to JSONL
 git commit -m "..."     # Commit everything
+git push                # Push to remote
 ```
 
-## Agent skills
+### Best Practices
 
-### Issue tracker
+- Check `br ready` at session start to find available work
+- Update status as you work (in_progress → closed)
+- Create new issues with `br create` when you discover tasks
+- Use descriptive titles and set appropriate priority/type
+- Always sync before ending session
 
-Issues live in `.beads/` and are managed with the `br` CLI (beads-rust). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Five canonical roles using default strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context repo; domain context lives in `docs/architecture.md`, `docs/domain-model.md`, `docs/tui-conventions.md`, and `docs/adr/` (numbered ADRs; no `CONTEXT.md`). See `docs/agents/domain.md`.
-
-### Recording decisions
-
-Decisions and conclusions belong in **documents** (`docs/adr/`), not in beads (`br`) tickets and
-not in engram memory — both stay short, describe *what* something is, and *link* to the document
-that holds the actual content. This applies to a `/wayfinder` map ticket itself, not only its
-child tickets: the map's destination, context, and out-of-scope reasoning go in the ADR: a
-one-time epic and its children only ever state what a ticket is about and where to read the
-answer.
-
-A resolved architectural/design decision goes into `docs/adr/` as a numbered ADR (`**Status**` /
-`## Context` / `## Non-goals` / `## Decision` / `## Consequences`, see
-`docs/adr/0003-jira-remote-links.md`). One ADR per feature area, with `## Decision` subsections
-appended as sub-decisions resolve — not one ADR per ticket. Beads tickets close with a short
-`--reason`, nothing more; engram memory stays for session continuity, not decision content.
-
-### Documentation style
-
-Write and edit documentation (`docs/`, ADRs, README) from the reader's position, describing the
-system's **current** state — not the session, task, or history that produced it. Never narrate
-your own process ("I changed X because...", "this fixes the bug where...", "as discussed above",
-"previously this was..."). If a fact needs a *why*, give the durable reason (an invariant, an
-external constraint, a tradeoff) rather than the conversation that surfaced it. A reader opening
-the doc cold, with no memory of any session, should not be able to tell it was just edited.
-
-This is the "Code comments" rule from the global CLAUDE.md, applied to documentation.
-
-<!-- end-bv-agent-instructions -->
+<!-- end-br-agent-instructions -->
