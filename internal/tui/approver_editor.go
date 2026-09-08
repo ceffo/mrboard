@@ -540,7 +540,10 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 			if name == "" {
 				name = s.Username
 			}
-			label := name + " " + reviewerIcon(s.State)
+			label := name
+			if icon := reviewerIcon(s.State, s.IsApprover); icon != "" {
+				label += " " + icon
+			}
 			if i == w.cursor {
 				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItemFocused.Render(label) + "\n")
 			} else {

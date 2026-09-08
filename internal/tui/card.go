@@ -253,21 +253,37 @@ func (c cardWidget) renderPills(now time.Time) []string {
 }
 
 func (c cardWidget) renderPill(r domain.ReviewerInfo, now time.Time) string {
-	icon := reviewerIcon(r.State)
+	icon := reviewerIcon(r.State, r.IsApprover)
 	displayName := c.renderReviewerUsername(r)
 	ps := pillStyle(r.State, c.styles)
 	var rendered strings.Builder
 	rendered.WriteString(c.styles.PillBracket.Render("["))
 	rendered.WriteString(displayName)
-	rendered.WriteString(" ")
-	rendered.WriteString(ps.Render(icon))
-	if !r.WaitingSince.IsZero() {
+	if icon != "" {
+		rendered.WriteString(" ")
+		rendered.WriteString(ps.Render(icon))
+	}
+	if showWaitingDuration(r) {
 		duration := withNBSP(domain.FormatDuration(now.Sub(r.WaitingSince)))
 		rendered.WriteString(" ")
 		rendered.WriteString(ps.Render(duration))
 	}
 	rendered.WriteString(c.styles.PillBracket.Render("]"))
 	return rendered.String()
+}
+
+// showWaitingDuration reports whether a reviewer pill should display its
+// waiting duration. Basic reviewers are not held to a review SLA in
+// mrboard's domain model, so a not-started or re-review-requested basic
+// reviewer shows no duration even though WaitingSince is populated.
+func showWaitingDuration(r domain.ReviewerInfo) bool {
+	if r.WaitingSince.IsZero() {
+		return false
+	}
+	if r.IsApprover {
+		return true
+	}
+	return r.State != domain.ReviewerNotStarted && r.State != domain.ReviewerReReviewRequested
 }
 
 func pillStyle(state domain.ReviewerState, styles Styles) lip.Style {
@@ -326,9 +342,16 @@ func (c cardWidget) wrapPills(now time.Time, width int) []string {
 	return lines
 }
 
-func reviewerIcon(s domain.ReviewerState) string {
+// reviewerIcon returns the pill glyph for a reviewer's state. The hourglass
+// (waiting-for-review) icon is scoped to approvers: basic reviewers are not
+// held to a review SLA in mrboard's domain model, so a not-started basic
+// reviewer gets no icon at all.
+func reviewerIcon(s domain.ReviewerState, isApprover bool) string {
 	switch s {
 	case domain.ReviewerNotStarted:
+		if !isApprover {
+			return ""
+		}
 		return "⏳"
 	case domain.ReviewerCommented:
 		return "💬"

@@ -36,9 +36,10 @@ func DeriveReviewerInfos(
 	mrCreatedAt time.Time,
 ) []ReviewerInfo {
 	type timestamps struct {
-		lastComment  time.Time
-		lastReReview time.Time
-		lastApproval time.Time
+		lastComment        time.Time
+		firstReviewRequest time.Time // earliest "requested review" note — proxy for when the reviewer was assigned
+		lastReviewRequest  time.Time // latest "requested review" note — when a re-review was last asked for
+		lastApproval       time.Time
 	}
 	stamps := make(map[string]*timestamps, len(reviewers))
 	for _, r := range reviewers {
@@ -55,8 +56,11 @@ func DeriveReviewerInfos(
 				s.lastComment = e.Timestamp
 			}
 		case KindReReviewRequest:
-			if e.Timestamp.After(s.lastReReview) {
-				s.lastReReview = e.Timestamp
+			if s.firstReviewRequest.IsZero() || e.Timestamp.Before(s.firstReviewRequest) {
+				s.firstReviewRequest = e.Timestamp
+			}
+			if e.Timestamp.After(s.lastReviewRequest) {
+				s.lastReviewRequest = e.Timestamp
 			}
 		case KindApproval:
 			if e.Timestamp.After(s.lastApproval) {
@@ -67,11 +71,16 @@ func DeriveReviewerInfos(
 	result := make([]ReviewerInfo, 0, len(reviewers))
 	for _, r := range reviewers {
 		s := stamps[r.Username]
-		state := deriveReviewerState(approvedBy[r.Username], s.lastComment, s.lastReReview)
+		state := deriveReviewerState(approvedBy[r.Username], s.lastComment, s.lastReviewRequest)
 		var waitingSince, approvedAt time.Time
 		switch state {
+		case ReviewerNotStarted:
+			waitingSince = s.firstReviewRequest
+			if waitingSince.IsZero() {
+				waitingSince = mrCreatedAt
+			}
 		case ReviewerReReviewRequested:
-			waitingSince = s.lastReReview
+			waitingSince = s.lastReviewRequest
 			if waitingSince.IsZero() {
 				waitingSince = mrCreatedAt
 			}

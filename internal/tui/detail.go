@@ -298,9 +298,12 @@ func (d detailWidget) detailReviewerLines() []string {
 		if name == "" {
 			name = r.Username
 		}
-		icon := reviewerIcon(r.State)
-		iconStyled := pillStyle(r.State, d.styles).Render(icon)
-		lines = append(lines, nameStyle.Render(name)+" "+iconStyled)
+		icon := reviewerIcon(r.State, r.IsApprover)
+		line := nameStyle.Render(name)
+		if icon != "" {
+			line += " " + pillStyle(r.State, d.styles).Render(icon)
+		}
+		lines = append(lines, line)
 	}
 	return lines
 }
