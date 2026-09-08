@@ -35,6 +35,19 @@ note alone — with no comment ever recorded — must not be read as a re-review
 System note text to match (case-insensitive): `"requested review from @<username>"`
 Draft toggle note to match: `"marked as ready"`
 
+### WaitingSince derivation
+
+| State | `WaitingSince` |
+|---|---|
+| `NotStarted` | earliest "requested review from @X" note (proxy for when the reviewer was assigned); falls back to the MR's `CreatedAt` if no such note was recorded |
+| `Commented` | the reviewer's last comment timestamp |
+| `ReReviewRequested` | the latest "requested review from @X" note; falls back to the MR's `CreatedAt` if none |
+| `Approved` | zero (see `ApprovedAt` instead) |
+
+Both the earliest and latest "requested review" note timestamps are tracked per reviewer, since a
+reviewer can be re-pinged more than once before ever commenting — in that case `WaitingSince`
+uses the *first* note (when their obligation started), not the most recent nudge.
+
 Active reviewers = those in the MR's formal **Reviewers** field only.
 Commenters not in that field are ignored for phase computation.
 
@@ -144,6 +157,15 @@ An **Approver** is a reviewer who is listed in the MR-level GitLab approval rule
 Being an Approver is not a separate role — it is a property of a reviewer.
 `IsApprover` is populated from `GET .../merge_requests/:iid/approval_rules` (rule name `"Approvers"`,
 `eligible_approvers[].username`). If no such rule exists on the MR, all `IsApprover` fields are false.
+
+`WaitingSince` is computed and stored for every reviewer regardless of `IsApprover` — it is an
+objective fact about when their current state began, not a display decision. Basic reviewers are
+not held to a review SLA in mrboard's domain model, so the TUI only renders the hourglass/re-review
+waiting duration for reviewers with `IsApprover == true` (see `docs/tui-conventions.md`). This
+gating is applied at render time rather than by clearing `WaitingSince` for non-approvers, because
+`IsApprover` can be recomputed independently of a full reviewer-state refresh (GitLab's approval
+rules can change without bumping the MR's `UpdatedAt`) — zeroing the field would permanently lose
+it for a reviewer later promoted to approver.
 
 ## Time helpers
 

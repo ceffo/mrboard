@@ -147,6 +147,31 @@ func TestDeriveReviewerInfos_WaitingSince_ReReviewRequested(t *testing.T) {
 	assert.Equal(t, evT2, result[0].WaitingSince, "WaitingSince should be re-review timestamp")
 }
 
+func TestDeriveReviewerInfos_WaitingSince_NotStarted_NoEvents(t *testing.T) {
+	result := DeriveReviewerInfos(singleReviewer(), nil, nil, evT0)
+	assert.Equal(t, evT0, result[0].WaitingSince, "WaitingSince should fall back to MR creation time")
+}
+
+func TestDeriveReviewerInfos_WaitingSince_NotStarted_AssignmentNote(t *testing.T) {
+	events := []DiscussionEvent{
+		{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT1},
+	}
+	result := DeriveReviewerInfos(singleReviewer(), events, nil, evT0)
+	assert.Equal(t, evT1, result[0].WaitingSince, "WaitingSince should be the assignment note timestamp")
+}
+
+func TestDeriveReviewerInfos_WaitingSince_NotStarted_UsesEarliestNote(t *testing.T) {
+	// A reviewer who never commented but received repeated "requested review"
+	// notes (e.g. re-pinged before ever looking) should wait from the first
+	// such note, not the most recent one.
+	events := []DiscussionEvent{
+		{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT1},
+		{AuthorUsername: testUsername, Kind: KindReReviewRequest, Timestamp: evT3},
+	}
+	result := DeriveReviewerInfos(singleReviewer(), events, nil, evT0)
+	assert.Equal(t, evT1, result[0].WaitingSince, "WaitingSince should be the earliest note timestamp")
+}
+
 func TestDeriveReviewerInfos_WaitingSince_Commented(t *testing.T) {
 	events := []DiscussionEvent{
 		{AuthorUsername: testUsername, Kind: KindComment, Timestamp: evT1},
