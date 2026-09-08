@@ -275,6 +275,13 @@ The refresh `tea.Cmd` returns one of these. Widgets receive them via the normal 
 
 Reviewer pill icons: `⏳` not_started · `💬` commented · `🔄` re_review_requested · `✓` approved
 
+`⏳` and its waiting duration are shown only for reviewers with `IsApprover == true` — basic
+reviewers are not held to a review SLA in mrboard's domain model. A not-started basic reviewer
+renders with no icon at all (`[bob]`, not `[bob ⏳ ...]`); a re-review-requested basic reviewer
+keeps the `🔄` icon but shows no duration. `💬` and `✓` (and their durations) are unaffected by
+`IsApprover` since they reflect real reviewer activity, not an SLA. See `reviewerIcon` and
+`showWaitingDuration` in `card.go`.
+
 ## Async operations — mandatory spinner feedback
 
 **Every async operation that touches the network or runs an external process MUST show a
