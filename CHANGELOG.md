@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- **Breaking:** `mrboard update` renamed to `mrboard auto` — the name was ambiguous once mrboard gained an actual software-update feature; the command's behavior (auto-assign reviewers) is unchanged.
+
 ## [0.11.0] - 2026-09-02
 
 ### Added

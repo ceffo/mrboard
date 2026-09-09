@@ -13,13 +13,13 @@ import (
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
-func buildUpdateCmd() *cobra.Command {
+func buildAutoCmd() *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   "auto",
 		Short: "Run mrboard's automatic write actions (currently: auto-assign reviewers)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return execUpdate(cmd.Context(), updateCmdOptions{dryRun: dryRun})
+			return execAuto(cmd.Context(), autoCmdOptions{dryRun: dryRun})
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
@@ -27,19 +27,19 @@ func buildUpdateCmd() *cobra.Command {
 	return cmd
 }
 
-// updateCmdOptions controls execUpdate's behavior independently of config,
+// autoCmdOptions controls execAuto's behavior independently of config,
 // mirroring fetchCmdOptions's role for the fetch command.
-type updateCmdOptions struct {
+type autoCmdOptions struct {
 	// dryRun, when true, evaluates and logs eligible MRs without calling
 	// mrsvc.AutoAssignReviewers, so a run's effect can be previewed before
 	// it writes to GitLab.
 	dryRun bool
 }
 
-// execUpdate fetches every configured MR and applies mrsvc.AutoAssignReviewers
+// execAuto fetches every configured MR and applies mrsvc.AutoAssignReviewers
 // to each one that qualifies. It respects auto_assign_reviewers.enabled rather
 // than writing unconditionally (docs/adr/0009).
-func execUpdate(ctx context.Context, opts updateCmdOptions) error {
+func execAuto(ctx context.Context, opts autoCmdOptions) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 	logger := c.Logger
 

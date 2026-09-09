@@ -117,11 +117,11 @@ with no config file, credentials, or network access required.`,
 	}
 	root.AddCommand(fetchCmd)
 
-	updateCmd := buildUpdateCmd()
-	updateCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+	autoCmd := buildAutoCmd()
+	autoCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
 		return bootCore(cmd)
 	}
-	root.AddCommand(updateCmd)
+	root.AddCommand(autoCmd)
 
 	root.AddCommand(buildVersionCmd())
 

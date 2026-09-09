@@ -18,15 +18,15 @@ import (
 )
 
 const (
-	updateTestProjectID = 42
-	updateTestMRIID     = 7
+	autoTestProjectID = 42
+	autoTestMRIID     = 7
 
 	userAlice = "alice"
 	userBob   = "bob"
 )
 
 // newTestCore builds a *core.Core wired to src and cfg, backed by a real
-// on-disk state store rooted at t.TempDir() so execUpdate's Load() call
+// on-disk state store rooted at t.TempDir() so execAuto's Load() call
 // exercises the same path production does.
 func newTestCore(t *testing.T, src mrsvc.MergeRequestSource, cfg *config.AppConfig) *core.Core {
 	t.Helper()
@@ -44,8 +44,8 @@ func newTestCore(t *testing.T, src mrsvc.MergeRequestSource, cfg *config.AppConf
 // criterion against a team roster containing userAlice and userBob.
 func eligibleMR() domain.MergeRequest {
 	return domain.MergeRequest{
-		ProjectID: updateTestProjectID,
-		IID:       updateTestMRIID,
+		ProjectID: autoTestProjectID,
+		IID:       autoTestMRIID,
 		Author:    userAlice,
 		Title:     "feat(OD-1): add widget",
 		Phase:     domain.PhaseNeedsReview,
@@ -59,17 +59,17 @@ func teamConfig() *config.AppConfig {
 	}
 }
 
-func TestExecUpdate_Disabled_SkipsFetch(t *testing.T) {
+func TestExecAuto_Disabled_SkipsFetch(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t) // no EXPECT() — any call fails the test
 	cfg := &config.AppConfig{AutoAssignReviewers: config.AutoAssignReviewers{Enabled: false}}
 	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, cfg))
 
-	err := execUpdate(ctx, updateCmdOptions{})
+	err := execAuto(ctx, autoCmdOptions{})
 
 	require.NoError(t, err)
 }
 
-func TestExecUpdate_DryRun_DoesNotWriteReviewers(t *testing.T) {
+func TestExecAuto_DryRun_DoesNotWriteReviewers(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().
 		FetchAll(mock.Anything, mrsvc.FetchOptions{IncludeReviewerMRs: false}).
@@ -80,12 +80,12 @@ func TestExecUpdate_DryRun_DoesNotWriteReviewers(t *testing.T) {
 	// No SetReviewers expectation: dry run must never call it.
 	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
 
-	err := execUpdate(ctx, updateCmdOptions{dryRun: true})
+	err := execAuto(ctx, autoCmdOptions{dryRun: true})
 
 	require.NoError(t, err)
 }
 
-func TestExecUpdate_AssignsReviewers(t *testing.T) {
+func TestExecAuto_AssignsReviewers(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().
 		FetchAll(mock.Anything, mrsvc.FetchOptions{IncludeReviewerMRs: false}).
@@ -94,11 +94,11 @@ func TestExecUpdate_AssignsReviewers(t *testing.T) {
 		ResolveUsers(mock.Anything, []string{userAlice, userBob}).
 		Return([]domain.User{{ID: 1, Username: userAlice}, {ID: 2, Username: userBob}}, nil).Once()
 	src.EXPECT().
-		SetReviewers(mock.Anything, int64(updateTestProjectID), int64(updateTestMRIID), []int64{2}).
+		SetReviewers(mock.Anything, int64(autoTestProjectID), int64(autoTestMRIID), []int64{2}).
 		Return(nil).Once()
 	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
 
-	err := execUpdate(ctx, updateCmdOptions{dryRun: false})
+	err := execAuto(ctx, autoCmdOptions{dryRun: false})
 
 	require.NoError(t, err)
 }

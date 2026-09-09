@@ -68,7 +68,7 @@ a fetch is already in flight.
 Each landed fetch also drives, in order: ticket enrichment and the JIRA description back-link via
 `ticketsvc.TicketEnricher`/`TicketLinker` (`docs/adr/0003-jira-remote-links.md`), then
 `mrsvc.AutoAssignReviewers` for newly opened, ticket-linked MRs with no reviewers yet, gated by
-`auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard update` runs
+`auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard auto` runs
 the same auto-assign step as a standalone command, outside the TUI.
 
 Detail panel (`↵`) calls `MergeRequestSource.GetDetail(ctx, projectID, mrIID)`.
@@ -93,7 +93,7 @@ mrboard/
       root.go              # Cobra root command; boots core, launches the board by default
       board.go             # execBoard — launches the TUI
       fetch.go             # `mrboard fetch` — one-shot JSON dump, mirrors the TUI's read path
-      update.go            # `mrboard update` — one-shot auto-assign-reviewers write (adr/0009)
+      auto.go              # `mrboard auto` — one-shot auto-assign-reviewers write (adr/0009)
       version.go           # `mrboard version` subcommand
     config/
       config.go            # AppConfig, Load(), typed sub-config accessors
