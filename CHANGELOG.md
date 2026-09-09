@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- mrboard now checks GitHub for a newer release on launch (skipped for dev builds) and shows an `↑` badge next to the version number in the footer. Press `u` to confirm running `brew update && brew upgrade ceffo/tap/mrboard`. Configurable via `update_check.enabled`/`cache_ttl` (default: enabled, 24h cache).
+
 ### Changed
 - **Breaking:** `mrboard update` renamed to `mrboard auto` — the name was ambiguous once mrboard gained an actual software-update feature; the command's behavior (auto-assign reviewers) is unchanged.
 

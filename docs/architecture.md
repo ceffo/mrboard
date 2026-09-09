@@ -14,9 +14,11 @@ graph TD
     C --> F["internal/adapters/gitlabadpt<br>implements mrsvc.MergeRequestSource"]
     C --> J["internal/adapters/jiraadpt<br>implements ticketsvc ports"]
     C --> K["internal/adapters/teamsnotify<br>implements domain.Notifier"]
+    C --> M["internal/adapters/githubadpt<br>implements updatesvc.UpdateChecker"]
     B --> G["internal/tui<br>Bubble Tea; only layer importing charmbracelet"]
     G --> H["internal/domain/service/mrsvc<br>ports owned by business layer"]
     G --> L["internal/domain/service/ticketsvc<br>ports owned by business layer"]
+    G --> N["internal/domain/service/updatesvc<br>ports owned by business layer"]
 ```
 
 | Package | Import constraint |
@@ -24,15 +26,18 @@ graph TD
 | `internal/domain` | stdlib only — zero non-stdlib imports |
 | `internal/domain/service/mrsvc` | port interfaces; imports only `internal/domain` |
 | `internal/domain/service/ticketsvc` | port interfaces; imports only `internal/domain` |
+| `internal/domain/service/updatesvc` | port interfaces + version comparison; imports only stdlib |
 | `pkg/gitlab` | REST + GQL client; imports only stdlib + `net/http` libs |
+| `pkg/github` | unauthenticated REST client for GitHub releases; imports only stdlib + `net/http` |
 | `internal/adapters/gitlabadpt` | implements `mrsvc`; imports `pkg/gitlab` + `internal/domain` |
 | `internal/adapters/jiraadpt` | implements `ticketsvc` via `pkg/jira`, disk-cached |
 | `internal/adapters/teamsnotify` | implements `domain.Notifier` for Microsoft Teams |
+| `internal/adapters/githubadpt` | implements `updatesvc.UpdateChecker` via `pkg/github`, disk-cached; see adr/0010 |
 | `internal/adapters/statestore` | implements `domain.StateStore`; stdlib + file I/O |
 | `internal/adapters/snapshotstore` | implements `domain.SnapshotStore`; stdlib + file I/O |
 | `internal/adapters/demoadpt` | implements every driven port from an embedded fixture; see adr/0006 |
 | `internal/core` | composition root; no TUI imports |
-| `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc` interfaces, never on adapters |
+| `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc`/`updatesvc` interfaces, never on adapters |
 
 `internal/tui` depends on `mrsvc.MergeRequestSource` (the port), not on any adapter directly.
 This keeps every backend swappable and makes the TUI fully unit-testable with generated mocks.
@@ -82,6 +87,11 @@ MR via `FetchMR` after a successful write.
 The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
 for Microsoft Teams.
 
+On startup, a one-shot `updatesvc.UpdateChecker.CheckForUpdate` call (skipped entirely for a "dev"
+build) sets the footer's update-available badge; the `u` key, enabled only while a newer release
+is available, opens a confirmation modal that runs the update command via `tea.ExecProcess` on
+confirm (`docs/adr/0010-self-update-check.md`).
+
 ## File layout
 
 ```
@@ -113,6 +123,10 @@ mrboard/
       service/ticketsvc/
         ticketsvc.go       # Vendor-neutral TicketEnricher/TicketLinker ports
         mocks/             # mockery-generated doubles
+      service/updatesvc/
+        updatesvc.go       # Vendor-neutral UpdateChecker port (adr/0010)
+        version.go         # ParseVersion/IsNewer — major.minor.patch comparison
+        mocks/             # mockery-generated doubles
     adapters/
       gitlabadpt/
         gitlabadpt.go      # MergeRequestSource implementation (REST + GQL)
@@ -122,6 +136,8 @@ mrboard/
         jiraadpt.go        # ticketsvc.TicketEnricher + TicketLinker via pkg/jira, disk-cached
       teamsnotify/
         teamsnotify.go     # domain.Notifier for Microsoft Teams via a Power Automate webhook
+      githubadpt/
+        githubadpt.go      # updatesvc.UpdateChecker via pkg/github, disk-cached (adr/0010)
       statestore/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
       snapshotstore/
@@ -147,6 +163,7 @@ mrboard/
       settings_widget.go   # Settings overlay (press ,) — Filters/Sorting/Theme tabs
       overlay_router.go    # overlayKind — which exclusive overlay owns input focus
       help_modal.go        # Full keybinding help modal (press ?)
+      update_modal.go      # Update-available confirmation modal (press u) (adr/0010)
       command_argv.go      # Resolves external-command argv templates against MR metadata (adr/0004)
       jira_icons.go        # Issue-type icon lookup for JIRA-linked MR titles
       footer.go            # Help/keybinding bar
@@ -162,6 +179,7 @@ mrboard/
       graphql.go           # GraphQL query helpers
       config.go            # pkg/gitlab.Config
     jira/                  # JIRA REST client, used by internal/adapters/jiraadpt
+    github/                # Unauthenticated GitHub releases-API client, used by githubadpt
     theme/
       model.go             # Theme model
       theme.go             # Token → color resolution
