@@ -10,6 +10,8 @@ type ParsedVersion struct {
 	Major, Minor, Patch int
 }
 
+const versionSegments = 3 // major.minor.patch
+
 // ParseVersion parses a "v0.12.0" or "0.12.0" style version string. It
 // returns ok=false for "dev", empty strings, and anything with extra
 // characters after the patch number (e.g. a prerelease suffix) — this
@@ -19,11 +21,11 @@ type ParsedVersion struct {
 func ParseVersion(s string) (ParsedVersion, bool) {
 	s = strings.TrimPrefix(s, "v")
 	parts := strings.Split(s, ".")
-	if len(parts) != 3 {
+	if len(parts) != versionSegments {
 		return ParsedVersion{}, false
 	}
 
-	nums := make([]int, 3)
+	nums := make([]int, versionSegments)
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 0 {

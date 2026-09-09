@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/afero"
 
+	"github.com/ceffo/mrboard/internal/adapters/githubadpt"
 	"github.com/ceffo/mrboard/internal/adapters/gitlabadpt"
 	"github.com/ceffo/mrboard/internal/adapters/jiraadpt"
 	"github.com/ceffo/mrboard/internal/adapters/snapshotstore"
@@ -20,9 +21,20 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
+	pkggithub "github.com/ceffo/mrboard/pkg/github"
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
+)
+
+// updateCheckRepoOwner/updateCheckRepo identify the GitHub repository mrboard
+// checks for its own newer releases. Fixed, not user-configurable — the
+// update check is about this binary's own upstream, not a general-purpose
+// GitHub integration.
+const (
+	updateCheckRepoOwner = "ceffo"
+	updateCheckRepo      = "mrboard"
 )
 
 // Core holds every dependency a binary needs, fully wired.
@@ -33,6 +45,7 @@ type Core struct {
 	Notifier       domain.Notifier
 	TicketEnricher ticketsvc.TicketEnricher // nil when the issue tracker is not configured
 	TicketLinker   ticketsvc.TicketLinker   // nil when not configured; same adapter instance as TicketEnricher
+	UpdateChecker  updatesvc.UpdateChecker  // nil when update_check.enabled is false
 	Config         *config.AppConfig
 	Logger         *slog.Logger
 	logCloser      io.Closer
@@ -133,6 +146,22 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		ticketLinker = adpt
 	}
 
+	// 6. Update-check adapter (docs/adr/0010) — optional, gated on config.
+	var updateChecker updatesvc.UpdateChecker
+	if cfg.UpdateCheck.Enabled {
+		ghClient := pkggithub.NewClient(pkggithub.Config{Owner: updateCheckRepoOwner, Repo: updateCheckRepo})
+		ghAdpt, err := githubadpt.New(ghClient, githubadpt.Config{
+			FS:       afero.NewOsFs(),
+			CacheDir: filepath.Join(config.XDGCacheDir(), "release"),
+			TTL:      cfg.UpdateCheck.CacheTTL,
+		}, logger)
+		if err != nil {
+			closer.Close()
+			return nil, err
+		}
+		updateChecker = ghAdpt
+	}
+
 	return &Core{
 		MRSource:       adapter,
 		StateStore:     store,
@@ -140,6 +169,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		Notifier:       notifier,
 		TicketEnricher: ticketEnricher,
 		TicketLinker:   ticketLinker,
+		UpdateChecker:  updateChecker,
 		Config:         cfg,
 		Logger:         logger,
 		logCloser:      closer,
