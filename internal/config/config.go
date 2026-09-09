@@ -78,6 +78,14 @@ type AutoAssignReviewers struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
+// UpdateCheck holds configuration for the GitHub-release update check
+// (docs/adr/0010). Enabled by default; the check itself never runs for a
+// "dev" build regardless of this setting.
+type UpdateCheck struct {
+	Enabled  bool          `mapstructure:"enabled"`
+	CacheTTL time.Duration `mapstructure:"cache_ttl"` // default 24h
+}
+
 // Command is a user-configured external command launched against a selected MR card
 // (see docs/adr/0004-external-command-launcher.md). Args is an argv template: each
 // element may contain Go template placeholders (e.g. "{{.ProjectPath}}") resolved
@@ -109,6 +117,7 @@ type AppConfig struct {
 	// cadence"); default 60s, 0 disables the timer entirely.
 	RefreshInterval     time.Duration       `mapstructure:"refresh_interval"`
 	AutoAssignReviewers AutoAssignReviewers `mapstructure:"auto_assign_reviewers"`
+	UpdateCheck         UpdateCheck         `mapstructure:"update_check"`
 }
 
 // TeamUsernames returns every username listed by a "user"-type source — the
@@ -213,6 +222,8 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("jira.case_insensitive_ticket_match", true)
 	v.SetDefault("refresh_interval", "60s")
 	v.SetDefault("auto_assign_reviewers.enabled", false)
+	v.SetDefault("update_check.enabled", true)
+	v.SetDefault("update_check.cache_ttl", "24h")
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {

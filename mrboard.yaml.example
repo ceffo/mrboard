@@ -20,6 +20,16 @@ current_user: alice       # your GitLab username — highlights your MRs in the 
 # refresh ('r', which also resets this timer). 0 disables auto-refresh.
 refresh_interval: 60s     # default: 60s
 
+# Checks GitHub for a newer mrboard release once per cache_ttl window
+# (docs/adr/0010-self-update-check.md). Only release builds check — a "dev"
+# build (one not built via goreleaser) never does, regardless of this
+# setting. When an update is found, a small indicator appears next to the
+# version number in the footer; press 'u' to confirm running
+# `brew update && brew upgrade ceffo/tap/mrboard`.
+update_check:
+  enabled: true      # default: true
+  cache_ttl: 24h     # default: 24h
+
 log:
   path: /tmp/mrboard.log  # optional; omit to disable file logging
   level: info             # debug | info | warn | error
