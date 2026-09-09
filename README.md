@@ -92,60 +92,43 @@ mrboard auto     # run mrboard's automatic write actions once, outside the TUI
 never writes to GitLab. `--reviewer-mrs` overrides the saved "include reviewer-sourced MRs"
 setting; `--cold` ignores the snapshot and recomputes every MR from scratch.
 
-`update` runs mrboard's automatic write actions (currently: auto-assigning the team as reviewers
+`auto` runs mrboard's automatic write actions (currently: auto-assigning the team as reviewers
 on newly opened, ticket-linked MRs — see `auto_assign_reviewers` in
 [docs/configuration.md](docs/configuration.md)) as a standalone step, useful for a cron job when
 nobody has the TUI open. It is a no-op unless `auto_assign_reviewers.enabled` is set. `--dry-run`
 logs what would be assigned without writing to GitLab.
 
-## Documentation
+## Updating
 
-| | |
-| --- | --- |
-| [configuration.md](docs/configuration.md) | Every config key, defaults, env vars, troubleshooting |
-| [theme-format.md](docs/theme-format.md) | Writing a custom theme |
-| [architecture.md](docs/architecture.md) | Package boundaries and data flow |
-| [domain-model.md](docs/domain-model.md) | Phase rules and the reviewer state machine |
-| [adr/](docs/adr/) | Why things are built the way they are |
+mrboard checks for a newer release on its own and tells you in the footer: an **`↑`** badge
+appears next to the version number, and `u` opens a confirmation dialog that performs the
+upgrade. The `u` binding only exists while an update is actually available.
 
-## Development
+To check and update without opening the board:
 
 ```bash
-just check                    # fmt + lint + build + test (CI runs `just check-ci`)
-just demo-run                 # launch the board against the demo dataset
-just demo                     # re-record the GIF from the working tree
-just demo-release v0.10.0     # re-record it from a clean checkout of a tag
+mrboard --update
 ```
 
-Use `demo-release` for the committed GIF: the version in the footer is stamped at
-build time, so recording from the working tree labels the frame `-dirty`. Both need
-[vhs](https://github.com/charmbracelet/vhs).
+That forces a fresh check, bypassing the cache, and upgrades in place if a newer release
+exists — otherwise it prints `… is the latest release` and exits. Restart mrboard
+afterwards to pick up the new version.
 
-## Releasing
-
-Merging a PR into `main` releases it. The squashed commit subject — the PR title — picks
-the bump:
-
-| PR title | Bump | Release |
-| --- | --- | --- |
-| `feat(tui): …` | minor | yes |
-| `fix`, `perf`, `refactor`, `revert` | patch | yes |
-| `build`, `chore`, `ci`, `docs`, `merge`, `release`, `style`, `test`, `wip` | none | no |
-| `… [skip release]` | skip | no |
-| any other type, or a subject that is not a conventional commit | unknown | no, with a warning on the run |
-
-A `!` breaking marker bumps the minor, not the major — `v1.0.0` is only reachable
-through `just release major`.
-
-The last two rows are separate on purpose: `none` is a deliberate non-releasing merge,
-`unknown` is usually a mistyped title. Both stop the release, but `unknown` annotates the
-workflow run so an unreleased merge does not pass unnoticed. Check a title before merging
-with:
+Either route runs the same thing, so you can also do it yourself:
 
 ```bash
-just release-preview "feat(tui): add a column"
-# level=minor
-# version=v0.14.0
+brew update && brew upgrade ceffo/tap/mrboard
 ```
 
-See [adr/0011](docs/adr/0011-auto-release-on-merge.md) for the full rationale.
+The check runs against the GitHub releases API, caches its answer for 24h, and never
+blocks the board. Turn it off with:
+
+```yaml
+update_check:
+  enabled: false
+```
+
+## Contributing
+
+Build instructions, the architecture docs, and the release process are in
+[docs/development.md](docs/development.md).
