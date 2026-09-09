@@ -34,7 +34,9 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
+          # Newest goreleaser within v2. `latest` would follow a future v3 into
+          # whatever it changes about publishing, unannounced and mid-release.
+          version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
