@@ -36,6 +36,33 @@ where `type` is a conventional-commit type (`feat`, `fix`, `chore`, `docs`, `ref
 If the purpose of the work isn't clear enough to derive a branch name from, ask the user
 what to call it rather than guessing.
 
+## Releasing — the PR title ships a version
+
+Merging a PR into `main` releases it: the squashed commit subject is the PR title, and its
+conventional-commit type picks the bump. `!` bumps the minor, never the major. See
+[`docs/adr/0011-auto-release-on-merge.md`](docs/adr/0011-auto-release-on-merge.md).
+
+| Level | Types | Releases |
+| --- | --- | --- |
+| `minor` | `feat` | yes |
+| `patch` | `fix`, `perf`, `refactor`, `revert` | yes |
+| `none` | `build`, `chore`, `ci`, `docs`, `merge`, `release`, `style`, `test`, `wip` | no |
+| `skip` | any type, with `[skip release]` in the subject | no |
+| `unknown` | any other type, and any subject that is not a conventional commit | no |
+
+Consequences for how you work:
+
+- **A PR title is a release decision.** Before opening or retitling a PR, run
+  `just release-preview "<title>"` and tell the user the level and version it will
+  publish.
+- A title that lands as `unknown` releases nothing and warns on the workflow run. If that
+  is not what was intended, retitle the PR rather than tagging by hand.
+- Add `[skip release]` to the title for work that shouldn't ship on its own.
+- `scripts/next-version.sh` owns the type → bump mapping. Adding a type means updating its
+  `--self-test` table, the ADR, this table, and the README table in the same commit.
+- Never push a tag by hand to release. `just release major` is the only manual route, and
+  it exists for reaching `v1.0.0`.
+
 ## Quality gates
 
 Every bead must pass before closing (use the justfile — never bare `go` commands):

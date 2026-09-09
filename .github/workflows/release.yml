@@ -1,11 +1,12 @@
 name: Release
 
+# The one place that knows how to publish a release. Reached three ways: a tag
+# pushed by scripts/release.sh, a dispatch from release-on-merge.yml, and a
+# manual dispatch. Every path releases an existing tag; none creates one.
 on:
   push:
     tags:
       - "v*.*.*"
-  # Manual re-run for a tag whose push event never produced a run (e.g. an
-  # Actions outage). The tag must already exist; this never creates one.
   workflow_dispatch:
     inputs:
       tag:

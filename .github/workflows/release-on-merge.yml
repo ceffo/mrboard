@@ -1,0 +1,93 @@
+name: Release on merge
+
+# Merges to main are squash merges, so the head commit subject is the PR title.
+# Its conventional-commit type decides the version bump; scripts/next-version.sh
+# owns that mapping. See docs/adr/0011-auto-release-on-merge.md.
+on:
+  push:
+    branches: [main]
+  # Dry run: reports the version a subject would release and stops. Never tags,
+  # so it is the safe way to exercise this workflow on the runner.
+  workflow_dispatch:
+    inputs:
+      subject:
+        description: "Commit subject to evaluate instead of main's head"
+        required: false
+        type: string
+
+permissions:
+  contents: write # push the tag
+  actions: write # dispatch release.yml
+
+# Serialize: two merges landing together must not both read the same latest tag
+# and compute the same next version. Queue rather than cancel — a skipped run
+# means a release that never happens.
+concurrency:
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version arithmetic reads the tag list
+
+      - name: Check the subject → bump mapping
+        run: bash scripts/next-version.sh --self-test
+
+      - name: Plan the release
+        id: plan
+        env:
+          # Read through the environment, never interpolated into the script:
+          # the subject is arbitrary text.
+          SUBJECT_OVERRIDE: ${{ inputs.subject }}
+        run: |
+          set -euo pipefail
+          subject=${SUBJECT_OVERRIDE:-$(git log -1 --pretty=%s)}
+
+          # level= and version=, straight into the step outputs. Which levels
+          # release is the script's decision, not restated here.
+          plan=$(bash scripts/next-version.sh --plan "$subject")
+          echo "$plan" >> "$GITHUB_OUTPUT"
+          level=$(printf '%s\n' "$plan" | sed -n 's/^level=//p')
+          version=$(printf '%s\n' "$plan" | sed -n 's/^version=//p')
+
+          echo "subject: $subject"
+          echo "level:   $level"
+          echo "version: $version"
+          {
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| subject | $subject |"
+            echo "| bump | $level |"
+            echo "| release | $version |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # An unrecognised type stops the release for the same reason a typo
+          # would, so say so rather than leaving a silently unreleased merge.
+          if [ "$level" = unknown ]; then
+            echo "::warning title=Nothing released::'$subject' is not a recognised conventional-commit type. Retitle and re-run, or release by hand with 'just release patch'."
+          fi
+
+      - name: Tag and dispatch the release
+        if: github.event_name == 'push' && steps.plan.outputs.version != 'none'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "$VERSION is already tagged — nothing to do"
+            echo "$VERSION was already tagged; no release dispatched" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          # A tag pushed with GITHUB_TOKEN does not fire release.yml's `push: tags`
+          # trigger, so dispatch it explicitly. It checks out the tag it is given.
+          gh workflow run release.yml --ref main -f tag="$VERSION"
+          echo "Tagged $VERSION and dispatched release.yml" >> "$GITHUB_STEP_SUMMARY"

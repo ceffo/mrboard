@@ -60,5 +60,10 @@ generate:
 # bumps version, tags, and pushes to trigger a release
 # no args: interactive prompt (patch|minor|major) with a live version preview
 # with args: forwarded as-is, e.g. `just release patch --force`
+# merging a feat/fix PR releases on its own — this is for a major, or a re-run
 release *args:
   bash scripts/release.sh {{args}}
+
+# prints the bump and version merging a PR with this title would release
+release-preview title:
+  @bash scripts/next-version.sh --plan "{{title}}"
