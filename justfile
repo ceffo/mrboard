@@ -20,8 +20,19 @@ lint:
 fmt:
   golangci-lint fmt
 
+# reports formatting that fmt would apply, without applying it
+fmt-check:
+  golangci-lint fmt --diff
+
+# checks the release scripts' own logic — the PR title → version bump mapping
+scripts-test:
+  bash scripts/next-version.sh --self-test
+
 # runs all checks for the project required before any commit or pull request
-check: fmt lint build test
+check: fmt lint build test scripts-test
+
+# the CI form of `check`: fails on unformatted code instead of reformatting it
+check-ci: fmt-check lint build test scripts-test
 
 # run the tui
 run: build

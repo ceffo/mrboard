@@ -67,9 +67,13 @@ Consequences for how you work:
 
 Every bead must pass before closing (use the justfile — never bare `go` commands):
 ```
-just check      # fmt + lint + build + test
+just check      # fmt + lint + build + test + release-script self-test
 just generate   # regenerate all mocks (run after changing any interface in internal/service)
 ```
+
+`.github/workflows/check.yml` runs `just check-ci` on every PR — the same gate, except it
+fails on unformatted code instead of reformatting it. Never put a bare `go` command in a
+workflow either: CI and a local run must be the same gate.
 
 ## End of session checklist
 

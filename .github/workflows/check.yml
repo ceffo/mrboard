@@ -1,0 +1,50 @@
+name: Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+# Only the newest run on a ref is the answer.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # the toolchain go.mod asks for, not a second copy of it
+          cache: true
+
+      # Both pinned: an unpinned tool turns someone else's release into a red
+      # build on an unrelated PR. Bump together with the local versions.
+      - name: Install just and golangci-lint
+        env:
+          JUST_VERSION: "1.58.0"
+          GOLANGCI_LINT_VERSION: "v2.13.2"
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # From the GitHub release, not just.systems/install.sh — that returns
+          # 403 to Actions runners.
+          curl -sSfL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" |
+            tar -xz -C "$HOME/.local/bin" just
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh |
+            sh -s -- -b "$HOME/.local/bin" "$GOLANGCI_LINT_VERSION"
+
+      - name: Report tool versions
+        run: |
+          just --version
+          golangci-lint --version
+
+      # The same gate as a local `just check`, except formatting is verified
+      # rather than applied — CI must fail on unformatted code, not fix it in a
+      # checkout nobody keeps.
+      - run: just check-ci

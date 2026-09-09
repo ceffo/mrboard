@@ -111,7 +111,7 @@ logs what would be assigned without writing to GitLab.
 ## Development
 
 ```bash
-just check                    # fmt + lint + build + test
+just check                    # fmt + lint + build + test (CI runs `just check-ci`)
 just demo-run                 # launch the board against the demo dataset
 just demo                     # re-record the GIF from the working tree
 just demo-release v0.10.0     # re-record it from a clean checkout of a tag
