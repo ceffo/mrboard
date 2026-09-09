@@ -150,7 +150,7 @@ interactive TUI through agent-tui. Letting it drift out of parity removes that c
 
 1. Add or change an interface in `internal/service/`.
 2. Add (or verify) an entry in `.mockery.yml` under `packages:`.
-3. Run `just generate` — this runs `mockery` which reads `.mockery.yml`.
+3. Run `just generate` — this runs `go tool mockery`, which reads `.mockery.yml`.
 4. The generated file lands in `internal/service/mocks/mock_<InterfaceName>.go`.
 5. Commit the generated file alongside the interface change.
 
@@ -189,12 +189,20 @@ packages:
       MyNewPort:            # add new entries here
 ```
 
-### Prerequisites (one-time install)
+### Prerequisites: none
 
-```bash
-brew install mockery          # or go install github.com/vektra/mockery/v3@latest
-go install golang.org/x/tools/cmd/goimports@latest
-```
+golangci-lint and mockery are `tool` directives in `go.mod`, invoked as `go tool
+golangci-lint` and `go tool mockery`. A fresh clone runs `just check` and `just generate`
+with nothing but the Go toolchain, and every machine — including CI — uses the version
+this checkout records.
+
+- **Never call a bare `golangci-lint` or `mockery`** from the justfile or a workflow. That
+  runs whatever the machine happens to have, which is how the committed mocks silently
+  fell a mockery version behind the one that generated them.
+- `just tools-update` takes the newest release of both and records it in `go.mod`. Commit
+  the `go.mod`/`go.sum` change together with the mocks a mockery bump regenerates.
+- `goimports` needs no install either: `.mockery.yml`'s `formatter: goimports` is a
+  library inside mockery, not the binary.
 
 ## TUI verification with agent-tui
 

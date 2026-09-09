@@ -13,16 +13,25 @@ test:
   go test -v ./...
 
 # runs linting on the project using golangci-lint
+# `go tool` builds the version go.mod records, so local and CI lint identically
 lint:
-  golangci-lint run --allow-parallel-runners --timeout 5m
+  go tool golangci-lint run --allow-parallel-runners --timeout 5m
 
 # formats the code using golangci-lint's fmt command
 fmt:
-  golangci-lint fmt
+  go tool golangci-lint fmt
 
 # reports formatting that fmt would apply, without applying it
 fmt-check:
-  golangci-lint fmt --diff
+  go tool golangci-lint fmt --diff
+
+# takes the newest release of each dev tool and records it in go.mod
+# rerun `just generate` afterwards: a mockery bump changes the generated mocks
+tools-update:
+  go get -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+  go get -tool github.com/vektra/mockery/v3@latest
+  go mod tidy
+  go tool golangci-lint --version
 
 # checks the release scripts' own logic — the PR title → version bump mapping
 scripts-test:
@@ -64,9 +73,9 @@ demo-release ref:
 preview-card:
   go test ./internal/tui/ -run TestCardPreview -v 2>/dev/null
 
-# regenerates all mocks from .mockery.yml (requires mockery v3 and goimports)
+# regenerates all mocks from .mockery.yml
 generate:
-  mockery
+  go tool mockery
 
 # bumps version, tags, and pushes to trigger a release
 # no args: interactive prompt (patch|minor|major) with a live version preview
