@@ -18,6 +18,7 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	"github.com/ceffo/mrboard/pkg/theme"
 )
@@ -192,6 +193,19 @@ type CommandResultMsg struct {
 	Err         error
 }
 
+// UpdateCheckResultMsg carries the result of the one-shot release check
+// (docs/adr/0010-self-update-check.md).
+type UpdateCheckResultMsg struct {
+	Info updatesvc.Info
+	Err  error
+}
+
+// SelfUpdateResultMsg carries the outcome of running the self-update command
+// via tea.ExecProcess (docs/adr/0010-self-update-check.md).
+type SelfUpdateResultMsg struct {
+	Err error
+}
+
 // TicketIssueTypeMsg carries the result of a background issue-type fetch.
 type TicketIssueTypeMsg struct {
 	IssueKey  string
@@ -258,6 +272,7 @@ type Model struct {
 	settings           settingsWidget
 	reviewerEditor     *reviewerEditorWidget
 	batchPreview       *batchPreviewWidget
+	updateModal        *updateModalWidget
 	diffView           diffViewWidget
 	overlay            overlayRouter
 	showHelp           bool // '?' help modal open
@@ -267,6 +282,7 @@ type Model struct {
 	settingsKeys       SettingsKeyMap
 	reviewerEditorKeys ReviewerEditorKeyMap
 	batchPreviewKeys   BatchPreviewKeyMap
+	updateConfirmKeys  UpdateConfirmKeyMap
 	styles             Styles
 	theme              theme.Theme[ColorKey]
 	themeName          string // currently active theme name
@@ -312,6 +328,10 @@ type Model struct {
 	dirty              dirtySet                         // locally-written MRs unconfirmed by a fetch, see docs/adr/0005
 	refreshInterval    time.Duration                    // auto-refresh cadence; <= 0 disables it, see docs/adr/0005
 	refreshGen         int                              // bumped on manual refresh to invalidate pending ticks
+	version            string                           // running build version; "dev" for a non-release build
+	updateChecker      updatesvc.UpdateChecker          // nil when the update check is disabled or unconfigured
+	updateAvailable    bool                             // see docs/adr/0010-self-update-check.md
+	latestVersion      string                           // set alongside updateAvailable; empty otherwise
 }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
@@ -325,6 +345,7 @@ func New(
 	notifier domain.Notifier,
 	ticketEnricher ticketsvc.TicketEnricher,
 	ticketLinker ticketsvc.TicketLinker,
+	updateChecker updatesvc.UpdateChecker,
 	version string,
 	opts Options,
 ) Model {
@@ -372,6 +393,7 @@ func New(
 	keys.Notify.SetEnabled(notifier != nil)
 	keys.Sprint.SetEnabled(cfg.Jira.BoardID != 0)
 	keys.OpenTicket.SetEnabled(false) // enabled dynamically when focused MR has a ticket ID
+	keys.Update.SetEnabled(false)     // enabled dynamically once a check finds a newer release
 
 	sf := sortFieldFromState(st.SortField)
 
@@ -396,6 +418,7 @@ func New(
 		settingsKeys:       DefaultSettingsKeyMap,
 		reviewerEditorKeys: DefaultReviewerEditorKeyMap,
 		batchPreviewKeys:   DefaultBatchPreviewKeyMap,
+		updateConfirmKeys:  DefaultUpdateConfirmKeyMap,
 		diffView:           newDiffViewWidget(ctx, styles, DefaultDiffViewKeyMap, src),
 		styles:             styles,
 		theme:              th,
@@ -424,6 +447,8 @@ func New(
 		dirty:              newDirtySet(),
 		refreshInterval:    cfg.RefreshInterval,
 		iconResolver:       ir,
+		version:            version,
+		updateChecker:      updateChecker,
 		alerts: toast.New(toastWidth, toast.FontUnicode, toastDuration).
 			WithPosition(toast.TopRight).
 			WithMinWidth(toastMinWidth).
@@ -465,7 +490,27 @@ func (m Model) Init() tea.Cmd {
 		refreshTickCmd(m.refreshInterval, m.refreshGen),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
 		m.sprintFetchCmd(),
+		m.checkForUpdateCmd(),
 	)
+}
+
+// checkForUpdateCmd fires the one-shot release check (docs/adr/0010). It is a
+// no-op for a "dev" build or when no checker is wired (update_check.enabled
+// is false, or demo mode) — the update checker itself owns caching, so this
+// can safely run on every launch.
+func (m Model) checkForUpdateCmd() tea.Cmd {
+	if m.version == "dev" || m.updateChecker == nil {
+		return nil
+	}
+	checker := m.updateChecker
+	version := m.version
+	base := m.baseCtx
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+		info, err := checker.CheckForUpdate(ctx, version)
+		return UpdateCheckResultMsg{Info: info, Err: err}
+	}
 }
 
 // sprintFetchCmd returns a Cmd that asks the enricher for current active-sprint
@@ -713,6 +758,9 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CommandResultMsg:
 		return m.handleCommandResult(msg)
 
+	case UpdateCheckResultMsg, UpdateConfirmedMsg, UpdateCancelledMsg, SelfUpdateResultMsg:
+		return m.handleUpdateFlowMsg(msg)
+
 	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
 		return m.handleTicketResultMsg(msg)
 
@@ -760,6 +808,8 @@ func (m Model) baseStack() []*Context {
 		}
 	case overlayKindBatchPreview:
 		return append(stack, BatchPreviewCtx)
+	case overlayKindUpdateConfirm:
+		return append(stack, UpdateConfirmCtx)
 	case overlayKindNone:
 	}
 	if m.showDetail {
@@ -823,6 +873,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.batchPreview != nil {
 			updated, cmd := m.batchPreview.Update(msg)
 			m.batchPreview = updated.(*batchPreviewWidget)
+			return m, cmd
+		}
+	case overlayKindUpdateConfirm:
+		if m.updateModal != nil {
+			updated, cmd := m.updateModal.Update(msg)
+			m.updateModal = updated.(*updateModalWidget)
 			return m, cmd
 		}
 	case overlayKindDiffView:
@@ -981,6 +1037,10 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		})
+	case m.keys.Update.Match(msg):
+		m.updateModal = newUpdateModalWidget(m.version, m.latestVersion, m.styles, m.updateConfirmKeys)
+		m.overlay.openOverlay(overlayKindUpdateConfirm)
+		return m, nil
 	}
 	return m, nil
 }
@@ -1170,6 +1230,75 @@ func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleUpdateFlowMsg dispatches every message in the update-available flow
+// (docs/adr/0010-self-update-check.md): the background check result, the
+// modal's confirm/cancel outcome, and the self-update run's result. Grouped
+// under one coreUpdate case (rather than one case per type) to keep that
+// switch's branch count down — this function owns the internal dispatch.
+func (m Model) handleUpdateFlowMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case UpdateCheckResultMsg:
+		return m.handleUpdateCheckResult(msg)
+	case UpdateConfirmedMsg:
+		m.overlay.closeOverlay()
+		return m, m.selfUpdateCmd()
+	case UpdateCancelledMsg:
+		m.overlay.closeOverlay()
+		return m, nil
+	case SelfUpdateResultMsg:
+		return m.handleSelfUpdateResult(msg)
+	}
+	return m, nil
+}
+
+// handleUpdateCheckResult applies the outcome of the background release check
+// (docs/adr/0010-self-update-check.md). A check failure is logged at Debug,
+// not surfaced to the user — it is a background nicety, not an action they
+// took, so it gets no toast.
+func (m Model) handleUpdateCheckResult(msg UpdateCheckResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Debug("tui: update check failed", "err", msg.Err)
+		return m, nil
+	}
+	m.updateAvailable = msg.Info.Available
+	m.latestVersion = msg.Info.Latest
+	m.keys.Update.SetEnabled(msg.Info.Available)
+	m.footer.SetUpdateAvailable(msg.Info.Available)
+	return m, nil
+}
+
+// newSelfUpdateExecCmd builds the *exec.Cmd for the self-update run, kept
+// separate from selfUpdateCmd so its construction can be asserted on in
+// tests without ever actually invoking tea.ExecProcess (docs/adr/0010).
+func newSelfUpdateExecCmd() *exec.Cmd {
+	// updateCommand is a fixed constant baked into mrboard, not user- or
+	// config-supplied input — unlike execCommandCmd's argv, there is no
+	// injection surface here; the shell is needed only for "&&" sequencing.
+	return exec.Command("sh", "-c", updateCommand)
+}
+
+// selfUpdateCmd suspends mrboard and runs the fixed update command via
+// tea.ExecProcess, mirroring execCommandCmd's shape (docs/adr/0010).
+func (m Model) selfUpdateCmd() tea.Cmd {
+	m.logger.Info("tui: running self-update", "from", m.version, "to", m.latestVersion)
+	return tea.ExecProcess(newSelfUpdateExecCmd(), func(err error) tea.Msg {
+		return SelfUpdateResultMsg{Err: err}
+	})
+}
+
+// handleSelfUpdateResult reports the self-update run's outcome. Unlike
+// handleCommandResult, success still gets a toast: the running process is
+// still the old binary until mrboard is restarted, so the redrawn board is
+// not itself a sufficient signal that anything changed.
+func (m Model) handleSelfUpdateResult(msg SelfUpdateResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.logger.Error("tui: self-update failed", "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, "update failed: "+msg.Err.Error())
+	}
+	m.logger.Info("tui: self-update finished")
+	return m, m.toast(toast.InfoAlert, "updated — restart mrboard to use the new version")
+}
+
 // updateTicketKey enables or disables the ticket key based on whether the
 // focused MR has a detectable ticket ID and ticketBaseURL is configured, and
 // syncs m.selected to match. Call after any navigation that may change the
@@ -1224,6 +1353,10 @@ func (m Model) renderScreen() string {
 		case overlayKindBatchPreview:
 			if m.batchPreview != nil {
 				return m.renderWithOverlay(board, m.batchPreview.render())
+			}
+		case overlayKindUpdateConfirm:
+			if m.updateModal != nil {
+				return m.renderWithOverlay(board, m.updateModal.render())
 			}
 		}
 		return board
@@ -1732,6 +1865,9 @@ func (m *Model) applyTheme() {
 	}
 	if m.batchPreview != nil {
 		m.batchPreview.styles = m.styles
+	}
+	if m.updateModal != nil {
+		m.updateModal.styles = m.styles
 	}
 }
 

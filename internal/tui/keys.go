@@ -69,6 +69,7 @@ type BoardKeyMap struct {
 	Notify     Action
 	OpenTicket Action
 	Settings   Action
+	Update     Action
 }
 
 // DefaultBoardKeyMap is the default keybinding set for board mode.
@@ -88,6 +89,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
 	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
+	Update:     Act("u", "update available", PriorityModal, CategoryAct),
 }
 
 // BoardCtx is the board-mode context.
@@ -269,6 +271,22 @@ var DefaultBatchPreviewKeyMap = BatchPreviewKeyMap{
 var BatchPreviewCtx = NewContext("batch-preview", "Batch preview", &DefaultBatchPreviewKeyMap,
 	WithFooterGroup("↑↓", "move", &DefaultBatchPreviewKeyMap.Up, &DefaultBatchPreviewKeyMap.Down),
 )
+
+// UpdateConfirmKeyMap holds keybindings for the update-confirmation modal
+// (docs/adr/0010-self-update-check.md).
+type UpdateConfirmKeyMap struct {
+	Confirm Action
+	Cancel  Action
+}
+
+// DefaultUpdateConfirmKeyMap is the default keybinding set for the update-confirmation modal.
+var DefaultUpdateConfirmKeyMap = UpdateConfirmKeyMap{
+	Confirm: Act("↵/y", "confirm", PriorityCore, CategoryGeneral, "enter", "y"),
+	Cancel:  Act("esc/n", "cancel", PriorityCore, CategoryGeneral, "esc", "n"),
+}
+
+// UpdateConfirmCtx is the update-confirmation modal context.
+var UpdateConfirmCtx = NewContext("update-confirm", "Update mrboard", &DefaultUpdateConfirmKeyMap)
 
 // CustomCommands owns resolving a keypress to its configured external
 // command end to end (docs/adr/0004-external-command-launcher.md): Context

@@ -39,7 +39,7 @@ func makeModelWithSnapshotStore(t *testing.T, snap *recordingSnapshotStore) Mode
 	src := mocks.NewMockMergeRequestSource(t)
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(someMRs(), nil).Maybe()
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{MRs: someMRs()})
 	snap.saves = 0
 	snap.last = nil

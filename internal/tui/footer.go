@@ -7,13 +7,15 @@ import (
 )
 
 // footerWidget renders the one-line status bar: a prioritized selection of
-// the active context's keybindings on the left and the app version pinned to
-// the right edge. The version is never sacrificed; binding items are dropped
-// whole (lowest priority first) when the terminal is too narrow.
+// the active context's keybindings on the left and the app version — plus an
+// update-available badge, when one applies — pinned to the right edge. The
+// version (and badge) is never sacrificed; binding items are dropped whole
+// (lowest priority first) when the terminal is too narrow.
 type footerWidget struct {
-	styles  Styles
-	version string
-	width   int
+	styles          Styles
+	version         string
+	updateAvailable bool
+	width           int
 }
 
 func newFooterWidget(styles Styles, version string) footerWidget {
@@ -25,6 +27,10 @@ func (f *footerWidget) SetStyles(s Styles) { f.styles = s }
 
 // SetWidth updates available width so the version is pinned to the right edge.
 func (f *footerWidget) SetWidth(w int) { f.width = w }
+
+// SetUpdateAvailable records whether a newer mrboard release is available,
+// shown as a badge next to the version (docs/adr/0010-self-update-check.md).
+func (f *footerWidget) SetUpdateAvailable(available bool) { f.updateAvailable = available }
 
 // render builds the status line for the given context stack (bottom → top).
 // Layout: `? help • <top-context items by priority> • q quit …… version`.
@@ -48,6 +54,9 @@ func (f footerWidget) render(stack []*Context) string {
 	}
 
 	ver := f.styles.FooterVersion.Render(f.version)
+	if f.updateAvailable {
+		ver += " " + f.styles.FooterUpdateBadge.Render("↑")
+	}
 	if f.width <= 0 {
 		return f.styles.Footer.Render(f.renderItems(items) + " " + ver)
 	}
