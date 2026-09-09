@@ -89,7 +89,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
 	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
-	Update:     Act("u", "update available", PriorityModal, CategoryAct),
+	Update:     Act("u", "update", PriorityModal, CategoryAct),
 }
 
 // BoardCtx is the board-mode context.
@@ -272,21 +272,20 @@ var BatchPreviewCtx = NewContext("batch-preview", "Batch preview", &DefaultBatch
 	WithFooterGroup("↑↓", "move", &DefaultBatchPreviewKeyMap.Up, &DefaultBatchPreviewKeyMap.Down),
 )
 
-// UpdateConfirmKeyMap holds keybindings for the update-confirmation modal
-// (docs/adr/0010-self-update-check.md).
-type UpdateConfirmKeyMap struct {
+// ConfirmKeyMap holds keybindings for the reusable yes/no dialog.
+type ConfirmKeyMap struct {
 	Confirm Action
 	Cancel  Action
 }
 
-// DefaultUpdateConfirmKeyMap is the default keybinding set for the update-confirmation modal.
-var DefaultUpdateConfirmKeyMap = UpdateConfirmKeyMap{
+// DefaultConfirmKeyMap is the default keybinding set for the yes/no dialog.
+var DefaultConfirmKeyMap = ConfirmKeyMap{
 	Confirm: Act("↵/y", "confirm", PriorityCore, CategoryGeneral, "enter", "y"),
 	Cancel:  Act("esc/n", "cancel", PriorityCore, CategoryGeneral, "esc", "n"),
 }
 
-// UpdateConfirmCtx is the update-confirmation modal context.
-var UpdateConfirmCtx = NewContext("update-confirm", "Update mrboard", &DefaultUpdateConfirmKeyMap)
+// ConfirmCtx is the yes/no dialog context.
+var ConfirmCtx = NewContext("confirm", "Confirm", &DefaultConfirmKeyMap)
 
 // CustomCommands owns resolving a keypress to its configured external
 // command end to end (docs/adr/0004-external-command-launcher.md): Context

@@ -12,7 +12,9 @@ older build that a newer one exists — they only find out by remembering to run
 
 The destination: a small `↑` badge next to the version number in the footer when a newer release
 exists, and a `u` keybinding (enabled only while a badge is showing) that opens a Yes/No
-confirmation modal offering to run `brew update && brew upgrade ceffo/tap/mrboard` itself.
+confirmation dialog offering to run `brew update && brew upgrade ceffo/tap/mrboard` itself. The
+badge carries the `u` hint beside it, since a badge nobody knows how to act on is only half a
+feature.
 
 While designing this, "update" was found to already name something unrelated in this codebase —
 `mrboard update` was the CLI subcommand for auto-assigning reviewers (ADR-0009). That command was
@@ -25,29 +27,43 @@ renamed to `mrboard auto` in the same change, freeing "update" for this feature.
   feature.
 - No update mechanism other than Homebrew. mrboard does not attempt to detect how it was
   installed; the offered command assumes the documented install path.
-- The check never runs for a `dev` build (one not built via goreleaser), regardless of
-  `update_check.enabled` — a local development build has no meaningful "latest release" to compare
-  against, and nagging a developer mid-session would be actively unhelpful.
+- The check never runs for a build that isn't a published release, regardless of
+  `update_check.enabled` — a local build has no meaningful "latest release" to compare against, and
+  nagging a developer mid-session would be actively unhelpful. That covers both `dev` and the
+  `git describe` version `just build` stamps (`v0.11.0-3-gabc1234-dirty`): goreleaser publishes
+  only plain `vX.Y.Z`, so any suffix means locally built.
 
 ## Decision
 
 **Version source.** `GET /repos/ceffo/mrboard/releases/latest` (`pkg/github`), unauthenticated —
 goreleaser already guarantees a GitHub Release exists per tag, so it's authoritative regardless of
-how the user installed mrboard. Comparison is a hand-rolled `major.minor.patch` parse
-(`updatesvc.ParseVersion`/`IsNewer`) rather than a semver dependency: the tag scheme is guaranteed
-simple (`v*.*.*` only, no prerelease suffixes), and a parse failure — including the running
-`"dev"` version — is treated as "can't safely compare," never as "always/never newer."
+how the user installed mrboard. Comparison uses `github.com/Masterminds/semver/v3`, in
+`githubadpt`, not a hand-rolled parse: version precedence has enough edge cases (prerelease
+ranking especially) that owning the implementation buys nothing. It sits in the adapter rather
+than the port because `internal/domain` — `updatesvc` included — takes no non-stdlib
+dependencies; the port declares only that an implementation must never report an update available
+for a version it cannot parse, which is what the running `"dev"` build relies on.
 
-**Check cadence.** One-shot per launch, fired from `Model.Init()`, not the existing
-`RefreshInterval` ticker — that ticker exists for MR-data staleness, an unrelated cadence concern.
-`githubadpt` layers its own 24h disk cache (mirroring `jiraadpt`'s cache shape) on top, so the
-one-shot-per-launch call still amounts to roughly one real GitHub request per day across however
-many times mrboard is started, comfortably inside GitHub's unauthenticated rate limit.
+**Check cadence.** A forced live check on launch from the version widget's `Init()`, then a
+recurring check every `update_check.cache_ttl`. Launch forces past the cache because a cache entry
+written by a previous run describes what was true then, and launch is exactly when a stale or
+missing badge is most visible. The recurring cadence matches the cache TTL deliberately: a shorter
+period would only ever be answered from that cache, and a longer one would leave the cache expired
+between checks. It is separate from the `RefreshInterval` ticker, which exists for MR-data
+staleness — an unrelated concern.
 
-**Modal is a real confirmation, not a two-step reveal.** The modal shows the current/latest
-version and the exact command, and a single keypress decides the outcome: Enter/y runs it, Esc/n
-dismisses. There is no separate "show the command" state requiring a second key to actually run
-it.
+**Dialog is a real confirmation, not a two-step reveal.** It shows the current/latest version and
+the exact command, and a single keypress decides the outcome: Enter/y runs it, Esc/n dismisses.
+There is no separate "show the command" state requiring a second key to actually run it. The
+dialog itself is the generic `confirmWidget` (`internal/tui/confirm.go`), which knows nothing
+about updates: bubbles ships no yes/no dialog, so mrboard owns one, parameterized by title, body,
+and the message to emit on yes.
+
+**The version widget owns the whole feature.** `internal/tui/version.go` holds the running
+version, the checker, the check cadence, the badge, the enablement of the `u` binding, and the
+self-update run. `model.go` routes messages to it and opens the overlay it builds; it stores no
+update state of its own. Widgets cannot reach the root model's screen-wide resources directly, so
+the widget emits `dismissOverlayMsg` and `toastMsg` and the root serves them.
 
 **The confirm handler shells out, unlike the custom-command launcher.** ADR-0004's external
 command launcher deliberately never passes a shell — its argv is templated from user config, and
@@ -69,7 +85,8 @@ than implying the running session is now current.
 
 **Config.** `update_check.enabled` (default `true`) and `update_check.cache_ttl` (default `24h`),
 following the `Jira`/`AutoAssignReviewers` struct-per-feature convention. No `owner`/`repo` keys —
-the target repository isn't user-configurable (see Non-goals).
+the target repository isn't user-configurable (see Non-goals). `cache_ttl` sets both the adapter's
+cache lifetime and the widget's re-check period, so one key describes the whole cadence.
 
 **Demo mode never checks for real**, regardless of `update_check.enabled`: `demoadpt.UpdateChecker`
 always reports no update available, the same "every driven port has a fake here" invariant already
@@ -80,6 +97,9 @@ covering `Notifier`.
 - `internal/domain/service/updatesvc` and `internal/adapters/githubadpt` are new vendor-neutral
   port/adapter packages, following the same shape as `ticketsvc`/`jiraadpt`.
 - `pkg/github` is a new raw API client package, alongside `pkg/gitlab`/`pkg/jira`.
+- `confirmWidget` and `ConfirmCtx` are generic: the next feature needing a yes/no decision reuses
+  them rather than adding another bespoke modal.
+- `github.com/Masterminds/semver/v3` is a new direct dependency, used only by `githubadpt`.
 - `tui.New`'s signature grows a `updatesvc.UpdateChecker` parameter; every call site (production
   and tests) passes it explicitly.
 - Verifying the actual confirm-and-run path cannot be automated or driven through `agent-tui`: it

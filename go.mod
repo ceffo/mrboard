@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.7
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/ceffo/toast v0.2.1
 	github.com/eko/gocache/lib/v4 v4.2.4
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0

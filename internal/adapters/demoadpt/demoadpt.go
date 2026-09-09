@@ -110,7 +110,9 @@ func (a *Adapter) UpdateChecker() updatesvc.UpdateChecker { return &updateChecke
 // updateChecker is the demo-mode updatesvc.UpdateChecker: always up to date.
 type updateChecker struct{}
 
-func (*updateChecker) CheckForUpdate(_ context.Context, _ string) (updatesvc.Info, error) {
+func (*updateChecker) CheckForUpdate(
+	_ context.Context, _ string, _ updatesvc.CheckOptions,
+) (updatesvc.Info, error) {
 	return updatesvc.Info{}, nil
 }
 

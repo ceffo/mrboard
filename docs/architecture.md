@@ -26,7 +26,7 @@ graph TD
 | `internal/domain` | stdlib only — zero non-stdlib imports |
 | `internal/domain/service/mrsvc` | port interfaces; imports only `internal/domain` |
 | `internal/domain/service/ticketsvc` | port interfaces; imports only `internal/domain` |
-| `internal/domain/service/updatesvc` | port interfaces + version comparison; imports only stdlib |
+| `internal/domain/service/updatesvc` | port interfaces only; imports only stdlib |
 | `pkg/gitlab` | REST + GQL client; imports only stdlib + `net/http` libs |
 | `pkg/github` | unauthenticated REST client for GitHub releases; imports only stdlib + `net/http` |
 | `internal/adapters/gitlabadpt` | implements `mrsvc`; imports `pkg/gitlab` + `internal/domain` |
@@ -87,10 +87,10 @@ MR via `FetchMR` after a successful write.
 The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
 for Microsoft Teams.
 
-On startup, a one-shot `updatesvc.UpdateChecker.CheckForUpdate` call (skipped entirely for a "dev"
-build) sets the footer's update-available badge; the `u` key, enabled only while a newer release
-is available, opens a confirmation modal that runs the update command via `tea.ExecProcess` on
-confirm (`docs/adr/0010-self-update-check.md`).
+`internal/tui/version.go`'s `versionWidget` owns the update check end to end: a forced check on
+launch, a recurring one every `update_check.cache_ttl`, the footer badge and its `u` hint, the
+enablement of the `u` binding, and the `tea.ExecProcess` run on confirm. All of it is skipped for
+a "dev" build (`docs/adr/0010-self-update-check.md`).
 
 ## File layout
 
@@ -125,7 +125,6 @@ mrboard/
         mocks/             # mockery-generated doubles
       service/updatesvc/
         updatesvc.go       # Vendor-neutral UpdateChecker port (adr/0010)
-        version.go         # ParseVersion/IsNewer — major.minor.patch comparison
         mocks/             # mockery-generated doubles
     adapters/
       gitlabadpt/
@@ -137,7 +136,7 @@ mrboard/
       teamsnotify/
         teamsnotify.go     # domain.Notifier for Microsoft Teams via a Power Automate webhook
       githubadpt/
-        githubadpt.go      # updatesvc.UpdateChecker via pkg/github, disk-cached (adr/0010)
+        githubadpt.go      # updatesvc.UpdateChecker via pkg/github, semver-compared, disk-cached (adr/0010)
       statestore/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
       snapshotstore/
@@ -163,7 +162,8 @@ mrboard/
       settings_widget.go   # Settings overlay (press ,) — Filters/Sorting/Theme tabs
       overlay_router.go    # overlayKind — which exclusive overlay owns input focus
       help_modal.go        # Full keybinding help modal (press ?)
-      update_modal.go      # Update-available confirmation modal (press u) (adr/0010)
+      version.go           # Version footer segment + update check/badge/run (adr/0010)
+      confirm.go           # Reusable yes/no dialog overlay
       command_argv.go      # Resolves external-command argv templates against MR metadata (adr/0004)
       jira_icons.go        # Issue-type icon lookup for JIRA-linked MR titles
       footer.go            # Help/keybinding bar

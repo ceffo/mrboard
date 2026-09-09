@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/eko/gocache/lib/v4/cache"
 	"github.com/eko/gocache/lib/v4/marshaler"
 	"github.com/eko/gocache/lib/v4/store"
@@ -67,18 +68,23 @@ func New(client releaseClient, cfg Config, logger *slog.Logger) (*GitHubAdapter,
 }
 
 // CheckForUpdate implements updatesvc.UpdateChecker. currentVersion == "dev"
-// (or anything else ParseVersion rejects) never calls the client and never
-// reports an update available.
-func (a *GitHubAdapter) CheckForUpdate(ctx context.Context, currentVersion string) (updatesvc.Info, error) {
-	current, ok := updatesvc.ParseVersion(currentVersion)
+// (or anything else semver rejects) never calls the client and never reports
+// an update available. opts.Force skips the cache read, so the returned Info
+// reflects the live upstream state.
+func (a *GitHubAdapter) CheckForUpdate(
+	ctx context.Context,
+	currentVersion string,
+	opts updatesvc.CheckOptions,
+) (updatesvc.Info, error) {
+	current, ok := releaseVersion(currentVersion)
 	if !ok {
 		return updatesvc.Info{}, nil
 	}
 
 	var cachedTag string
-	if a.getCache(ctx, &cachedTag) {
+	if !opts.Force && a.getCache(ctx, &cachedTag) {
 		a.logger.Debug("githubadpt: cache hit", "tag", cachedTag)
-		return a.compare(current, cachedTag), nil
+		return compare(current, cachedTag), nil
 	}
 
 	rel, err := a.client.GetLatestRelease(ctx)
@@ -90,12 +96,28 @@ func (a *GitHubAdapter) CheckForUpdate(ctx context.Context, currentVersion strin
 	}
 
 	a.setCache(ctx, rel.TagName)
-	return a.compare(current, rel.TagName), nil
+	return compare(current, rel.TagName), nil
 }
 
-func (a *GitHubAdapter) compare(current updatesvc.ParsedVersion, tag string) updatesvc.Info {
-	latest, ok := updatesvc.ParseVersion(tag)
-	if !ok || !updatesvc.IsNewer(current, latest) {
+// releaseVersion parses a running build's version, accepting only a plain
+// vX.Y.Z release. goreleaser publishes nothing else, so any suffix means a
+// locally built binary — `just build` stamps `git describe`, which appends a
+// commit count and sha once the checkout has moved past the tag. Such a build
+// has no meaningful upstream to compare against.
+func releaseVersion(s string) (*semver.Version, bool) {
+	v, err := semver.NewVersion(s)
+	if err != nil || v.Prerelease() != "" || v.Metadata() != "" {
+		return nil, false
+	}
+	return v, true
+}
+
+// compare reports the update state of a release tag against the running
+// version. A tag semver cannot parse yields "no update available": an
+// unreadable tag must never be treated as newer.
+func compare(current *semver.Version, tag string) updatesvc.Info {
+	latest, err := semver.NewVersion(tag)
+	if err != nil || !latest.GreaterThan(current) {
 		return updatesvc.Info{}
 	}
 	return updatesvc.Info{Available: true, Latest: tag}

@@ -39,8 +39,8 @@ func (_m *MockUpdateChecker) EXPECT() *MockUpdateChecker_Expecter {
 }
 
 // CheckForUpdate provides a mock function for the type MockUpdateChecker
-func (_mock *MockUpdateChecker) CheckForUpdate(ctx context.Context, currentVersion string) (updatesvc.Info, error) {
-	ret := _mock.Called(ctx, currentVersion)
+func (_mock *MockUpdateChecker) CheckForUpdate(ctx context.Context, currentVersion string, opts updatesvc.CheckOptions) (updatesvc.Info, error) {
+	ret := _mock.Called(ctx, currentVersion, opts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckForUpdate")
@@ -48,16 +48,16 @@ func (_mock *MockUpdateChecker) CheckForUpdate(ctx context.Context, currentVersi
 
 	var r0 updatesvc.Info
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (updatesvc.Info, error)); ok {
-		return returnFunc(ctx, currentVersion)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, updatesvc.CheckOptions) (updatesvc.Info, error)); ok {
+		return returnFunc(ctx, currentVersion, opts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) updatesvc.Info); ok {
-		r0 = returnFunc(ctx, currentVersion)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, updatesvc.CheckOptions) updatesvc.Info); ok {
+		r0 = returnFunc(ctx, currentVersion, opts)
 	} else {
 		r0 = ret.Get(0).(updatesvc.Info)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, currentVersion)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, updatesvc.CheckOptions) error); ok {
+		r1 = returnFunc(ctx, currentVersion, opts)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -72,11 +72,12 @@ type MockUpdateChecker_CheckForUpdate_Call struct {
 // CheckForUpdate is a helper method to define mock.On call
 //   - ctx context.Context
 //   - currentVersion string
-func (_e *MockUpdateChecker_Expecter) CheckForUpdate(ctx any, currentVersion any) *MockUpdateChecker_CheckForUpdate_Call {
-	return &MockUpdateChecker_CheckForUpdate_Call{Call: _e.mock.On("CheckForUpdate", ctx, currentVersion)}
+//   - opts updatesvc.CheckOptions
+func (_e *MockUpdateChecker_Expecter) CheckForUpdate(ctx any, currentVersion any, opts any) *MockUpdateChecker_CheckForUpdate_Call {
+	return &MockUpdateChecker_CheckForUpdate_Call{Call: _e.mock.On("CheckForUpdate", ctx, currentVersion, opts)}
 }
 
-func (_c *MockUpdateChecker_CheckForUpdate_Call) Run(run func(ctx context.Context, currentVersion string)) *MockUpdateChecker_CheckForUpdate_Call {
+func (_c *MockUpdateChecker_CheckForUpdate_Call) Run(run func(ctx context.Context, currentVersion string, opts updatesvc.CheckOptions)) *MockUpdateChecker_CheckForUpdate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -86,9 +87,14 @@ func (_c *MockUpdateChecker_CheckForUpdate_Call) Run(run func(ctx context.Contex
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
+		var arg2 updatesvc.CheckOptions
+		if args[2] != nil {
+			arg2 = args[2].(updatesvc.CheckOptions)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -99,7 +105,7 @@ func (_c *MockUpdateChecker_CheckForUpdate_Call) Return(info updatesvc.Info, err
 	return _c
 }
 
-func (_c *MockUpdateChecker_CheckForUpdate_Call) RunAndReturn(run func(ctx context.Context, currentVersion string) (updatesvc.Info, error)) *MockUpdateChecker_CheckForUpdate_Call {
+func (_c *MockUpdateChecker_CheckForUpdate_Call) RunAndReturn(run func(ctx context.Context, currentVersion string, opts updatesvc.CheckOptions) (updatesvc.Info, error)) *MockUpdateChecker_CheckForUpdate_Call {
 	_c.Call.Return(run)
 	return _c
 }

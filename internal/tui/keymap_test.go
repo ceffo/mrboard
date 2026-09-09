@@ -86,7 +86,7 @@ func TestFooterItemsRespectPriorityAndGroups(t *testing.T) {
 // items ("? help", "q quit") survive while lower-priority items are dropped,
 // and that the version stays within the line.
 func TestFooterPinnedNeverDropped(t *testing.T) {
-	f := newFooterWidget(NewStyles(LoadThemeByName(""), true), "v0.0.0")
+	f := newFooterWidget(NewStyles(LoadThemeByName(""), true), newTestVersionWidget("v0.0.0"))
 	f.SetWidth(40)
 	line := f.render([]*Context{BaseCtx, BoardCtx})
 	for _, pinned := range []string{"help", "quit", "v0.0.0"} {
