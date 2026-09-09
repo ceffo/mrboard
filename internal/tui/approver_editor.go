@@ -34,8 +34,10 @@ type ReviewerEditorClosedMsg struct{}
 // list while sibling MRs are present, requesting the per-MR preview screen before
 // writing to more than the focused MR.
 type BatchReviewerEditorPreviewMsg struct {
-	Staged    []stagedReviewer
-	Siblings  []domain.MergeRequest // all MRs sharing the JIRA key, including FocusedMR
+	Staged []stagedReviewer
+	// Siblings is every other MR sharing the JIRA key, excluding FocusedMR —
+	// FocusedMR's own write is unconditional and never listed as a "sibling".
+	Siblings  []domain.MergeRequest
 	FocusedMR domain.MergeRequest
 	// KnownIDs is the editor's resolved username→userID map (see userIDByName),
 	// carried through so the eventual batch write reuses it instead of
@@ -117,7 +119,7 @@ type reviewerEditorWidget struct {
 	searchResults []domain.ProjectMember // filtered by searchQuery
 	searchSel     map[int64]bool         // userID → selected in search
 
-	// Sibling MRs sharing the same JIRA key as mr (includes mr itself), and the
+	// Other MRs sharing the same JIRA key as mr (mr itself excluded), and the
 	// read-only panel used to browse them. Empty when mr has no JIRA key or no
 	// other open MR shares it.
 	siblings     []domain.MergeRequest
@@ -131,8 +133,10 @@ type reviewerEditorWidget struct {
 // newReviewerEditorWidget creates a staged-buffer editor for the given MR.
 // roster is the resolved team from startup (may be nil for group-only configs).
 // siblings is every MR sharing the same JIRA key as mr, including mr itself
-// (e.g. Model.SiblingMRs(m.keyMatcher.ExtractFromTitle(mr.Title))); nil or a
-// single-element slice means mr has no siblings to offer a batch apply to.
+// (e.g. Model.SiblingMRs(m.keyMatcher.ExtractFromTitle(mr.Title))); mr itself is
+// filtered out below, since it's the primary edit target, not an "also apply to".
+// An empty result (after filtering) means mr has no siblings to offer a batch
+// apply to.
 func newReviewerEditorWidget(
 	baseCtx context.Context,
 	mr domain.MergeRequest,
@@ -156,6 +160,13 @@ func newReviewerEditorWidget(
 			IsApprover: r.IsApprover,
 		})
 	}
+	others := make([]domain.MergeRequest, 0, len(siblings))
+	for _, s := range siblings {
+		if s.ProjectID == mr.ProjectID && s.IID == mr.IID {
+			continue
+		}
+		others = append(others, s)
+	}
 	return &reviewerEditorWidget{
 		styles:       styles,
 		keys:         keys,
@@ -167,7 +178,7 @@ func newReviewerEditorWidget(
 		staged:       staged,
 		userIDByName: make(map[string]int64),
 		searchSel:    make(map[int64]bool),
-		siblings:     siblings,
+		siblings:     others,
 	}
 }
 
@@ -302,7 +313,7 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 // mr; otherwise it hands off to the batch preview screen so the user can review
 // and exclude individual siblings before anything else is written.
 func (w *reviewerEditorWidget) confirm() (tea.Model, tea.Cmd) { //nolint:ireturn
-	if len(w.siblings) <= 1 {
+	if len(w.siblings) == 0 {
 		w.saving = true
 		return w, w.saveCmd()
 	}
@@ -481,8 +492,8 @@ func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
 // header's gap padding (anchored to the widest one) and each panel's own
 // bottom hint always agree.
 const (
-	reviewerListHint = "  ↑/↓ move  space:approver  d:remove  /:search  T:team  tab:siblings  ↵:save  v/esc:cancel"
-	reviewerSibHint  = "  ↑/↓ move  tab:reviewers  ↵:save  v/esc:cancel"
+	reviewerListHint = "  ↑/↓ move  space:approver  d:remove  /:search  T:team  tab:siblings  ↵:save  a/esc:cancel"
+	reviewerSibHint  = "  ↑/↓ move  tab:reviewers  ↵:save  a/esc:cancel"
 )
 
 func (w *reviewerEditorWidget) render() string {
@@ -506,8 +517,8 @@ func (w *reviewerEditorWidget) render() string {
 	// Line 2: MR title
 	line2 := w.styles.PopupItem.Render(w.mr.Title)
 	sb.WriteString(line1 + "\n" + line2 + "\n")
-	if key := w.keyMatcher.ExtractFromTitle(w.mr.Title); key != "" && len(w.siblings) > 1 {
-		sb.WriteString(w.styles.PopupHint.Render(fmt.Sprintf("🎫 %s · %d linked MRs", key, len(w.siblings))) + "\n")
+	if key := w.keyMatcher.ExtractFromTitle(w.mr.Title); key != "" && len(w.siblings) > 0 {
+		sb.WriteString(w.styles.PopupHint.Render(fmt.Sprintf("🎫 %s · %d linked MRs", key, len(w.siblings)+1)) + "\n")
 	}
 	sb.WriteString("\n")
 
@@ -564,10 +575,14 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 	}
 }
 
-// renderSiblings shows the read-only list of MRs sharing mr's JIRA key. Each
-// row is flagged with a conflict badge when its "Approvers" rule differs
-// from mr's — a warning, not a block: the write still applies to it on
-// confirm (via the batch preview screen) unless the user excludes it there.
+// renderSiblings shows the read-only list of other MRs sharing mr's JIRA key
+// (mr itself is never listed — its own write is unconditional, not an "also
+// apply to"). Rows are kept short (icon, IID, repo) so the modal's width
+// doesn't swing with MR title length; when a row's "Approvers" rule conflicts
+// with mr's, the added/removed usernames render inline at the end of that same
+// row — a warning, not a block: the write still applies to it on confirm (via
+// the batch preview screen) unless the user excludes it there. The focused
+// row's title (also left off the row itself) renders below the list.
 func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 	plural := "s"
 	if len(w.siblings) == 1 {
@@ -578,36 +593,63 @@ func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 
 	if len(w.siblings) == 0 {
 		sb.WriteString(w.styles.PopupHint.Render("  (no sibling MRs)") + "\n")
-	} else {
-		end := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
-		for i := w.sibScrollOff; i < end; i++ {
-			sib := w.siblings[i]
-			repo := sib.ProjectPath
-			if idx := strings.LastIndex(repo, "/"); idx >= 0 {
-				repo = repo[idx+1:]
-			}
-			isSelf := sib.ProjectID == w.mr.ProjectID && sib.IID == w.mr.IID
-			suffix := ""
-			if isSelf {
-				suffix = " (this)"
-			} else if domain.ApproversConflict(w.mr, sib) {
-				suffix = " " + w.styles.DurationWarning.Render("⚠ approvers differ")
-			}
-			label := fmt.Sprintf("!%d %s — %s%s", sib.IID, repo, sib.Title, suffix)
-			if i == w.sibCursor {
-				sb.WriteString("  " + w.styles.PopupItemFocused.Render(label) + "\n")
-			} else {
-				sb.WriteString("  " + w.styles.PopupItem.Render(label) + "\n")
-			}
-		}
-		if len(w.siblings) > reviewerEditorMaxVisible {
-			shown := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
-			sb.WriteString(w.styles.PopupHint.Render(
-				fmt.Sprintf("  %d–%d / %d", w.sibScrollOff+1, shown, len(w.siblings))) + "\n")
-		}
+		return
 	}
 
+	end := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
+	for i := w.sibScrollOff; i < end; i++ {
+		sib := w.siblings[i]
+		repo := sib.ProjectPath
+		if idx := strings.LastIndex(repo, "/"); idx >= 0 {
+			repo = repo[idx+1:]
+		}
+		label := fmt.Sprintf("%s !%d %s", phaseIcon(sib.Phase), sib.IID, repo)
+		if added, removed := domain.ApproversDiff(w.mr, sib); len(added)+len(removed) > 0 {
+			label += " " + renderInlineDiff(w.styles, removed, added)
+		}
+		if i == w.sibCursor {
+			sb.WriteString("  " + w.styles.PopupItemFocused.Render(label) + "\n")
+		} else {
+			sb.WriteString("  " + w.styles.PopupItem.Render(label) + "\n")
+		}
+	}
+	if len(w.siblings) > reviewerEditorMaxVisible {
+		shown := min(w.sibScrollOff+reviewerEditorMaxVisible, len(w.siblings))
+		sb.WriteString(w.styles.PopupHint.Render(
+			fmt.Sprintf("  %d–%d / %d", w.sibScrollOff+1, shown, len(w.siblings))) + "\n")
+	}
+
+	w.renderSiblingDetails(sb)
+
 	sb.WriteString("\n" + w.styles.PopupHint.Render(reviewerSibHint))
+}
+
+// renderSiblingDetails renders the focused sibling row's title below the
+// list — kept out of the row itself so the list stays a stable width. The
+// row's inline diff (see renderSiblings) is already the complete diagnostic
+// for a conflict, so there's nothing to repeat here.
+func (w *reviewerEditorWidget) renderSiblingDetails(sb *strings.Builder) {
+	if w.sibCursor >= len(w.siblings) {
+		return
+	}
+	sib := w.siblings[w.sibCursor]
+	contentW := max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint))
+	sb.WriteString("\n" + w.styles.PopupItem.Render(truncateWidth(sib.Title, contentW)) + "\n")
+}
+
+// renderInlineDiff formats removed/added usernames as a single same-line diff
+// — "-@user1 +@user2", removed before added, each token colored red/green
+// with no space between the sign and the "@". Shared by the reviewer editor's
+// sibling panel and the batch preview screen.
+func renderInlineDiff(styles Styles, removed, added []string) string {
+	parts := make([]string, 0, len(removed)+len(added))
+	for _, u := range removed {
+		parts = append(parts, styles.DiffRemoved.Render("-@"+u))
+	}
+	for _, u := range added {
+		parts = append(parts, styles.DiffAdded.Render("+@"+u))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) {

@@ -61,6 +61,24 @@ func phaseName(p domain.MRPhase) string {
 	}
 }
 
+// phaseIcon returns the glyph representing an MR's overall phase, used
+// wherever multiple MRs are listed side by side (e.g. the reviewer editor's
+// sibling panel) and a column header's text label isn't available.
+func phaseIcon(p domain.MRPhase) string {
+	switch p {
+	case domain.PhaseDraft:
+		return "🚧"
+	case domain.PhaseNeedsReview:
+		return "👀"
+	case domain.PhaseNeedsAuthorAction:
+		return "🖊️"
+	case domain.PhaseReadyToMerge:
+		return "✅"
+	default:
+		return "?"
+	}
+}
+
 func (c *columnWidget) SetFocused(v bool) {
 	c.focused = v
 	c.syncCardFocus()

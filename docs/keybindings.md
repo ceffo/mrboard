@@ -166,7 +166,7 @@ the terminal, centered.
         │  Navigate         Act           │
         │  ↑/k   up         r  refresh    │
         │  ↓/j   down       o  open MR    │
-        │  ←/h   left       v  reviewers  │
+        │  ←/h   left       a  reviewers  │
         │  →/l   right      d  diff       │
         │  ↵     details                  │
         │                   n  notify     │

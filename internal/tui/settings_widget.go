@@ -21,6 +21,7 @@ const (
 
 	markerChecked   = "[x]"
 	markerUnchecked = "[ ]"
+	markerFixed     = "[•]" // always-applied row with no toggle, e.g. the focused MR in the batch preview
 
 	filterSelectMaxVisible = 8
 )
