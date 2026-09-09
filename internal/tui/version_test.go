@@ -15,6 +15,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc/mocks"
+	"github.com/ceffo/mrboard/internal/selfupdate"
 )
 
 // testLatestTag is the newer release the fake checks report.
@@ -166,7 +167,7 @@ func TestVersionWidget_ConfirmDialog_RunsUpdateOnYes(t *testing.T) {
 	body := dlg.render()
 	assert.Contains(t, body, "1.2.3")
 	assert.Contains(t, body, testLatestTag)
-	assert.Contains(t, body, updateCommand)
+	assert.Contains(t, body, selfupdate.Command)
 
 	_, cmd := dlg.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	msgs := runCmds(t, batchCmds(t, cmd))
@@ -183,10 +184,4 @@ func TestConfirmWidget_Cancel_DismissesWithoutRunning(t *testing.T) {
 
 	require.NotNil(t, cmd)
 	assert.Equal(t, dismissOverlayMsg{}, cmd())
-}
-
-func TestNewSelfUpdateExecCmd_ShellsOutToBrew(t *testing.T) {
-	cmd := newSelfUpdateExecCmd()
-
-	assert.Equal(t, []string{"sh", "-c", updateCommand}, cmd.Args)
 }

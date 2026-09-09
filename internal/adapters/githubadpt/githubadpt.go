@@ -113,14 +113,15 @@ func releaseVersion(s string) (*semver.Version, bool) {
 }
 
 // compare reports the update state of a release tag against the running
-// version. A tag semver cannot parse yields "no update available": an
-// unreadable tag must never be treated as newer.
+// version. A tag semver cannot parse yields the zero Info: an unreadable tag
+// must never be treated as newer, and reporting it as the latest release
+// would misdescribe it to a caller.
 func compare(current *semver.Version, tag string) updatesvc.Info {
 	latest, err := semver.NewVersion(tag)
-	if err != nil || !latest.GreaterThan(current) {
+	if err != nil {
 		return updatesvc.Info{}
 	}
-	return updatesvc.Info{Available: true, Latest: tag}
+	return updatesvc.Info{Available: latest.GreaterThan(current), Latest: tag}
 }
 
 // getCache reads the cached latest-release tag. A miss, an expired or corrupt

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,18 +11,13 @@ import (
 	"github.com/ceffo/toast"
 
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
+	"github.com/ceffo/mrboard/internal/selfupdate"
 )
 
 // devVersion is the version string of a build not produced by goreleaser.
 // Such a build has no meaningful "latest release" to compare against, so it
 // never checks (docs/adr/0010-self-update-check.md).
 const devVersion = "dev"
-
-// updateCommand is the fixed, non-user-templated command the confirm dialog
-// offers to run. Unlike the argv-only custom-command launcher (whose args come
-// from admin config and must never pass through a shell), this string never
-// varies and is not built from any external input.
-const updateCommand = "brew update && brew upgrade ceffo/tap/mrboard"
 
 // updateCheckResultMsg carries the result of one release check.
 type updateCheckResultMsg struct {
@@ -128,7 +122,7 @@ func (w *versionWidget) render() string {
 // confirmDialog builds the yes/no dialog offered when the user presses the
 // update key.
 func (w *versionWidget) confirmDialog(keys ConfirmKeyMap) *confirmWidget {
-	body := fmt.Sprintf("update available: %s → %s\n\nrun `%s`?", w.version, w.latest, updateCommand)
+	body := fmt.Sprintf("update available: %s → %s\n\nrun `%s`?", w.version, w.latest, selfupdate.Command)
 	return newConfirmWidget("Update mrboard", body, w.styles, keys, func() tea.Msg {
 		return selfUpdateRequestedMsg{}
 	})
@@ -174,21 +168,11 @@ func (w *versionWidget) applyCheckResult(msg updateCheckResultMsg) {
 	w.action.SetEnabled(msg.info.Available)
 }
 
-// newSelfUpdateExecCmd builds the *exec.Cmd for the self-update run, kept
-// separate from selfUpdateCmd so its construction can be asserted on in tests
-// without ever actually invoking tea.ExecProcess.
-func newSelfUpdateExecCmd() *exec.Cmd {
-	// updateCommand is a fixed constant baked into mrboard, not user- or
-	// config-supplied input — unlike execCommandCmd's argv, there is no
-	// injection surface here; the shell is needed only for "&&" sequencing.
-	return exec.Command("sh", "-c", updateCommand)
-}
-
 // selfUpdateCmd suspends mrboard and runs the fixed update command via
 // tea.ExecProcess, mirroring execCommandCmd's shape.
 func (w *versionWidget) selfUpdateCmd() tea.Cmd {
 	w.logger.Info("tui: running self-update", "from", w.version, "to", w.latest)
-	return tea.ExecProcess(newSelfUpdateExecCmd(), func(err error) tea.Msg {
+	return tea.ExecProcess(selfupdate.ExecCmd(), func(err error) tea.Msg {
 		return selfUpdateResultMsg{err: err}
 	})
 }

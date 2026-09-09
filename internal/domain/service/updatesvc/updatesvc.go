@@ -7,8 +7,14 @@ import "context"
 
 // Info describes the result of an update check.
 type Info struct {
+	// Available reports whether Latest is newer than the version checked.
 	Available bool
-	Latest    string // e.g. "v0.12.0"; empty when !Available
+	// Latest is the newest published release (e.g. "v0.12.0"), set whether or
+	// not it is newer than the running build. It is empty only when no
+	// comparison happened at all — an unparseable current version, or nothing
+	// published upstream — which is how a caller tells "you are current" from
+	// "there was nothing to compare against."
+	Latest string
 }
 
 // CheckOptions tunes a single update check.

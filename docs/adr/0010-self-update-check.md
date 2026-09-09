@@ -65,6 +65,13 @@ self-update run. `model.go` routes messages to it and opens the overlay it build
 update state of its own. Widgets cannot reach the root model's screen-wide resources directly, so
 the widget emits `dismissOverlayMsg` and `toastMsg` and the root serves them.
 
+**`mrboard --update` is the non-interactive form of the same feature.** It forces a live check and
+either runs the upgrade, reports that the running build is already the latest release, or says
+there was nothing to compare against. To make that third case distinguishable from the second,
+`updatesvc.Info.Latest` carries the upstream tag whether or not it is newer; empty means no
+comparison happened. Both entry points run `internal/selfupdate.Command`, so the TUI dialog and
+the flag can never drift apart.
+
 **The confirm handler shells out, unlike the custom-command launcher.** ADR-0004's external
 command launcher deliberately never passes a shell — its argv is templated from user config, and
 a shell there would let a config-supplied argument smuggle in shell metacharacters. This command

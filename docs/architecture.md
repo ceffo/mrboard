@@ -15,7 +15,7 @@ graph TD
     C --> J["internal/adapters/jiraadpt<br>implements ticketsvc ports"]
     C --> K["internal/adapters/teamsnotify<br>implements domain.Notifier"]
     C --> M["internal/adapters/githubadpt<br>implements updatesvc.UpdateChecker"]
-    B --> G["internal/tui<br>Bubble Tea; only layer importing charmbracelet"]
+    B --> G["internal/tui<br>Bubble Tea; the only layer building charmbracelet UI"]
     G --> H["internal/domain/service/mrsvc<br>ports owned by business layer"]
     G --> L["internal/domain/service/ticketsvc<br>ports owned by business layer"]
     G --> N["internal/domain/service/updatesvc<br>ports owned by business layer"]
@@ -37,6 +37,7 @@ graph TD
 | `internal/adapters/snapshotstore` | implements `domain.SnapshotStore`; stdlib + file I/O |
 | `internal/adapters/demoadpt` | implements every driven port from an embedded fixture; see adr/0006 |
 | `internal/core` | composition root; no TUI imports |
+| `internal/selfupdate` | the fixed command that upgrades an installed binary; used by the TUI and `--update` |
 | `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc`/`updatesvc` interfaces, never on adapters |
 
 `internal/tui` depends on `mrsvc.MergeRequestSource` (the port), not on any adapter directly.
@@ -90,7 +91,8 @@ for Microsoft Teams.
 `internal/tui/version.go`'s `versionWidget` owns the update check end to end: a forced check on
 launch, a recurring one every `update_check.cache_ttl`, the footer badge and its `u` hint, the
 enablement of the `u` binding, and the `tea.ExecProcess` run on confirm. All of it is skipped for
-a "dev" build (`docs/adr/0010-self-update-check.md`).
+a "dev" build (`docs/adr/0010-self-update-check.md`). `mrboard --update` is the non-interactive
+form: same port, same `internal/selfupdate` command, no TUI.
 
 ## File layout
 
@@ -100,10 +102,11 @@ mrboard/
     main.go                # Signal handling; calls mrboardcmd.Execute
   internal/
     cmd/mrboard/
-      root.go              # Cobra root command; boots core, launches the board by default
+      root.go              # Cobra root command wrapped by fang; boots core, launches the board by default
       board.go             # execBoard — launches the TUI
       fetch.go             # `mrboard fetch` — one-shot JSON dump, mirrors the TUI's read path
       auto.go              # `mrboard auto` — one-shot auto-assign-reviewers write (adr/0009)
+      update.go            # `mrboard --update` — check and install a newer release (adr/0010)
       version.go           # `mrboard version` subcommand
     config/
       config.go            # AppConfig, Load(), typed sub-config accessors
@@ -111,6 +114,8 @@ mrboard/
     core/
       core.go              # Composition root — builds and wires all dependencies
       demo.go              # NewDemo() — wires Core against demoadpt instead of real adapters
+    selfupdate/
+      selfupdate.go        # The fixed brew command that upgrades this binary (adr/0010)
     domain/
       mr.go                # All domain types (see domain-model.md)
       state.go             # StateStore + SnapshotStore interfaces

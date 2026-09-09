@@ -1,6 +1,10 @@
 # TUI Conventions
 
-The TUI lives entirely in `internal/tui/`. Only this package may import charmbracelet libraries.
+The TUI lives entirely in `internal/tui/`. Only this package may import charmbracelet libraries,
+with one exception: `internal/cmd/mrboard` imports `charm.land/fang/v2` to style cobra's help,
+version and error output. Fang wraps command execution and renders nothing the TUI owns, so it
+does not put a second renderer in the CLI layer — anything beyond that (lipgloss, bubbles, a
+bubbletea program) still belongs in `internal/tui`.
 
 ## Ecosystem versions — import paths
 
