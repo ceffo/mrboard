@@ -59,7 +59,8 @@ Consequences for how you work:
   is not what was intended, retitle the PR rather than tagging by hand.
 - Add `[skip release]` to the title for work that shouldn't ship on its own.
 - `scripts/next-version.sh` owns the type → bump mapping. Adding a type means updating its
-  `--self-test` table, the ADR, this table, and the README table in the same commit.
+  `--self-test` table, the ADR, this table, and the `docs/development.md` table in the
+  same commit.
 - Never push a tag by hand to release. `just release major` is the only manual route, and
   it exists for reaching `v1.0.0`.
 
