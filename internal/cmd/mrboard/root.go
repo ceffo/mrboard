@@ -73,22 +73,8 @@ func buildRootCmd() *cobra.Command {
 	}
 
 	root := &cobra.Command{
-		Use:   "mrboard",
-		Short: "GitLab MR review board for daily standups",
-		Long: `mrboard displays GitLab merge requests in a kanban board.
-
-Config search path (first match wins):
-  --config flag
-  $XDG_CONFIG_HOME/mrboard/mrboard.yaml  (default: ~/.config/mrboard/mrboard.yaml)
-  ./mrboard.yaml
-
-Environment:
-  GITLAB_TOKEN     Override gitlab.token from config
-
-Run "mrboard --demo" to explore the board against a built-in fake dataset,
-with no config file, credentials, or network access required.
-
-Run "mrboard --update" to check for a newer release and install it.`,
+		Use:          "mrboard",
+		Short:        "GitLab MR review board for daily standups",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			return bootCore(cmd)
