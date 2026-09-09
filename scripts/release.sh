@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: scripts/release.sh [patch|minor|major] [--force] [--dry-run]
 # Reads the latest git tag, bumps the requested component, tags, and pushes.
-# Bootstraps to v0.0.1 if no tags exist.
+# The version arithmetic itself lives in next-version.sh, shared with CI.
 # Called with no bump argument, prompts interactively (via gum) with a live
 # preview of the resulting version for each choice.
 # --force   skips the gum confirmation prompt (for non-interactive environments).
@@ -26,22 +26,12 @@ if [[ "$unpushed" -gt 0 ]]; then
   exit 1
 fi
 
-latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+latest=$(bash "$script_dir/next-version.sh" --current)
 
 compute_next() {
-  local level=$1
-  if [[ -z "$latest" ]]; then
-    echo "v0.0.1"
-    return
-  fi
-  local major minor patch
-  IFS='.' read -r major minor patch <<< "${latest#v}"
-  case "$level" in
-    major) major=$((major + 1)); minor=0; patch=0 ;;
-    minor) minor=$((minor + 1)); patch=0 ;;
-    patch) patch=$((patch + 1)) ;;
-  esac
-  echo "v${major}.${minor}.${patch}"
+  bash "$script_dir/next-version.sh" --next "$1"
 }
 
 if [[ -z "$bump" ]]; then

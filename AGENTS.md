@@ -36,13 +36,44 @@ where `type` is a conventional-commit type (`feat`, `fix`, `chore`, `docs`, `ref
 If the purpose of the work isn't clear enough to derive a branch name from, ask the user
 what to call it rather than guessing.
 
+## Releasing — the PR title ships a version
+
+Merging a PR into `main` releases it: the squashed commit subject is the PR title, and its
+conventional-commit type picks the bump. `!` bumps the minor, never the major. See
+[`docs/adr/0011-auto-release-on-merge.md`](docs/adr/0011-auto-release-on-merge.md).
+
+| Level | Types | Releases |
+| --- | --- | --- |
+| `minor` | `feat` | yes |
+| `patch` | `fix`, `perf`, `refactor`, `revert` | yes |
+| `none` | `build`, `chore`, `ci`, `docs`, `merge`, `release`, `style`, `test`, `wip` | no |
+| `skip` | any type, with `[skip release]` in the subject | no |
+| `unknown` | any other type, and any subject that is not a conventional commit | no |
+
+Consequences for how you work:
+
+- **A PR title is a release decision.** Before opening or retitling a PR, run
+  `just release-preview "<title>"` and tell the user the level and version it will
+  publish.
+- A title that lands as `unknown` releases nothing and warns on the workflow run. If that
+  is not what was intended, retitle the PR rather than tagging by hand.
+- Add `[skip release]` to the title for work that shouldn't ship on its own.
+- `scripts/next-version.sh` owns the type → bump mapping. Adding a type means updating its
+  `--self-test` table, the ADR, this table, and the README table in the same commit.
+- Never push a tag by hand to release. `just release major` is the only manual route, and
+  it exists for reaching `v1.0.0`.
+
 ## Quality gates
 
 Every bead must pass before closing (use the justfile — never bare `go` commands):
 ```
-just check      # fmt + lint + build + test
+just check      # fmt + lint + build + test + release-script self-test
 just generate   # regenerate all mocks (run after changing any interface in internal/service)
 ```
+
+`.github/workflows/check.yml` runs `just check-ci` on every PR — the same gate, except it
+fails on unformatted code instead of reformatting it. Never put a bare `go` command in a
+workflow either: CI and a local run must be the same gate.
 
 ## End of session checklist
 
@@ -119,7 +150,7 @@ interactive TUI through agent-tui. Letting it drift out of parity removes that c
 
 1. Add or change an interface in `internal/service/`.
 2. Add (or verify) an entry in `.mockery.yml` under `packages:`.
-3. Run `just generate` — this runs `mockery` which reads `.mockery.yml`.
+3. Run `just generate` — this runs `go tool mockery`, which reads `.mockery.yml`.
 4. The generated file lands in `internal/service/mocks/mock_<InterfaceName>.go`.
 5. Commit the generated file alongside the interface change.
 
@@ -158,12 +189,20 @@ packages:
       MyNewPort:            # add new entries here
 ```
 
-### Prerequisites (one-time install)
+### Prerequisites: none
 
-```bash
-brew install mockery          # or go install github.com/vektra/mockery/v3@latest
-go install golang.org/x/tools/cmd/goimports@latest
-```
+golangci-lint and mockery are `tool` directives in `go.mod`, invoked as `go tool
+golangci-lint` and `go tool mockery`. A fresh clone runs `just check` and `just generate`
+with nothing but the Go toolchain, and every machine — including CI — uses the version
+this checkout records.
+
+- **Never call a bare `golangci-lint` or `mockery`** from the justfile or a workflow. That
+  runs whatever the machine happens to have, which is how the committed mocks silently
+  fell a mockery version behind the one that generated them.
+- `just tools-update` takes the newest release of both and records it in `go.mod`. Commit
+  the `go.mod`/`go.sum` change together with the mocks a mockery bump regenerates.
+- `goimports` needs no install either: `.mockery.yml`'s `formatter: goimports` is a
+  library inside mockery, not the binary.
 
 ## TUI verification with agent-tui
 

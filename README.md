@@ -111,7 +111,7 @@ logs what would be assigned without writing to GitLab.
 ## Development
 
 ```bash
-just check                    # fmt + lint + build + test
+just check                    # fmt + lint + build + test (CI runs `just check-ci`)
 just demo-run                 # launch the board against the demo dataset
 just demo                     # re-record the GIF from the working tree
 just demo-release v0.10.0     # re-record it from a clean checkout of a tag
@@ -120,3 +120,32 @@ just demo-release v0.10.0     # re-record it from a clean checkout of a tag
 Use `demo-release` for the committed GIF: the version in the footer is stamped at
 build time, so recording from the working tree labels the frame `-dirty`. Both need
 [vhs](https://github.com/charmbracelet/vhs).
+
+## Releasing
+
+Merging a PR into `main` releases it. The squashed commit subject — the PR title — picks
+the bump:
+
+| PR title | Bump | Release |
+| --- | --- | --- |
+| `feat(tui): …` | minor | yes |
+| `fix`, `perf`, `refactor`, `revert` | patch | yes |
+| `build`, `chore`, `ci`, `docs`, `merge`, `release`, `style`, `test`, `wip` | none | no |
+| `… [skip release]` | skip | no |
+| any other type, or a subject that is not a conventional commit | unknown | no, with a warning on the run |
+
+A `!` breaking marker bumps the minor, not the major — `v1.0.0` is only reachable
+through `just release major`.
+
+The last two rows are separate on purpose: `none` is a deliberate non-releasing merge,
+`unknown` is usually a mistyped title. Both stop the release, but `unknown` annotates the
+workflow run so an unreleased merge does not pass unnoticed. Check a title before merging
+with:
+
+```bash
+just release-preview "feat(tui): add a column"
+# level=minor
+# version=v0.14.0
+```
+
+See [adr/0011](docs/adr/0011-auto-release-on-merge.md) for the full rationale.
