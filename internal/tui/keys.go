@@ -81,7 +81,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Detail:     Act("↵", "details", PriorityCore, CategoryNavigate, "enter"),
 	Refresh:    Act("r", "refresh", PriorityCommon, CategoryAct),
 	Open:       actOpenMR,
-	Reviewers:  Act("v", "reviewers", PriorityCommon, CategoryAct),
+	Reviewers:  Act("a", "reviewers", PriorityCommon, CategoryAct),
 	Diff:       actDiff,
 	Sort:       Act("s", "sort", PriorityCommon, CategoryView),
 	ToggleView: Act("tab", "toggle view", PriorityCommon, CategoryView),
@@ -215,7 +215,7 @@ var DefaultReviewerEditorKeyMap = ReviewerEditorKeyMap{
 	Search:         Act("/", "search", PriorityCommon, CategoryAct),
 	SetTeam:        Act("T", "set team", PriorityCommon, CategoryAct),
 	Confirm:        Act("↵", "save", PriorityCore, CategoryGeneral, "enter"),
-	Close:          Act("v/esc", "cancel", PriorityCore, CategoryGeneral, "v", "esc"),
+	Close:          Act("a/esc", "cancel", PriorityCore, CategoryGeneral, "a", "esc"),
 }
 
 // ReviewerEditorCtx is the reviewer editor (list mode) context.

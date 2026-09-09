@@ -1,5 +1,7 @@
 package domain
 
+import "sort"
+
 // ApproversConflict reports whether two MRs' "Approvers" rule memberships
 // differ. Compares MergeRequest.Approvers — the full eligible-approver
 // roster — not who currently happens to be assigned as a reviewer, so two
@@ -19,6 +21,28 @@ func ApproversConflict(a, b MergeRequest) bool {
 		}
 	}
 	return false
+}
+
+// ApproversDiff reports how other's "Approvers" rule membership differs from
+// base's: added is present in other but not base, removed is present in base
+// but not other. Both are sorted for stable display. Used by the reviewer
+// editor's sibling panel to show why ApproversConflict flagged two MRs.
+func ApproversDiff(base, other MergeRequest) (added, removed []string) {
+	setBase := stringSet(base.Approvers)
+	setOther := stringSet(other.Approvers)
+	for username := range setOther {
+		if !setBase[username] {
+			added = append(added, username)
+		}
+	}
+	for username := range setBase {
+		if !setOther[username] {
+			removed = append(removed, username)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	return added, removed
 }
 
 func stringSet(usernames []string) map[string]bool {
