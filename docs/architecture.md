@@ -14,9 +14,11 @@ graph TD
     C --> F["internal/adapters/gitlabadpt<br>implements mrsvc.MergeRequestSource"]
     C --> J["internal/adapters/jiraadpt<br>implements ticketsvc ports"]
     C --> K["internal/adapters/teamsnotify<br>implements domain.Notifier"]
-    B --> G["internal/tui<br>Bubble Tea; only layer importing charmbracelet"]
+    C --> M["internal/adapters/githubadpt<br>implements updatesvc.UpdateChecker"]
+    B --> G["internal/tui<br>Bubble Tea; the only layer building charmbracelet UI"]
     G --> H["internal/domain/service/mrsvc<br>ports owned by business layer"]
     G --> L["internal/domain/service/ticketsvc<br>ports owned by business layer"]
+    G --> N["internal/domain/service/updatesvc<br>ports owned by business layer"]
 ```
 
 | Package | Import constraint |
@@ -24,15 +26,19 @@ graph TD
 | `internal/domain` | stdlib only — zero non-stdlib imports |
 | `internal/domain/service/mrsvc` | port interfaces; imports only `internal/domain` |
 | `internal/domain/service/ticketsvc` | port interfaces; imports only `internal/domain` |
+| `internal/domain/service/updatesvc` | port interfaces only; imports only stdlib |
 | `pkg/gitlab` | REST + GQL client; imports only stdlib + `net/http` libs |
+| `pkg/github` | unauthenticated REST client for GitHub releases; imports only stdlib + `net/http` |
 | `internal/adapters/gitlabadpt` | implements `mrsvc`; imports `pkg/gitlab` + `internal/domain` |
 | `internal/adapters/jiraadpt` | implements `ticketsvc` via `pkg/jira`, disk-cached |
 | `internal/adapters/teamsnotify` | implements `domain.Notifier` for Microsoft Teams |
+| `internal/adapters/githubadpt` | implements `updatesvc.UpdateChecker` via `pkg/github`, disk-cached; see adr/0010 |
 | `internal/adapters/statestore` | implements `domain.StateStore`; stdlib + file I/O |
 | `internal/adapters/snapshotstore` | implements `domain.SnapshotStore`; stdlib + file I/O |
 | `internal/adapters/demoadpt` | implements every driven port from an embedded fixture; see adr/0006 |
 | `internal/core` | composition root; no TUI imports |
-| `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc` interfaces, never on adapters |
+| `internal/selfupdate` | the fixed command that upgrades an installed binary; used by the TUI and `--update` |
+| `internal/tui` | charmbracelet v2; depends on `mrsvc`/`ticketsvc`/`updatesvc` interfaces, never on adapters |
 
 `internal/tui` depends on `mrsvc.MergeRequestSource` (the port), not on any adapter directly.
 This keeps every backend swappable and makes the TUI fully unit-testable with generated mocks.
@@ -68,7 +74,7 @@ a fetch is already in flight.
 Each landed fetch also drives, in order: ticket enrichment and the JIRA description back-link via
 `ticketsvc.TicketEnricher`/`TicketLinker` (`docs/adr/0003-jira-remote-links.md`), then
 `mrsvc.AutoAssignReviewers` for newly opened, ticket-linked MRs with no reviewers yet, gated by
-`auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard update` runs
+`auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard auto` runs
 the same auto-assign step as a standalone command, outside the TUI.
 
 Detail panel (`↵`) calls `MergeRequestSource.GetDetail(ctx, projectID, mrIID)`.
@@ -82,6 +88,12 @@ MR via `FetchMR` after a successful write.
 The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
 for Microsoft Teams.
 
+`internal/tui/version.go`'s `versionWidget` owns the update check end to end: a forced check on
+launch, a recurring one every `update_check.cache_ttl`, the footer badge and its `u` hint, the
+enablement of the `u` binding, and the `tea.ExecProcess` run on confirm. All of it is skipped for
+a "dev" build (`docs/adr/0010-self-update-check.md`). `mrboard --update` is the non-interactive
+form: same port, same `internal/selfupdate` command, no TUI.
+
 ## File layout
 
 ```
@@ -90,10 +102,11 @@ mrboard/
     main.go                # Signal handling; calls mrboardcmd.Execute
   internal/
     cmd/mrboard/
-      root.go              # Cobra root command; boots core, launches the board by default
+      root.go              # Cobra root command wrapped by fang; boots core, launches the board by default
       board.go             # execBoard — launches the TUI
       fetch.go             # `mrboard fetch` — one-shot JSON dump, mirrors the TUI's read path
-      update.go            # `mrboard update` — one-shot auto-assign-reviewers write (adr/0009)
+      auto.go              # `mrboard auto` — one-shot auto-assign-reviewers write (adr/0009)
+      update.go            # `mrboard --update` — check and install a newer release (adr/0010)
       version.go           # `mrboard version` subcommand
     config/
       config.go            # AppConfig, Load(), typed sub-config accessors
@@ -101,6 +114,8 @@ mrboard/
     core/
       core.go              # Composition root — builds and wires all dependencies
       demo.go              # NewDemo() — wires Core against demoadpt instead of real adapters
+    selfupdate/
+      selfupdate.go        # The fixed brew command that upgrades this binary (adr/0010)
     domain/
       mr.go                # All domain types (see domain-model.md)
       state.go             # StateStore + SnapshotStore interfaces
@@ -113,6 +128,9 @@ mrboard/
       service/ticketsvc/
         ticketsvc.go       # Vendor-neutral TicketEnricher/TicketLinker ports
         mocks/             # mockery-generated doubles
+      service/updatesvc/
+        updatesvc.go       # Vendor-neutral UpdateChecker port (adr/0010)
+        mocks/             # mockery-generated doubles
     adapters/
       gitlabadpt/
         gitlabadpt.go      # MergeRequestSource implementation (REST + GQL)
@@ -122,6 +140,8 @@ mrboard/
         jiraadpt.go        # ticketsvc.TicketEnricher + TicketLinker via pkg/jira, disk-cached
       teamsnotify/
         teamsnotify.go     # domain.Notifier for Microsoft Teams via a Power Automate webhook
+      githubadpt/
+        githubadpt.go      # updatesvc.UpdateChecker via pkg/github, semver-compared, disk-cached (adr/0010)
       statestore/
         statestore.go      # domain.StateStore on local disk (XDG data dir)
       snapshotstore/
@@ -147,6 +167,8 @@ mrboard/
       settings_widget.go   # Settings overlay (press ,) — Filters/Sorting/Theme tabs
       overlay_router.go    # overlayKind — which exclusive overlay owns input focus
       help_modal.go        # Full keybinding help modal (press ?)
+      version.go           # Version footer segment + update check/badge/run (adr/0010)
+      confirm.go           # Reusable yes/no dialog overlay
       command_argv.go      # Resolves external-command argv templates against MR metadata (adr/0004)
       jira_icons.go        # Issue-type icon lookup for JIRA-linked MR titles
       footer.go            # Help/keybinding bar
@@ -162,6 +184,7 @@ mrboard/
       graphql.go           # GraphQL query helpers
       config.go            # pkg/gitlab.Config
     jira/                  # JIRA REST client, used by internal/adapters/jiraadpt
+    github/                # Unauthenticated GitHub releases-API client, used by githubadpt
     theme/
       model.go             # Theme model
       theme.go             # Token → color resolution

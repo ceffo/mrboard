@@ -7,16 +7,17 @@ import (
 )
 
 // footerWidget renders the one-line status bar: a prioritized selection of
-// the active context's keybindings on the left and the app version pinned to
-// the right edge. The version is never sacrificed; binding items are dropped
-// whole (lowest priority first) when the terminal is too narrow.
+// the active context's keybindings on the left and the version widget's
+// segment pinned to the right edge. That segment is never sacrificed; binding
+// items are dropped whole (lowest priority first) when the terminal is too
+// narrow.
 type footerWidget struct {
 	styles  Styles
-	version string
+	version *versionWidget
 	width   int
 }
 
-func newFooterWidget(styles Styles, version string) footerWidget {
+func newFooterWidget(styles Styles, version *versionWidget) footerWidget {
 	return footerWidget{styles: styles, version: version}
 }
 
@@ -47,7 +48,7 @@ func (f footerWidget) render(stack []*Context) string {
 		}
 	}
 
-	ver := f.styles.FooterVersion.Render(f.version)
+	ver := f.version.render()
 	if f.width <= 0 {
 		return f.styles.Footer.Render(f.renderItems(items) + " " + ver)
 	}

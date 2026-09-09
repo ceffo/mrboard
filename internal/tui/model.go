@@ -18,6 +18,7 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 	"github.com/ceffo/mrboard/pkg/theme"
 )
@@ -258,6 +259,8 @@ type Model struct {
 	settings           settingsWidget
 	reviewerEditor     *reviewerEditorWidget
 	batchPreview       *batchPreviewWidget
+	versionw           *versionWidget
+	confirm            *confirmWidget
 	diffView           diffViewWidget
 	overlay            overlayRouter
 	showHelp           bool // '?' help modal open
@@ -267,6 +270,7 @@ type Model struct {
 	settingsKeys       SettingsKeyMap
 	reviewerEditorKeys ReviewerEditorKeyMap
 	batchPreviewKeys   BatchPreviewKeyMap
+	confirmKeys        ConfirmKeyMap
 	styles             Styles
 	theme              theme.Theme[ColorKey]
 	themeName          string // currently active theme name
@@ -325,6 +329,7 @@ func New(
 	notifier domain.Notifier,
 	ticketEnricher ticketsvc.TicketEnricher,
 	ticketLinker ticketsvc.TicketLinker,
+	updateChecker updatesvc.UpdateChecker,
 	version string,
 	opts Options,
 ) Model {
@@ -383,11 +388,15 @@ func New(
 	ir := NewIssueTypeIconResolver(cfg.Jira.IssueTypeIcons)
 	km := domain.NewTicketKeyMatcher(cfg.Jira.CaseInsensitiveTicketMatch)
 
+	versionw := newVersionWidget(
+		ctx, styles, version, updateChecker, cfg.UpdateCheck.CacheTTL, &keys.Update, logger)
+
 	m := Model{
 		state:              stateLoading,
 		header:             newHeaderWidget(styles),
 		board:              newBoardWidget(styles, defaultBoardWidth, defaultBoardHeight-chromeHeight, ir, km),
-		footer:             newFooterWidget(styles, version),
+		footer:             newFooterWidget(styles, versionw),
+		versionw:           versionw,
 		helpModal:          newHelpModalWidget(styles),
 		sp:                 newSpinnerWidget(),
 		detail:             newDetailWidget(styles),
@@ -396,6 +405,7 @@ func New(
 		settingsKeys:       DefaultSettingsKeyMap,
 		reviewerEditorKeys: DefaultReviewerEditorKeyMap,
 		batchPreviewKeys:   DefaultBatchPreviewKeyMap,
+		confirmKeys:        DefaultConfirmKeyMap,
 		diffView:           newDiffViewWidget(ctx, styles, DefaultDiffViewKeyMap, src),
 		styles:             styles,
 		theme:              th,
@@ -465,6 +475,7 @@ func (m Model) Init() tea.Cmd {
 		refreshTickCmd(m.refreshInterval, m.refreshGen),
 		makeResolveTeamCmd(m.baseCtx, m.src, m.cfg),
 		m.sprintFetchCmd(),
+		m.versionw.Init(),
 	)
 }
 
@@ -637,6 +648,18 @@ func (m Model) toast(def toast.AlertSpec, text string) tea.Cmd {
 	return m.alerts.NewAlertCmd(def, text)
 }
 
+// toastMsg asks the root model to raise a toast. A widget that needs to
+// notify the user emits it rather than owning a queue of its own — the alert
+// queue is a single screen-wide resource the root model holds.
+type toastMsg struct {
+	spec toast.AlertSpec
+	text string
+}
+
+func toastCmd(spec toast.AlertSpec, text string) tea.Cmd {
+	return func() tea.Msg { return toastMsg{spec: spec, text: text} }
+}
+
 // coreUpdate is the main message dispatch logic.
 func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -713,6 +736,10 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CommandResultMsg:
 		return m.handleCommandResult(msg)
 
+	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg,
+		dismissOverlayMsg, toastMsg:
+		return m.handleWidgetMsg(msg)
+
 	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
 		return m.handleTicketResultMsg(msg)
 
@@ -760,6 +787,8 @@ func (m Model) baseStack() []*Context {
 		}
 	case overlayKindBatchPreview:
 		return append(stack, BatchPreviewCtx)
+	case overlayKindConfirm:
+		return append(stack, ConfirmCtx)
 	case overlayKindNone:
 	}
 	if m.showDetail {
@@ -823,6 +852,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.batchPreview != nil {
 			updated, cmd := m.batchPreview.Update(msg)
 			m.batchPreview = updated.(*batchPreviewWidget)
+			return m, cmd
+		}
+	case overlayKindConfirm:
+		if m.confirm != nil {
+			_, cmd := m.confirm.Update(msg)
 			return m, cmd
 		}
 	case overlayKindDiffView:
@@ -981,6 +1015,10 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		})
+	case m.keys.Update.Match(msg):
+		m.confirm = m.versionw.confirmDialog(m.confirmKeys)
+		m.overlay.openOverlay(overlayKindConfirm)
+		return m, nil
 	}
 	return m, nil
 }
@@ -1160,6 +1198,23 @@ func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cm
 	})
 }
 
+// handleWidgetMsg serves the messages a child widget owns or raises: the
+// version widget's own flow, plus the two screen-wide resources only the root
+// model holds — the overlay router and the toast queue.
+func (m Model) handleWidgetMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case dismissOverlayMsg:
+		m.overlay.closeOverlay()
+		return m, nil
+	case toastMsg:
+		return m, m.toast(msg.spec, msg.text)
+	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg:
+		_, cmd := m.versionw.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
 // handleCommandResult reports a configured command's outcome. Success shows no
 // toast — the resumed, redrawn board is itself the success signal.
 func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
@@ -1224,6 +1279,10 @@ func (m Model) renderScreen() string {
 		case overlayKindBatchPreview:
 			if m.batchPreview != nil {
 				return m.renderWithOverlay(board, m.batchPreview.render())
+			}
+		case overlayKindConfirm:
+			if m.confirm != nil {
+				return m.renderWithOverlay(board, m.confirm.render())
 			}
 		}
 		return board
@@ -1732,6 +1791,10 @@ func (m *Model) applyTheme() {
 	}
 	if m.batchPreview != nil {
 		m.batchPreview.styles = m.styles
+	}
+	m.versionw.SetStyles(m.styles)
+	if m.confirm != nil {
+		m.confirm.styles = m.styles
 	}
 }
 

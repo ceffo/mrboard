@@ -38,3 +38,11 @@ packages:
     interfaces:
       TicketEnricher:
       TicketLinker:
+  github.com/ceffo/mrboard/internal/domain/service/updatesvc:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName}}.go"
+      structname: "Mock{{.InterfaceName}}"
+    interfaces:
+      UpdateChecker:

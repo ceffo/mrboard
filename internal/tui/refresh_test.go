@@ -61,7 +61,7 @@ func TestNew_ColdCache_StaysInLoadingState(t *testing.T) {
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
-		nil, nil, nil, "dev", Options{})
+		nil, nil, nil, nil, "dev", Options{})
 
 	assert.Equal(t, StateLoading, m.State(), "a genuinely cold cache must still show the loading state")
 }
@@ -71,7 +71,7 @@ func TestNew_ColdCache_RecoversOnFetchResult(t *testing.T) {
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(someMRs(), nil).Maybe()
 
 	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
-		nil, nil, nil, "dev", Options{})
+		nil, nil, nil, nil, "dev", Options{})
 
 	next, _ := m.Update(FetchResultMsg{MRs: someMRs()})
 	m2 := next.(Model)
@@ -86,7 +86,7 @@ func TestNew_WarmCache_BootsInteractiveAtAnyAge(t *testing.T) {
 	writtenAt := time.Now().Add(-72 * time.Hour) // a three-day-old snapshot
 	snap := &warmSnapshotStore{mrs: someMRs(), writtenAt: writtenAt}
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, nil, "dev", Options{})
 
 	assert.Equal(t, StateBoard, m.State(), "a warm cache of any age must render the board immediately")
 	assert.Len(t, m.AllMRs(), len(someMRs()))
@@ -103,7 +103,7 @@ func TestModel_FetchResultMsg_SavesSnapshot(t *testing.T) {
 	src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	snap := &warmSnapshotStore{}
 
-	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, "dev", Options{})
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, snap, nil, nil, nil, nil, "dev", Options{})
 
 	mrs := someMRs()
 	next, _ := m.Update(FetchResultMsg{MRs: mrs})

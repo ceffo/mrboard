@@ -34,7 +34,7 @@ func TestFetchResultMsg_DirtyGuard_PreservesLocalWriteAndIssuesTargetedRefetch(t
 	src := mocks.NewMockMergeRequestSource(t)
 
 	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
-		nil, nil, nil, "dev", Options{})
+		nil, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{MRs: []domain.MergeRequest{original}})
 	m = next.(Model)
 
@@ -82,7 +82,7 @@ func TestFetchResultMsg_DirtyGuard_ClearsWhenConfirmingFetchLands(t *testing.T) 
 	src := mocks.NewMockMergeRequestSource(t)
 
 	m := New(context.Background(), &config.Config{}, src, noopStore{}, noopSnapshotStore{},
-		nil, nil, nil, "dev", Options{})
+		nil, nil, nil, nil, "dev", Options{})
 	next, _ := m.Update(FetchResultMsg{MRs: []domain.MergeRequest{original}})
 	m = next.(Model)
 

@@ -83,6 +83,42 @@ jira:
 	assert.False(t, cfg.Jira.CaseInsensitiveTicketMatch, "want case-insensitive ticket matching disabled when configured")
 }
 
+func TestLoadUpdateCheckDefaults(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.True(t, cfg.UpdateCheck.Enabled, "want the update check enabled by default")
+	assert.Equal(t, 24*time.Hour, cfg.UpdateCheck.CacheTTL)
+}
+
+func TestLoadUpdateCheckOverride(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+update_check:
+  enabled: false
+  cache_ttl: 1h
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.False(t, cfg.UpdateCheck.Enabled)
+	assert.Equal(t, time.Hour, cfg.UpdateCheck.CacheTTL)
+}
+
 func TestLoadRefreshIntervalZeroDisables(t *testing.T) {
 	path := writeTemp(t, `
 gitlab:

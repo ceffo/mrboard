@@ -15,12 +15,14 @@
 package demoadpt
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 )
 
 // defaultLatency is a deliberate delay on FetchAll so the header's spinner and
@@ -101,7 +103,21 @@ func (a *Adapter) SnapshotStore() domain.SnapshotStore { return &snapshotStore{a
 // Notifier returns a notifier that accepts and discards.
 func (a *Adapter) Notifier() domain.Notifier { return &notifier{a: a} }
 
+// UpdateChecker returns an update checker that never reports an update
+// available — demo mode makes no network calls of any kind.
+func (a *Adapter) UpdateChecker() updatesvc.UpdateChecker { return &updateChecker{} }
+
+// updateChecker is the demo-mode updatesvc.UpdateChecker: always up to date.
+type updateChecker struct{}
+
+func (*updateChecker) CheckForUpdate(
+	_ context.Context, _ string, _ updatesvc.CheckOptions,
+) (updatesvc.Info, error) {
+	return updatesvc.Info{}, nil
+}
+
 var (
 	_ ticketsvc.TicketEnricher = (*tickets)(nil)
 	_ ticketsvc.TicketLinker   = (*tickets)(nil)
+	_ updatesvc.UpdateChecker  = (*updateChecker)(nil)
 )

@@ -36,6 +36,7 @@ type Styles struct {
 	FooterKey                   lip.Style
 	FooterSep                   lip.Style
 	FooterVersion               lip.Style
+	FooterUpdateBadge           lip.Style
 	HelpTitle                   lip.Style
 	HelpSection                 lip.Style
 	HelpKey                     lip.Style
@@ -98,6 +99,8 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Foreground(c(FgLow)),
 		FooterVersion: lip.NewStyle().
 			Foreground(c(FgLow)),
+		FooterUpdateBadge: lip.NewStyle().
+			Foreground(c(Warning)),
 		HelpTitle:    lip.NewStyle().Bold(true).Foreground(c(Accent)),
 		HelpSection:  lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
 		HelpKey:      lip.NewStyle().Foreground(c(Accent)),

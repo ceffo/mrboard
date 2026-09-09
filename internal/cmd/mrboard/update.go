@@ -2,105 +2,51 @@ package mrboardcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
+	"io"
+	"os"
 
-	"github.com/spf13/cobra"
-
-	"github.com/ceffo/mrboard/internal/config"
-	"github.com/ceffo/mrboard/internal/core"
-	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
+	"github.com/ceffo/mrboard/internal/selfupdate"
 )
 
-func buildUpdateCmd() *cobra.Command {
-	var dryRun bool
-	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Run mrboard's automatic write actions (currently: auto-assign reviewers)",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return execUpdate(cmd.Context(), updateCmdOptions{dryRun: dryRun})
-		},
-	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
-		"log what would be assigned without writing reviewers to GitLab")
-	return cmd
-}
-
-// updateCmdOptions controls execUpdate's behavior independently of config,
-// mirroring fetchCmdOptions's role for the fetch command.
-type updateCmdOptions struct {
-	// dryRun, when true, evaluates and logs eligible MRs without calling
-	// mrsvc.AutoAssignReviewers, so a run's effect can be previewed before
-	// it writes to GitLab.
-	dryRun bool
-}
-
-// execUpdate fetches every configured MR and applies mrsvc.AutoAssignReviewers
-// to each one that qualifies. It respects auto_assign_reviewers.enabled rather
-// than writing unconditionally (docs/adr/0009).
-func execUpdate(ctx context.Context, opts updateCmdOptions) error {
-	c := ctx.Value(coreKey{}).(*core.Core)
-	logger := c.Logger
-
-	if !c.Config.AutoAssignReviewers.Enabled {
-		logger.Info("mrboard: auto-assign reviewers is disabled, nothing to update")
-		return nil
+// runSelfUpdate backs `mrboard --update`: check for a newer release and, if
+// there is one, run the upgrade. The check is forced past the cache — the
+// user asked for the current answer, not a remembered one.
+func runSelfUpdate(ctx context.Context, checker updatesvc.UpdateChecker, version string, out io.Writer) error {
+	if checker == nil {
+		return errors.New("update checks are disabled (set update_check.enabled: true)")
 	}
 
-	const defaultTimeout = 30 * time.Second
-	timeout := c.Config.GitLab.Timeout
-	if timeout == 0 {
-		timeout = defaultTimeout
-	}
-	updateCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	state, err := c.StateStore.Load()
+	info, err := checker.CheckForUpdate(ctx, version, updatesvc.CheckOptions{Force: true})
 	if err != nil {
-		return fmt.Errorf("mrboard: loading app state: %w", err)
+		return fmt.Errorf("check for update: %w", err)
 	}
 
-	mrs, errs := c.MRSource.FetchAll(updateCtx, mrsvc.FetchOptions{IncludeReviewerMRs: state.IncludeReviewerMRs})
-	for _, e := range errs {
-		logger.Warn("mrboard: fetch partial error", "error", e)
+	switch {
+	case info.Available:
+		fmt.Fprintf(out, "updating mrboard %s → %s\n", version, info.Latest)
+		return runUpgrade(out)
+	case info.Latest == "":
+		fmt.Fprintf(out, "mrboard %s: no published release to compare against\n", version)
+	default:
+		fmt.Fprintf(out, "mrboard %s is the latest release\n", version)
 	}
+	return nil
+}
 
-	var teamRoster []domain.User
-	if usernames := config.TeamUsernames(c.Config.Sources); len(usernames) > 0 {
-		teamRoster, err = c.MRSource.ResolveUsers(updateCtx, usernames)
-		if err != nil {
-			return fmt.Errorf("mrboard: resolving team roster: %w", err)
-		}
+// runUpgrade streams the upgrade's output straight to the terminal: brew
+// takes minutes and reports its own progress, which is more useful than
+// mrboard buffering it and replaying it at the end. The run is not bound to
+// the command context — interrupting brew partway through leaves Homebrew in
+// a worse state than letting it finish (docs/adr/0010-self-update-check.md).
+func runUpgrade(out io.Writer) error {
+	cmd := selfupdate.ExecCmd()
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = out, os.Stderr, os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run %q: %w", selfupdate.Command, err)
 	}
-
-	matcher := domain.NewTicketKeyMatcher(c.Config.Jira.CaseInsensitiveTicketMatch)
-	assigned := 0
-	for _, mr := range mrs {
-		reviewers, issueKey, ok := domain.AutoAssignCandidates(mr, teamRoster, matcher)
-		if !ok {
-			continue
-		}
-		if opts.dryRun {
-			assigned++
-			logger.Info("mrboard: would auto-assign reviewers (dry run)",
-				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "reviewers", domain.Usernames(reviewers))
-			continue
-		}
-		writeErr := mrsvc.AutoAssignReviewers(updateCtx, c.MRSource, int64(mr.ProjectID), int64(mr.IID), reviewers)
-		if writeErr != nil {
-			logger.Warn("mrboard: auto-assign reviewers failed",
-				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "err", writeErr)
-			continue
-		}
-		assigned++
-		logger.Info("mrboard: auto-assigned reviewers",
-			"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "reviewers", domain.Usernames(reviewers))
-	}
-	if opts.dryRun {
-		logger.Info("mrboard: dry run complete", "mrs", len(mrs), "would_assign", assigned)
-		return nil
-	}
-	logger.Info("mrboard: update complete", "mrs", len(mrs), "assigned", assigned)
+	fmt.Fprintln(out, "done — restart mrboard to use the new version")
 	return nil
 }

@@ -1,104 +1,69 @@
 package mrboardcmd
 
 import (
+	"bytes"
 	"context"
-	"io"
-	"log/slog"
+	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/assert"
+	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ceffo/mrboard/internal/adapters/statestore"
-	"github.com/ceffo/mrboard/internal/config"
-	"github.com/ceffo/mrboard/internal/core"
-	"github.com/ceffo/mrboard/internal/domain"
-	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
-	"github.com/ceffo/mrboard/internal/domain/service/mrsvc/mocks"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
+	"github.com/ceffo/mrboard/internal/domain/service/updatesvc/mocks"
 )
 
-const (
-	updateTestProjectID = 42
-	updateTestMRIID     = 7
+func TestRunSelfUpdate_UpToDate(t *testing.T) {
+	checker := mocks.NewMockUpdateChecker(t)
+	checker.EXPECT().
+		CheckForUpdate(mock.Anything, "0.12.0", updatesvc.CheckOptions{Force: true}).
+		Return(updatesvc.Info{Latest: "v0.12.0"}, nil).
+		Once()
+	var out bytes.Buffer
 
-	userAlice = "alice"
-	userBob   = "bob"
-)
-
-// newTestCore builds a *core.Core wired to src and cfg, backed by a real
-// on-disk state store rooted at t.TempDir() so execUpdate's Load() call
-// exercises the same path production does.
-func newTestCore(t *testing.T, src mrsvc.MergeRequestSource, cfg *config.AppConfig) *core.Core {
-	t.Helper()
-	store, err := statestore.New(statestore.Config{Dir: t.TempDir()})
-	require.NoError(t, err)
-	return &core.Core{
-		MRSource:   src,
-		StateStore: store,
-		Config:     cfg,
-		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-}
-
-// eligibleMR returns an MR that satisfies every domain.AutoAssignCandidates
-// criterion against a team roster containing userAlice and userBob.
-func eligibleMR() domain.MergeRequest {
-	return domain.MergeRequest{
-		ProjectID: updateTestProjectID,
-		IID:       updateTestMRIID,
-		Author:    userAlice,
-		Title:     "feat(OD-1): add widget",
-		Phase:     domain.PhaseNeedsReview,
-	}
-}
-
-func teamConfig() *config.AppConfig {
-	return &config.AppConfig{
-		AutoAssignReviewers: config.AutoAssignReviewers{Enabled: true},
-		Sources:             []config.Source{{Type: "user", IDs: []string{userAlice, userBob}}},
-	}
-}
-
-func TestExecUpdate_Disabled_SkipsFetch(t *testing.T) {
-	src := mocks.NewMockMergeRequestSource(t) // no EXPECT() — any call fails the test
-	cfg := &config.AppConfig{AutoAssignReviewers: config.AutoAssignReviewers{Enabled: false}}
-	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, cfg))
-
-	err := execUpdate(ctx, updateCmdOptions{})
+	err := runSelfUpdate(context.Background(), checker, "0.12.0", &out)
 
 	require.NoError(t, err)
+	assert.Equal(t, "mrboard 0.12.0 is the latest release\n", out.String())
 }
 
-func TestExecUpdate_DryRun_DoesNotWriteReviewers(t *testing.T) {
-	src := mocks.NewMockMergeRequestSource(t)
-	src.EXPECT().
-		FetchAll(mock.Anything, mrsvc.FetchOptions{IncludeReviewerMRs: false}).
-		Return([]domain.MergeRequest{eligibleMR()}, nil).Once()
-	src.EXPECT().
-		ResolveUsers(mock.Anything, []string{userAlice, userBob}).
-		Return([]domain.User{{ID: 1, Username: userAlice}, {ID: 2, Username: userBob}}, nil).Once()
-	// No SetReviewers expectation: dry run must never call it.
-	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
+// TestRunSelfUpdate_NothingToCompare covers a build the checker cannot rank —
+// a dev or git-describe binary. Reporting it as "the latest release" would be
+// a lie, so it gets its own message.
+func TestRunSelfUpdate_NothingToCompare(t *testing.T) {
+	checker := mocks.NewMockUpdateChecker(t)
+	checker.EXPECT().
+		CheckForUpdate(mock.Anything, "dev", updatesvc.CheckOptions{Force: true}).
+		Return(updatesvc.Info{}, nil).
+		Once()
+	var out bytes.Buffer
 
-	err := execUpdate(ctx, updateCmdOptions{dryRun: true})
+	err := runSelfUpdate(context.Background(), checker, "dev", &out)
 
 	require.NoError(t, err)
+	assert.Contains(t, out.String(), "no published release to compare against")
 }
 
-func TestExecUpdate_AssignsReviewers(t *testing.T) {
-	src := mocks.NewMockMergeRequestSource(t)
-	src.EXPECT().
-		FetchAll(mock.Anything, mrsvc.FetchOptions{IncludeReviewerMRs: false}).
-		Return([]domain.MergeRequest{eligibleMR()}, nil).Once()
-	src.EXPECT().
-		ResolveUsers(mock.Anything, []string{userAlice, userBob}).
-		Return([]domain.User{{ID: 1, Username: userAlice}, {ID: 2, Username: userBob}}, nil).Once()
-	src.EXPECT().
-		SetReviewers(mock.Anything, int64(updateTestProjectID), int64(updateTestMRIID), []int64{2}).
-		Return(nil).Once()
-	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
+func TestRunSelfUpdate_CheckerDisabled(t *testing.T) {
+	var out bytes.Buffer
 
-	err := execUpdate(ctx, updateCmdOptions{dryRun: false})
+	err := runSelfUpdate(context.Background(), nil, "0.12.0", &out)
 
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Empty(t, out.String())
+}
+
+func TestRunSelfUpdate_CheckFails(t *testing.T) {
+	checker := mocks.NewMockUpdateChecker(t)
+	checker.EXPECT().
+		CheckForUpdate(mock.Anything, mock.Anything, mock.Anything).
+		Return(updatesvc.Info{}, errors.New("boom")).
+		Once()
+	var out bytes.Buffer
+
+	err := runSelfUpdate(context.Background(), checker, "0.12.0", &out)
+
+	require.Error(t, err)
+	assert.Empty(t, out.String())
 }

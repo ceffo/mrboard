@@ -125,7 +125,7 @@ auto_assign_reviewers:
   enabled: true
 ```
 
-Runs automatically after every TUI fetch, and on demand via `mrboard update`. There is no
+Runs automatically after every TUI fetch, and on demand via `mrboard auto`. There is no
 per-MR opt-out short of removing the ticket key from the title, keeping the MR in draft, or
 disabling the feature entirely. See
 [adr/0009-auto-assign-reviewers.md](adr/0009-auto-assign-reviewers.md).

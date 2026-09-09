@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"charm.land/fang/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ceffo/mrboard/internal/config"
@@ -18,9 +19,10 @@ var Version = "dev"
 
 type coreKey struct{}
 
-// Execute is the entry point called by cmd/mrboard/main.go.
+// Execute is the entry point called by cmd/mrboard/main.go. fang supplies the
+// styled help, version and error output, and adds `man` and completions.
 func Execute(ctx context.Context) error {
-	return buildRootCmd().ExecuteContext(ctx)
+	return fang.Execute(ctx, buildRootCmd(), fang.WithVersion(Version))
 }
 
 func buildRootCmd() *cobra.Command {
@@ -29,6 +31,7 @@ func buildRootCmd() *cobra.Command {
 	var themeOverride string
 	var modeOverride string
 	var demoMode bool
+	var updateOnly bool
 	var c *core.Core
 
 	// bootCore loads config and wires up the application. Only commands that
@@ -70,20 +73,8 @@ func buildRootCmd() *cobra.Command {
 	}
 
 	root := &cobra.Command{
-		Use:   "mrboard",
-		Short: "GitLab MR review board for daily standups",
-		Long: `mrboard displays GitLab merge requests in a kanban board.
-
-Config search path (first match wins):
-  --config flag
-  $XDG_CONFIG_HOME/mrboard/mrboard.yaml  (default: ~/.config/mrboard/mrboard.yaml)
-  ./mrboard.yaml
-
-Environment:
-  GITLAB_TOKEN     Override gitlab.token from config
-
-Run "mrboard --demo" to explore the board against a built-in fake dataset,
-with no config file, credentials, or network access required.`,
+		Use:          "mrboard",
+		Short:        "GitLab MR review board for daily standups",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			return bootCore(cmd)
@@ -96,6 +87,9 @@ with no config file, credentials, or network access required.`,
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if updateOnly {
+				return runSelfUpdate(cmd.Context(), c.UpdateChecker, Version, cmd.OutOrStdout())
+			}
 			opts := tui.Options{
 				ThemeOverride: themeOverride,
 				ModeOverride:  modeOverride,
@@ -108,6 +102,8 @@ with no config file, credentials, or network access required.`,
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level override (debug|info|warn|error)")
 	root.PersistentFlags().BoolVar(&demoMode, "demo", false,
 		"run against the built-in demo dataset — no config file, no token, no network")
+	root.Flags().BoolVar(&updateOnly, "update", false,
+		"check for a newer mrboard release, install it if there is one, and exit")
 	root.Flags().StringVar(&themeOverride, "theme", "", "session theme (default, dracula, nord, tokyo-night, monokai)")
 	root.Flags().StringVar(&modeOverride, "mode", "", "colour mode for this session (auto, dark, light)")
 
@@ -117,11 +113,11 @@ with no config file, credentials, or network access required.`,
 	}
 	root.AddCommand(fetchCmd)
 
-	updateCmd := buildUpdateCmd()
-	updateCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+	autoCmd := buildAutoCmd()
+	autoCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
 		return bootCore(cmd)
 	}
-	root.AddCommand(updateCmd)
+	root.AddCommand(autoCmd)
 
 	root.AddCommand(buildVersionCmd())
 

@@ -1,6 +1,10 @@
 # TUI Conventions
 
-The TUI lives entirely in `internal/tui/`. Only this package may import charmbracelet libraries.
+The TUI lives entirely in `internal/tui/`. Only this package may import charmbracelet libraries,
+with one exception: `internal/cmd/mrboard` imports `charm.land/fang/v2` to style cobra's help,
+version and error output. Fang wraps command execution and renders nothing the TUI owns, so it
+does not put a second renderer in the CLI layer — anything beyond that (lipgloss, bubbles, a
+bubbletea program) still belongs in `internal/tui`.
 
 ## Ecosystem versions — import paths
 
@@ -76,6 +80,9 @@ Use widgets from the bubbles library before building your own. Reference:
 **Do not reimplement spinner or key matching.** These are provided by bubbles. Help rendering
 is mrboard's own system — see [keybindings.md](keybindings.md).
 
+Bubbles ships no yes/no dialog (only `huh`, a full form framework, does), so `confirm.go` is
+mrboard's own. Reuse it for any confirmation rather than writing a second one.
+
 ### Spinner usage pattern
 
 ```go
@@ -126,10 +133,12 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
 | `approver_editor.go` | Reviewer/approver editor overlay (`v`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs |
 | `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — include/exclude toggle + change/conflict indicators |
+| `version.go` | Version widget — footer version segment, release check cadence, update badge + `u` hint, and the self-update run (docs/adr/0010-self-update-check.md) |
+| `confirm.go` | Reusable yes/no dialog — parameterized by title, body, and the message to emit on yes |
 | `settings_widget.go` | Settings overlay (`,`) — Filters/Sorting/Theme tabs |
 | `overlay_router.go` | `overlayKind` — which exclusive overlay owns key input and rendering focus |
 | `jira_icons.go` | Issue-type icon lookup for JIRA-linked MR titles |
-| `footer.go` | Footer bar — priority-filled keybinding hints + version pinned right |
+| `footer.go` | Footer bar — priority-filled keybinding hints, with `version.go`'s segment pinned right |
 | `header.go` | Header bar — title + MR stats |
 | `spinner.go` | Loading overlay |
 | `state.go` | Shared TUI state types |
@@ -155,6 +164,11 @@ Parent models call `widget.SetFocused(bool)` before delegating `Update`.
 
 Root `model.go` is the only place that handles `tea.WindowSizeMsg` and propagates dimensions
 down to children. Widgets never call `tea.WindowSize()` themselves.
+
+A widget owns its own state, async cadence, and keybinding enablement; `model.go` routes messages
+to it and composes its output, and holds no copy of what the widget owns. The two resources a
+widget cannot own — the overlay router and the toast queue, both screen-wide — are reached by
+emitting `dismissOverlayMsg` and `toastMsg`, which the root serves in `handleWidgetMsg`.
 
 ## Keybindings — keys.go
 

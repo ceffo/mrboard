@@ -42,6 +42,7 @@ func NewDemo(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		Notifier:       adpt.Notifier(),
 		TicketEnricher: ticketAdpt,
 		TicketLinker:   ticketAdpt,
+		UpdateChecker:  adpt.UpdateChecker(),
 		Config:         cfg,
 		Logger:         logger,
 		logCloser:      closer,

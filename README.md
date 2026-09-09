@@ -85,7 +85,7 @@ Alongside the interactive board, `mrboard` has two one-shot commands for scripti
 
 ```bash
 mrboard fetch    # fetch every configured MR and print it as JSON
-mrboard update   # run mrboard's automatic write actions once, outside the TUI
+mrboard auto     # run mrboard's automatic write actions once, outside the TUI
 ```
 
 `fetch` mirrors exactly what the TUI fetches — same saved settings, same on-disk snapshot — and
