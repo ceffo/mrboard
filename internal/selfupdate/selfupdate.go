@@ -6,7 +6,7 @@ package selfupdate
 import "os/exec"
 
 // Command upgrades mrboard. It is fixed, not templated: mrboard is
-// distributed as a Homebrew cask and does not detect how it was installed.
+// distributed as a Homebrew formula and does not detect how it was installed.
 const Command = "brew update && brew upgrade ceffo/tap/mrboard"
 
 // ExecCmd builds the process that runs Command. Command is a constant baked

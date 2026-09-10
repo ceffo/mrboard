@@ -4,9 +4,9 @@
 
 ## Context
 
-mrboard is distributed as a Homebrew cask (`ceffo/tap/mrboard`), built and published by
+mrboard is distributed as a Homebrew formula (`ceffo/tap/mrboard`), built and published by
 goreleaser on every `v*.*.*` tag (`.goreleaser.yml`, `.github/workflows/release.yml`), which
-creates a real GitHub Release alongside the cask update. Nothing today tells a user running an
+creates a real GitHub Release alongside the formula update. Nothing today tells a user running an
 older build that a newer one exists — they only find out by remembering to run
 `brew upgrade` themselves.
 
