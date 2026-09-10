@@ -214,3 +214,6 @@ log:
 
 For fetch problems specifically, `mrboard --log-level debug fetch` is usually faster than the
 TUI: it prints errors straight to stderr instead of behind the loading spinner.
+
+`--log-file <path>` overrides `log.path` for one invocation without editing the config — useful for
+routing a one-off debug run to its own file instead of the config's shared log.
