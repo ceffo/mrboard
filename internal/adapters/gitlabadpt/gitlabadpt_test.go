@@ -213,6 +213,7 @@ func TestFetchAll_DedupBeforeEnrichment(t *testing.T) {
 func TestFetchAll_Phase2SkipsUnchangedMRs(t *testing.T) {
 	client := newFakeFetchClient()
 	sharedMR := gqlMR("gid://gitlab/Project/123", "42", "group/project")
+	sharedMR.ApprovedBy.Nodes = []pkggitlab.GQLUser{{Username: testUserBob}}
 	client.userMRs[testUserPriya] = []pkggitlab.GQLMergeRequest{sharedMR}
 
 	updatedAt, err := time.Parse(time.RFC3339, sharedMR.UpdatedAt)
@@ -262,6 +263,40 @@ func TestFetchAll_Phase2FetchesChangedMRs(t *testing.T) {
 	assert.Equal(t, 1, client.batchCalls)
 	require.Len(t, client.discussionReqs, 1)
 	assert.Equal(t, pkggitlab.MRDiscussionsRequest{ProjectFullPath: "group/project", IID: "42"}, client.discussionReqs[0])
+}
+
+// TestFetchAll_ApprovalWithUnchangedUpdatedAt_StillFetchesFresh is a regression
+// test for a real reported bug (sods MR 858): GitLab does not bump an MR's
+// updatedAt when someone approves it, so a fresh approval can arrive with
+// updatedAt still matching the cached snapshot. Phase 2 must still refetch —
+// reusing the cache here would keep showing an approved reviewer as waiting.
+func TestFetchAll_ApprovalWithUnchangedUpdatedAt_StillFetchesFresh(t *testing.T) {
+	client := newFakeFetchClient()
+	sharedMR := gqlMR("gid://gitlab/Project/123", "42", "group/project")
+	sharedMR.ApprovedBy.Nodes = []pkggitlab.GQLUser{{Username: testUserBob}}
+	client.userMRs[testUserPriya] = []pkggitlab.GQLMergeRequest{sharedMR}
+
+	updatedAt, err := time.Parse(time.RFC3339, sharedMR.UpdatedAt)
+	require.NoError(t, err)
+	cached := domain.MergeRequest{
+		ProjectID: 123,
+		IID:       42,
+		UpdatedAt: updatedAt,
+		Reviewers: []domain.ReviewerInfo{{Username: testUserBob, Name: testUserBobName, State: domain.ReviewerNotStarted}},
+	}
+
+	adapter := New(client, Config{Sources: []mrsvc.Source{{Type: mrsvc.SourceTypeUser, IDs: []string{testUserPriya}}}})
+	mrs, errs := adapter.FetchAll(context.Background(), mrsvc.FetchOptions{Previous: []domain.MergeRequest{cached}})
+
+	assert.Empty(t, errs)
+	require.Len(t, mrs, 1)
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	assert.Equal(t, 1, client.batchCalls, "new approval must trigger a phase-2 refetch despite unchanged updatedAt")
+	require.Len(t, client.discussionReqs, 1)
+	want := pkggitlab.MRDiscussionsRequest{ProjectFullPath: sharedMR.Project.FullPath, IID: sharedMR.IID}
+	assert.Equal(t, want, client.discussionReqs[0])
 }
 
 // TestFetchAll_NilPrevious_TreatsEveryMRAsChanged verifies a nil Previous — what

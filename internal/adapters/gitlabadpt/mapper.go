@@ -408,7 +408,8 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 }
 
 // MergeMRFromGraphQL builds the domain.MergeRequest for a phase-1 GraphQL MR
-// whose updatedAt matched the previous snapshot, per docs/adr/0005 "What the
+// that diffGQLStage judged unchanged (updatedAt matched the previous snapshot
+// and the live approvedBy set matched the cache), per docs/adr/0005 "What the
 // cache is allowed to answer for": the cached MR answers only for the
 // discussion-derived fields (Reviewers, OpenThreads, RoundTripCount) — no
 // discussions were fetched, so there is no fresher data for them. Every other
@@ -417,11 +418,13 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 // conflict) without a discussions fetch. IsApprover and Approvers are
 // recomputed from phase-1's always-fresh approvalState.rules — that resolver
 // deliberately isn't cached (see the ADR) — but reviewer State/WaitingSince/
-// ApprovedAt come from cached, since GitLab bumps updatedAt on every note,
-// approval, and reviewer change, so a real updatedAt match means those can't
-// have moved. Phase, WaitingSince, and ReadyToMergeSince are re-derived from
-// the merged result so a changed DetailedMergeStatus still moves the MR
-// between board columns.
+// ApprovedAt come from cached: GitLab does not reliably bump updatedAt on
+// every discussion-affecting event (approvals notably do not move it), so
+// diffGQLStage cross-checks approvedBy independently before calling this;
+// that combination is what makes reusing the cached reviewer state safe here.
+// Phase, WaitingSince, and ReadyToMergeSince are re-derived from the merged
+// result so a changed DetailedMergeStatus still moves the MR between board
+// columns.
 func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest) domain.MergeRequest {
 	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
 	updatedAt, _ := time.Parse(time.RFC3339, mr.UpdatedAt) //nolint:errcheck

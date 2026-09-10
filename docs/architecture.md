@@ -66,8 +66,10 @@ On startup the TUI boots from `domain.SnapshotStore.Load()` (see
 immediately, fully interactive, at any age, while a `FetchAllCmd` runs in the background. A cold
 cache (nothing to load) is the only case that shows the loading state. `FetchAllCmd` calls
 `MergeRequestSource.FetchAll(ctx, mrsvc.FetchOptions{Previous: m.allMRs, ...})`, passing the
-current in-memory snapshot so `gitlabadpt` can diff `UpdatedAt` and skip re-fetching discussions
-for unchanged MRs. Every landed `FetchResultMsg` is persisted via `SnapshotStore.Save`. Manual
+current in-memory snapshot so `gitlabadpt` can diff `UpdatedAt` and the live approved-reviewer set
+— `UpdatedAt` alone is not a reliable signal for approvals, see docs/adr/0005 — and skip re-fetching
+discussions for MRs where neither moved. Every landed `FetchResultMsg` is persisted via
+`SnapshotStore.Save`. Manual
 refresh (`r`) and the `refresh_interval` timer both repeat the same cycle; a tick is skipped while
 a fetch is already in flight.
 
