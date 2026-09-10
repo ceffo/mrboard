@@ -119,9 +119,10 @@ type MergeRequest struct {
     Approvers []string
 
     CreatedAt         time.Time
-    UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, approvals, reviewer
-                                 // changes, title/draft edits — the version marker the snapshot
-                                 // cache diffs against (docs/adr/0005)
+    UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, reviewer changes, and
+                                 // title/draft edits — but NOT reliably on approvals, so the
+                                 // snapshot cache also cross-checks the live approvedBy set
+                                 // before treating an MR as unchanged (docs/adr/0005)
     NonDraftSince     time.Time // "marked as ready" note, or CreatedAt if never a draft
     WaitingSince      time.Time // when current phase started
     ReadyToMergeSince time.Time // when the phase most recently became PhaseReadyToMerge

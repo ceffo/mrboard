@@ -28,6 +28,7 @@ func Execute(ctx context.Context) error {
 func buildRootCmd() *cobra.Command {
 	var cfgPath string
 	var logLevel string
+	var logFile string
 	var themeOverride string
 	var modeOverride string
 	var demoMode bool
@@ -55,6 +56,9 @@ func buildRootCmd() *cobra.Command {
 		}
 		if logLevel != "" {
 			cfg.Log.Level = logLevel
+		}
+		if logFile != "" {
+			cfg.Log.Path = logFile
 		}
 		boot := core.New
 		if demoMode {
@@ -100,6 +104,7 @@ func buildRootCmd() *cobra.Command {
 
 	root.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "config file path (default: XDG search)")
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level override (debug|info|warn|error)")
+	root.PersistentFlags().StringVar(&logFile, "log-file", "", "log file path override (default: config's log.path)")
 	root.PersistentFlags().BoolVar(&demoMode, "demo", false,
 		"run against the built-in demo dataset — no config file, no token, no network")
 	root.Flags().BoolVar(&updateOnly, "update", false,

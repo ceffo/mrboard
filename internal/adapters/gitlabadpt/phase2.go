@@ -11,11 +11,18 @@ import (
 )
 
 // diffGQLStage splits phase-1 GraphQL survivors into unchanged (their
-// updatedAt matches the previous snapshot and the key wasn't forced stale) and
-// changed. A nil previous snapshot means every MR is changed — an
+// updatedAt matches the previous snapshot, their live approvedBy set still
+// matches what the cache recorded as approved, and the key wasn't forced
+// stale) and changed. A nil previous snapshot means every MR is changed — an
 // unconditional full fetch, which is what a cold cache (no snapshot file yet,
 // or `mrboard fetch --cold`) produces. See docs/adr/0005, "Two-phase
 // conditional fetch".
+//
+// updatedAt alone is not a sound staleness signal for approvals: GitLab does
+// not bump an MR's updatedAt when someone approves it, so an approval can
+// land with the cached updatedAt still matching. approvedBy is queried fresh
+// in the thin phase-1 query for exactly this reason (see gqlUserMRsThinQuery),
+// so it is compared here as a second, independent signal.
 func diffGQLStage(
 	toEnrichGQL []pkggitlab.GQLMergeRequest, previous []domain.MergeRequest, forceStale map[mrKey]bool,
 ) (unchanged, changed []pkggitlab.GQLMergeRequest, cachedByKey map[mrKey]domain.MergeRequest) {
@@ -27,7 +34,8 @@ func diffGQLStage(
 	for _, mr := range toEnrichGQL {
 		k := gqlMRKey(mr)
 		if cached, ok := cachedByKey[k]; ok && !forceStale[k] {
-			if updatedAt, err := time.Parse(time.RFC3339, mr.UpdatedAt); err == nil && cached.UpdatedAt.Equal(updatedAt) {
+			updatedAt, err := time.Parse(time.RFC3339, mr.UpdatedAt)
+			if err == nil && cached.UpdatedAt.Equal(updatedAt) && approvedBySetUnchanged(mr, cached) {
 				unchanged = append(unchanged, mr)
 				continue
 			}
@@ -35,6 +43,27 @@ func diffGQLStage(
 		changed = append(changed, mr)
 	}
 	return unchanged, changed, cachedByKey
+}
+
+// approvedBySetUnchanged reports whether the phase-1 GraphQL MR's live
+// approvedBy set still matches which reviewers the cached MR recorded as
+// approved.
+func approvedBySetUnchanged(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest) bool {
+	cachedApproved := make(map[string]bool, len(cached.Reviewers))
+	for _, r := range cached.Reviewers {
+		if r.State == domain.ReviewerApproved {
+			cachedApproved[r.Username] = true
+		}
+	}
+	if len(cachedApproved) != len(mr.ApprovedBy.Nodes) {
+		return false
+	}
+	for _, u := range mr.ApprovedBy.Nodes {
+		if !cachedApproved[u.Username] {
+			return false
+		}
+	}
+	return true
 }
 
 // chunkGQLMRs splits mrs into groups of at most size, preserving order. Used

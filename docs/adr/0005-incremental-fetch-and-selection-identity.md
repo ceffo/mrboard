@@ -82,8 +82,10 @@ standup ≈ 400ms, total ≈ 0.6s against today's 2–9s. A cold cache degenerat
 unique MR — still strictly better than today, because it fetches each MR once instead of up to five
 times.
 
-`updated_at` is a faithful version marker for note-derived data: GitLab bumps it on every note,
-approval, reviewer change, and title/draft edit. Two known gaps are handled explicitly below.
+`updated_at` is a faithful version marker for most note-derived data: GitLab bumps it on notes,
+reviewer changes, and title/draft edits. It is **not** faithful for approvals — see "`updated_at`
+does not cover approvals" below, discovered after this ADR was first written. Three known gaps are
+handled explicitly below.
 
 ### What the cache is allowed to answer for (resolved 2026-07-30)
 
@@ -106,6 +108,28 @@ does not bump the MR's `updated_at`. Local writes are covered by the dirty-set r
 teammate editing approvers in the GitLab web UI would otherwise be invisible to a cache keyed on
 `updated_at`. Keeping the field always-fresh closes that hole. If measurement shows this resolver
 dominates phase 1's latency, the trade is worth revisiting — as a deliberate decision, not silently.
+
+### `updated_at` does not cover approvals (resolved 2026-09-10)
+
+A real reviewer report (sods MR 858 staying stuck showing an approver as "not started" after they
+approved it) falsified this ADR's founding claim that GitLab bumps an MR's `updated_at` on every
+approval. Verified live against `gl.nsesi.io`: MR 858's `updated_at` predated the approving user's
+"approved this merge request" system note by 46 seconds and never moved afterward. Every fetch from
+that point on saw `updated_at` still matching the previous snapshot, judged the MR unchanged per
+the rule above, and kept serving the pre-approval cached `Reviewers` — indefinitely, until some
+unrelated field happened to bump `updated_at`.
+
+Fix: `diffGQLStage` (`internal/adapters/gitlabadpt/phase2.go`) now treats an MR as unchanged only
+when **both** `updated_at` matches **and** the live `approvedBy` set (already fetched in the thin
+phase-1 query — see `approverSetFromGQLRules` above for the same always-fresh precedent) still
+matches which reviewers the cached MR recorded as approved. Either signal alone is insufficient;
+either one moving forces a real phase-2 refetch. This does not change what phase-1 fetches, only
+how phase-2 skip eligibility is decided.
+
+This is the same class of gap the next section's `resolvedDiscussionsCount`/
+`resolvableDiscussionsCount` scalars were added to eventually close for thread resolution — that
+work was never finished into an actual second cache-invalidation signal, so a discussion resolved
+or reopened without an `updated_at` move is still an open, unverified exposure of the same shape.
 
 ### Phase-1 thin query: implementation findings (resolved 2026-07-31)
 
