@@ -32,26 +32,19 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-homebrew_casks:
+brews:
   - name: mrboard
-    directory: Casks
-    binaries:
-      - mrboard
+    directory: Formula
     repository:
       owner: ceffo
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/ceffo/mrboard"
     description: "GitLab MR review board for daily standups"
-    generate_completions_from_executable:
-      executable: "mrboard"
-      base_name: "mrboard"
-      shell_parameter_format: cobra
-      shells:
-        - bash
-        - zsh
-        - fish
-    hooks:
-      pre:
-        install: |
-          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mrboard"]
+    install: |
+      bin.install "mrboard"
+      generate_completions_from_executable(bin/"mrboard", "completion",
+                                            shell_parameter_format: :cobra,
+                                            shells: [:bash, :zsh, :fish])
+    test: |
+      system "#{bin}/mrboard", "--version"

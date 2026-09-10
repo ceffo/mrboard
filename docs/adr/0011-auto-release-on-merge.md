@@ -6,7 +6,7 @@
 
 Releasing was a two-step ritual performed by hand: merge the PR, then remember to run
 `just release patch|minor|major` locally, which tags and pushes, which fires
-`release.yml`, which runs goreleaser and updates the homebrew cask.
+`release.yml`, which runs goreleaser and updates the homebrew formula.
 
 Nothing enforced the second step, and nothing tied the bump level to what actually
 changed. Since ADR-0010 added an in-app update check, a version that never gets tagged is
@@ -86,7 +86,7 @@ While the version is `0.x`, `feat!:` and `fix!:` bump the minor. `v1.0.0` is rea
 only through `just release major` from a maintainer's machine.
 
 The alternative — strict semver, where `!` means major — was rejected because at `0.13.0`
-a single mistyped PR title would publish `v1.0.0`, and the homebrew cask, the update
+a single mistyped PR title would publish `v1.0.0`, and the homebrew formula, the update
 prompt, and the tag history are all effectively unrecallable once that happens. This also
 happens to be the ordinary reading of semver for `0.x`, where the minor is the breaking
 position.
