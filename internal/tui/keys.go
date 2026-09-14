@@ -70,6 +70,7 @@ type BoardKeyMap struct {
 	OpenTicket Action
 	Settings   Action
 	Update     Action
+	Undraft    Action
 }
 
 // DefaultBoardKeyMap is the default keybinding set for board mode.
@@ -90,6 +91,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
 	Update:     Act("u", "update", PriorityModal, CategoryAct),
+	Undraft:    Act("U", "undraft", PriorityModal, CategoryAct),
 }
 
 // BoardCtx is the board-mode context.

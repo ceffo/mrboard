@@ -746,8 +746,8 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TeamResolvedMsg:
 		return m.handleTeamResolved(msg)
 
-	case AutoAssignResultMsg:
-		return m.handleAutoAssignResult(msg)
+	case AutoAssignResultMsg, undraftRequestedMsg, UndraftResultMsg:
+		return m.handleMRWriteResultMsg(msg)
 
 	case tickMsg:
 		return m, tickCmd()
@@ -1019,6 +1019,15 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirm = m.versionw.confirmDialog(m.confirmKeys)
 		m.overlay.openOverlay(overlayKindConfirm)
 		return m, nil
+	case m.keys.Undraft.Match(msg):
+		return m.requireFocusedMR("undraft", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			if mr.Phase != domain.PhaseDraft {
+				return m, nil
+			}
+			m.confirm = newUndraftConfirmDialog(*mr, m.styles, m.confirmKeys)
+			m.overlay.openOverlay(overlayKindConfirm)
+			return m, nil
+		})
 	}
 	return m, nil
 }
@@ -1705,21 +1714,32 @@ func (m Model) handleTicketDescriptionLinkResult(msg TicketDescriptionLinkResult
 // meeting all four auto-assign criteria (docs/adr/0009). Returns nil when the
 // feature is disabled or no MRs qualify.
 func (m *Model) makeAutoAssignReviewersCmds() tea.Cmd {
-	if !m.cfg.AutoAssignReviewers.Enabled {
-		return nil
-	}
 	var cmds []tea.Cmd
 	for _, mr := range m.allMRs {
-		reviewers, issueKey, ok := domain.AutoAssignCandidates(mr, m.teamRoster, m.keyMatcher)
-		if !ok {
-			continue
+		if cmd := m.tryAutoAssignReviewersCmd(mr); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
-		cmds = append(cmds, makeAutoAssignReviewersCmd(m.baseCtx, m.src, mr, issueKey, reviewers))
 	}
 	if len(cmds) == 0 {
 		return nil
 	}
 	return tea.Batch(cmds...)
+}
+
+// tryAutoAssignReviewersCmd returns a Cmd that assigns the team as reviewers
+// on mr if it meets every auto-assign criterion (docs/adr/0009) and the
+// feature is enabled. Returns nil when disabled or mr doesn't qualify, so
+// callers can pass the result straight to tea.Batch. Shared by the post-fetch
+// pipeline (makeAutoAssignReviewersCmds) and the undraft flow.
+func (m *Model) tryAutoAssignReviewersCmd(mr domain.MergeRequest) tea.Cmd {
+	if !m.cfg.AutoAssignReviewers.Enabled {
+		return nil
+	}
+	reviewers, issueKey, ok := domain.AutoAssignCandidates(mr, m.teamRoster, m.keyMatcher)
+	if !ok {
+		return nil
+	}
+	return makeAutoAssignReviewersCmd(m.baseCtx, m.src, mr, issueKey, reviewers)
 }
 
 // makeAutoAssignReviewersCmd returns a Cmd that writes reviewers to a single
@@ -1753,6 +1773,49 @@ func (m Model) handleAutoAssignResult(msg AutoAssignResultMsg) (tea.Model, tea.C
 		"project_id", msg.ProjectID, "mr_iid", msg.MRIID, "ticket", msg.IssueKey,
 		"reviewers", domain.Usernames(msg.Reviewers))
 	return m, m.toast(toast.InfoAlert, "Auto-assigned team on "+mrRef)
+}
+
+// handleMRWriteResultMsg groups background single-MR write-result messages
+// under one coreUpdate case, keeping that switch's cyclomatic complexity down.
+func (m Model) handleMRWriteResultMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case AutoAssignResultMsg:
+		return m.handleAutoAssignResult(msg)
+	case undraftRequestedMsg:
+		return m, makeUndraftCmd(m.baseCtx, m.src, msg.MR)
+	case UndraftResultMsg:
+		return m.handleUndraftResult(msg)
+	}
+	return m, nil
+}
+
+// handleUndraftResult toasts the outcome and, on success, updates the MR
+// in-place so it moves to its new column immediately (applyMRFilter
+// preserves focus by MRKey — see docs/adr/0005 — so the board keeps the
+// focused card selected across the move), then chains the same reusable
+// auto-assign attempt the post-fetch pipeline runs (docs/adr/0009).
+func (m Model) handleUndraftResult(msg UndraftResultMsg) (tea.Model, tea.Cmd) {
+	mrRef := fmt.Sprintf("!%d", msg.MR.IID)
+	if msg.Err != nil {
+		m.logger.Warn("tui: undraft failed", "project_id", msg.MR.ProjectID, "mr_iid", msg.MR.IID, "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, "Undraft failed: "+mrRef)
+	}
+	updatedMR := msg.MR
+	for i, mr := range m.allMRs {
+		if mr.ProjectID == updatedMR.ProjectID && mr.IID == updatedMR.IID {
+			m.allMRs[i] = updatedMR
+			break
+		}
+	}
+	m.dirty.Mark(updatedMR.Key(), time.Now())
+	m.applyMRFilter()
+	m.updateTicketKey()
+	m.logger.Info("tui: undrafted MR", "project_id", updatedMR.ProjectID, "mr_iid", updatedMR.IID)
+	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Undrafted "+mrRef)}
+	if cmd := m.tryAutoAssignReviewersCmd(updatedMR); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // handleDiffFetchResult delegates the fetched MRDiff to diffView and updates

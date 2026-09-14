@@ -140,6 +140,21 @@ func (s *mrSource) UpdateDescription(ctx context.Context, projectID, mrIID int64
 	return nil
 }
 
+// Undraft accepts and applies the write, so the undraft path is genuinely
+// exercised rather than silently swallowed.
+func (s *mrSource) Undraft(ctx context.Context, projectID, mrIID int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	key := domain.MRKey{ProjectID: int(projectID), IID: int(mrIID)}
+	if !s.a.ds.mutate(key, func(mr *domain.MergeRequest) {
+		mr.Phase = domain.ClassifyPhase(false, true, mr.Reviewers)
+	}) {
+		return fmt.Errorf("demo: no MR %d!%d", projectID, mrIID)
+	}
+	return nil
+}
+
 // sleep waits out the configured latency, or returns early if the caller's
 // context is cancelled first.
 func (s *mrSource) sleep(ctx context.Context) error {

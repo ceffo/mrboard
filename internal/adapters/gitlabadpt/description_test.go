@@ -13,10 +13,12 @@ import (
 )
 
 // fakeDescriptionClient implements gitLabClient with only the methods needed
-// for description write tests. All unimplemented methods panic.
+// for description and undraft write tests. All unimplemented methods panic.
 type fakeDescriptionClient struct {
-	updateErr   error
-	updateCalls []string // captured new descriptions
+	updateErr    error
+	updateCalls  []string // captured new descriptions
+	undraftErr   error
+	undraftCalls int
 }
 
 func (f *fakeDescriptionClient) GetMRDescription(_ context.Context, _, _ int64) (string, error) {
@@ -26,6 +28,11 @@ func (f *fakeDescriptionClient) GetMRDescription(_ context.Context, _, _ int64) 
 func (f *fakeDescriptionClient) UpdateMRDescription(_ context.Context, _, _ int64, desc string) error {
 	f.updateCalls = append(f.updateCalls, desc)
 	return f.updateErr
+}
+
+func (f *fakeDescriptionClient) Undraft(_ context.Context, _, _ int64) error {
+	f.undraftCalls++
+	return f.undraftErr
 }
 
 // --- MRLister stubs ---

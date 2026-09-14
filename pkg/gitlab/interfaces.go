@@ -52,4 +52,8 @@ type MRWriter interface {
 	ListUsersByUsername(ctx context.Context, username string) (*gl.User, error)
 	// UpdateMRDescription replaces the body of an MR with the given description.
 	UpdateMRDescription(ctx context.Context, projectID, mrIID int64, description string) error
+	// Undraft marks an MR as ready for review. GitLab has no direct draft-toggle
+	// field; this strips the Draft:/WIP: marker from the title instead, which is
+	// what flips draft state server-side.
+	Undraft(ctx context.Context, projectID, mrIID int64) error
 }
