@@ -433,6 +433,36 @@ func (c *Client) UpdateMRDescription(ctx context.Context, projectID, mrIID int64
 	return nil
 }
 
+// Undraft marks an MR as ready for review. GitLab has no direct draft-toggle
+// field: removing the Draft:/WIP: marker from the title is what flips draft
+// status server-side, so this fetches the current title, strips the marker,
+// and writes it back — a harmless no-op write if the MR is already not a draft.
+func (c *Client) Undraft(ctx context.Context, projectID, mrIID int64) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: undraft MR", "project_id", projectID, "mr_iid", mrIID)
+	mr, err := c.GetMR(ctx, projectID, mrIID)
+	if err != nil {
+		return err
+	}
+	newTitle := stripDraftPrefix(mr.Title)
+	if newTitle == mr.Title {
+		c.logger.Warn("gitlab: undraft MR: title already carries no draft marker, skipping write",
+			"project_id", projectID, "mr_iid", mrIID)
+		return nil
+	}
+	_, _, err = c.gl.MergeRequests.UpdateMergeRequest(projectID, mrIID,
+		&gl.UpdateMergeRequestOptions{Title: gl.Ptr(newTitle)},
+		gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: undraft MR error", "project_id", projectID, "mr_iid", mrIID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return fmt.Errorf("gitlab: undraft project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Info("gitlab: undraft MR done", "project_id", projectID, "mr_iid", mrIID,
+		"duration", ilog.FmtDur(time.Since(start)))
+	return nil
+}
+
 // ListUsersByUsername looks up a GitLab user by exact username.
 // Returns nil, nil if no user is found.
 func (c *Client) ListUsersByUsername(ctx context.Context, username string) (*gl.User, error) {

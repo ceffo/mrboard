@@ -159,6 +159,10 @@ func (f *fakeFetchClient) UpdateMRDescription(_ context.Context, _, _ int64, _ s
 	panic("not implemented")
 }
 
+func (f *fakeFetchClient) Undraft(_ context.Context, _, _ int64) error {
+	panic("not implemented")
+}
+
 // gqlMR builds a minimal thin GQLMergeRequest for the given project/iid,
 // well-formed enough for parseGIDNumericSafe/parseIIDSafe and MapMRFromGraphQL.
 // Every test in this file lists it under testUserPriya's user source.

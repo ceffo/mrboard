@@ -63,6 +63,9 @@ type MergeRequestSource interface {
 
 	// UpdateDescription replaces the MR's description text.
 	UpdateDescription(ctx context.Context, projectID, mrIID int64, description string) error
+
+	// Undraft marks an MR as ready for review, moving it out of PhaseDraft.
+	Undraft(ctx context.Context, projectID, mrIID int64) error
 }
 
 // SourceType identifies the kind of GitLab entity a source represents.

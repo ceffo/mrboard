@@ -696,6 +696,69 @@ func (_c *MockMergeRequestSource_SetReviewers_Call) RunAndReturn(run func(ctx co
 	return _c
 }
 
+// Undraft provides a mock function for the type MockMergeRequestSource
+func (_mock *MockMergeRequestSource) Undraft(ctx context.Context, projectID int64, mrIID int64) error {
+	ret := _mock.Called(ctx, projectID, mrIID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Undraft")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64) error); ok {
+		r0 = returnFunc(ctx, projectID, mrIID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockMergeRequestSource_Undraft_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Undraft'
+type MockMergeRequestSource_Undraft_Call struct {
+	*mock.Call
+}
+
+// Undraft is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID int64
+//   - mrIID int64
+func (_e *MockMergeRequestSource_Expecter) Undraft(ctx any, projectID any, mrIID any) *MockMergeRequestSource_Undraft_Call {
+	return &MockMergeRequestSource_Undraft_Call{Call: _e.mock.On("Undraft", ctx, projectID, mrIID)}
+}
+
+func (_c *MockMergeRequestSource_Undraft_Call) Run(run func(ctx context.Context, projectID int64, mrIID int64)) *MockMergeRequestSource_Undraft_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMergeRequestSource_Undraft_Call) Return(err error) *MockMergeRequestSource_Undraft_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockMergeRequestSource_Undraft_Call) RunAndReturn(run func(ctx context.Context, projectID int64, mrIID int64) error) *MockMergeRequestSource_Undraft_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateDescription provides a mock function for the type MockMergeRequestSource
 func (_mock *MockMergeRequestSource) UpdateDescription(ctx context.Context, projectID int64, mrIID int64, description string) error {
 	ret := _mock.Called(ctx, projectID, mrIID, description)
