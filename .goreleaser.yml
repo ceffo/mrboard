@@ -43,7 +43,11 @@ brews:
     description: "GitLab MR review board for daily standups"
     install: |
       bin.install "mrboard"
-      generate_completions_from_executable(bin/"mrboard", "completion",
+      # shell_parameter_format: :cobra already appends `completion <shell>` to the
+      # invocation. Do not pass "completion" as an explicit command arg here — that
+      # duplicates it, invoking `mrboard completion completion <shell>` and printing
+      # cobra's help text instead of a real completion script (regressed twice: #1).
+      generate_completions_from_executable(bin/"mrboard",
                                             shell_parameter_format: :cobra,
                                             shells: [:bash, :zsh, :fish])
     test: |
