@@ -43,7 +43,7 @@ brews:
     description: "GitLab MR review board for daily standups"
     install: |
       bin.install "mrboard"
-      generate_completions_from_executable(bin/"mrboard", "completion",
+      generate_completions_from_executable(bin/"mrboard",
                                             shell_parameter_format: :cobra,
                                             shells: [:bash, :zsh, :fish])
     test: |
