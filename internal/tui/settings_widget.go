@@ -25,8 +25,10 @@ const (
 	markerFixed     = "[•]" // always-applied row with no toggle, e.g. the focused MR in the batch preview
 
 	filterSelectMaxVisible    = 8 // fallback used before SetSize sizes the panel to the terminal
-	filterSelectMinVisible    = 3
 	filterSelectMaxVisibleCap = 14
+	// settingsMinVisible is the floor SetSize clamps any tab's visible-row
+	// count to, however short the terminal.
+	settingsMinVisible = 3
 	// filterFixedChromeLines is every Filters-tab line but the list rows
 	// themselves: border+tabbar+blank+status+rule+header+indicator+blank+hint.
 	// See SetSize.
@@ -333,10 +335,17 @@ const (
 )
 
 const (
-	settingsPickerMaxVisible = 10
+	settingsPickerMaxVisible = 10 // cap; SetSize may lower it to fit a short terminal
 	settingsPickerListWidth  = 22
 	settingsModeWidth        = 10
 	sortColumnWidth          = 22
+	// settingsFrameChromeWidth/Height are the modal's border+padding+tab-bar+hint
+	// overhead outside a tab's body — see canvasSize.
+	settingsFrameChromeWidth  = 4 // border (2) + PopupBorder padding (2)
+	settingsFrameChromeHeight = 6 // border (2) + tab bar (1) + blank (1) + blank (1) + hint (1)
+	// settingsHintText is the footer hint shown under every tab; hoisted to a
+	// const so canvasSize can measure it alongside each tab's body.
+	settingsHintText = "  tab/shift+tab tabs  ↑↓←→ move  space toggle  ,/esc close"
 )
 
 // settingsWidget is a 4-tab settings panel: General / Filters / Sorting / Theme.
@@ -369,6 +378,7 @@ type settingsWidget struct {
 	themeScrollOff  int
 	themeModeCursor int
 	themeSection    int // 0 = list, 1 = mode
+	themeMaxVisible int // 0 falls back to settingsPickerMaxVisible; set by SetSize
 
 	// current persisted theme values (updated on each live change)
 	themeName string
@@ -492,16 +502,24 @@ func checkedSet(values []string) map[string]bool {
 // hard-coding a row count that can overflow a short one.
 func (w *settingsWidget) SetSize(width, height int) {
 	w.width, w.height = width, height
-	mv := height - filterFixedChromeLines
-	switch {
-	case mv < filterSelectMinVisible:
-		mv = filterSelectMinVisible
-	case mv > filterSelectMaxVisibleCap:
-		mv = filterSelectMaxVisibleCap
-	}
+	mv := clampVisible(height-filterFixedChromeLines, settingsMinVisible, filterSelectMaxVisibleCap)
 	w.filterAssignee.maxVisible = mv
 	w.filterReviewer.maxVisible = mv
 	w.filterTicket.maxVisible = mv
+	w.themeMaxVisible = clampVisible(height-settingsFrameChromeHeight, settingsMinVisible, settingsPickerMaxVisible)
+	w.adjustThemeScroll()
+}
+
+// clampVisible bounds n to [lo, hi].
+func clampVisible(n, lo, hi int) int {
+	switch {
+	case n < lo:
+		return lo
+	case n > hi:
+		return hi
+	default:
+		return n
+	}
 }
 
 // buildSelectItems builds the item list for a filterSelectWidget ("All" + sorted
@@ -815,11 +833,19 @@ func (w *settingsWidget) moveCursorTheme(delta int) {
 }
 
 func (w *settingsWidget) adjustThemeScroll() {
+	mv := w.effectiveThemeMaxVisible()
 	if w.themeCursor < w.themeScrollOff {
 		w.themeScrollOff = w.themeCursor
-	} else if w.themeCursor >= w.themeScrollOff+settingsPickerMaxVisible {
-		w.themeScrollOff = w.themeCursor - settingsPickerMaxVisible + 1
+	} else if w.themeCursor >= w.themeScrollOff+mv {
+		w.themeScrollOff = w.themeCursor - mv + 1
 	}
+}
+
+func (w settingsWidget) effectiveThemeMaxVisible() int {
+	if w.themeMaxVisible > 0 {
+		return w.themeMaxVisible
+	}
+	return settingsPickerMaxVisible
 }
 
 func (w *settingsWidget) activate() {
@@ -889,22 +915,54 @@ func (w settingsWidget) buildApplied() SettingsAppliedMsg {
 // --- rendering ---
 
 func (w settingsWidget) render() string {
-	var sb strings.Builder
-	sb.WriteString(w.renderTabBar() + "\n\n")
+	var body string
 	switch w.tab {
 	case tabGeneral:
-		sb.WriteString(w.renderGeneral())
+		body = w.renderGeneral()
 	case tabFilters:
-		sb.WriteString(w.renderFilters())
+		body = w.renderFilters()
 	case tabSorting:
-		sb.WriteString(w.renderSorting())
+		body = w.renderSorting()
 	case tabTheme:
-		sb.WriteString(w.renderTheme())
+		body = w.renderTheme()
 	}
-	sb.WriteString("\n" + w.styles.PopupHint.Render(
-		"  tab/shift+tab tabs  ↑↓←→ move  space toggle  ,/esc close",
-	))
+	// Every tab's body is placed into the same canvas so the border — and the
+	// header above it — lands on the same screen cell on every tab, instead
+	// of the popup resizing (and its position jumping) on each tab switch.
+	cw, ch := w.canvasSize()
+	body = lip.Place(cw, ch, lip.Left, lip.Top, body)
+
+	var sb strings.Builder
+	sb.WriteString(w.renderTabBar() + "\n\n")
+	sb.WriteString(body)
+	sb.WriteString("\n" + w.styles.PopupHint.Render(settingsHintText))
 	return w.styles.PopupBorder.Render(sb.String())
+}
+
+// canvasSize is the fixed content width/height every tab body is placed
+// into — the max natural size across all four tabs' bodies (plus the tab
+// bar and hint line, which share the same border), capped to the terminal.
+func (w settingsWidget) canvasSize() (width, height int) {
+	for _, body := range []string{w.renderGeneral(), w.renderFilters(), w.renderSorting(), w.renderTheme()} {
+		if bw := lip.Width(body); bw > width {
+			width = bw
+		}
+		if bh := lip.Height(body); bh > height {
+			height = bh
+		}
+	}
+	for _, line := range []string{w.renderTabBar(), settingsHintText} {
+		if lw := lip.Width(line); lw > width {
+			width = lw
+		}
+	}
+	if maxW := w.width - settingsFrameChromeWidth; maxW > 0 && width > maxW {
+		width = maxW
+	}
+	if maxH := w.height - settingsFrameChromeHeight; maxH > 0 && height > maxH {
+		height = maxH
+	}
+	return width, height
 }
 
 func (w settingsWidget) renderTabBar() string {
@@ -1046,8 +1104,10 @@ func renderRadioItem(label string, selected, focused bool, styles Styles) string
 }
 
 func (w settingsWidget) renderTheme() string {
+	mv := w.effectiveThemeMaxVisible()
+
 	// Left pane: theme list
-	end := w.themeScrollOff + settingsPickerMaxVisible
+	end := w.themeScrollOff + mv
 	if end > len(w.themes) {
 		end = len(w.themes)
 	}
@@ -1073,14 +1133,14 @@ func (w settingsWidget) renderTheme() string {
 		listLines = append(listLines, line)
 	}
 	emptyRaw := fmt.Sprintf("%-*s", settingsPickerListWidth, "")
-	for len(listLines) < settingsPickerMaxVisible {
+	for len(listLines) < mv {
 		listLines = append(listLines, w.styles.PopupItem.Render(emptyRaw))
 	}
 	listPane := strings.Join(listLines, "\n")
 
 	// Divider
 	var divLines []string
-	for range settingsPickerMaxVisible {
+	for range mv {
 		divLines = append(divLines, w.styles.PopupDivider.Render("│"))
 	}
 	divider := strings.Join(divLines, "\n")
@@ -1105,7 +1165,7 @@ func (w settingsWidget) renderTheme() string {
 		modeLines = append(modeLines, line)
 	}
 	emptyModeRaw := fmt.Sprintf("%-*s", settingsModeWidth, "")
-	for len(modeLines) < settingsPickerMaxVisible {
+	for len(modeLines) < mv {
 		modeLines = append(modeLines, w.styles.PopupItem.Render(emptyModeRaw))
 	}
 	modePane := strings.Join(modeLines, "\n")
