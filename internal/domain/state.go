@@ -10,6 +10,10 @@ type FilterCriteria struct {
 	Assignees []string `yaml:"assignees,omitempty"`
 	// Reviewers is nil/empty = show all reviewers.
 	Reviewers []string `yaml:"reviewers,omitempty"`
+	// TicketKeys is nil/empty = show all issue IDs; ignored when TicketNone is true.
+	TicketKeys []string `yaml:"ticket_keys,omitempty"`
+	// TicketNone, when true, shows only MRs with no detectable issue ID.
+	TicketNone bool `yaml:"ticket_none,omitempty"`
 }
 
 // ViewMode controls whether the board shows all MRs or only the current user's.

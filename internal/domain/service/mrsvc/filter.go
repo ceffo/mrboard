@@ -22,6 +22,12 @@ type FilterOptions struct {
 	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
 	// nil or empty slice means all reviewers are shown.
 	Reviewers []string
+	// TicketKeys restricts visible MRs to those whose extracted issue ID is in the set.
+	// Ignored when TicketNone is true. nil or empty means all issue IDs are shown.
+	TicketKeys []string
+	// TicketNone, when true, additionally shows MRs with no detectable issue ID,
+	// combined with TicketKeys the same way another key would be: by OR.
+	TicketNone bool
 	// SprintFilter, when true and SprintKeys is non-empty, shows only MRs whose
 	// extracted JIRA key is present in the active sprint.
 	SprintFilter bool
@@ -83,6 +89,20 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 					filtered = append(filtered, mr)
 					break
 				}
+			}
+		}
+		mrs = filtered
+	}
+	if opts.TicketNone || len(opts.TicketKeys) > 0 {
+		keySet := make(map[string]bool, len(opts.TicketKeys))
+		for _, k := range opts.TicketKeys {
+			keySet[k] = true
+		}
+		filtered := make([]domain.MergeRequest, 0, len(mrs))
+		for _, mr := range mrs {
+			k := opts.KeyMatcher.ExtractFromTitle(mr.Title)
+			if (k == "" && opts.TicketNone) || (k != "" && keySet[k]) {
+				filtered = append(filtered, mr)
 			}
 		}
 		mrs = filtered

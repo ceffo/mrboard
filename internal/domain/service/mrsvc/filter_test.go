@@ -315,6 +315,57 @@ func TestFilterAndSort_Reviewers_EmptyShowsAll(t *testing.T) {
 	assert.Len(t, got, 2)
 }
 
+// FilterAndSort — Issue ID (ticket key)
+
+func mrTitled(id int, title, repo string, iid int) domain.MergeRequest {
+	return domain.MergeRequest{ID: id, IID: iid, ProjectPath: repo, Title: title, CreatedAt: t0}
+}
+
+func TestFilterAndSort_TicketKeys_SingleMatch(t *testing.T) {
+	matcher := domain.NewTicketKeyMatcher(false)
+	mrs := []domain.MergeRequest{
+		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
+		mrTitled(2, "feat(OD-200): b", "repo/b", 2),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketKeys: []string{"OD-100"}, KeyMatcher: matcher})
+	require.Len(t, got, 1)
+	assert.Equal(t, 1, got[0].IID)
+}
+
+func TestFilterAndSort_TicketKeys_NoneShowsOnlyUntitled(t *testing.T) {
+	matcher := domain.NewTicketKeyMatcher(false)
+	mrs := []domain.MergeRequest{
+		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
+		mrTitled(2, "chore: cleanup", "repo/b", 2),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketNone: true, KeyMatcher: matcher})
+	require.Len(t, got, 1)
+	assert.Equal(t, 2, got[0].IID)
+}
+
+func TestFilterAndSort_TicketKeys_EmptyAndNoneFalseShowsAll(t *testing.T) {
+	matcher := domain.NewTicketKeyMatcher(false)
+	mrs := []domain.MergeRequest{
+		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
+		mrTitled(2, "chore: cleanup", "repo/b", 2),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{KeyMatcher: matcher})
+	assert.Len(t, got, 2)
+}
+
+func TestFilterAndSort_TicketKeys_NoneAndKeysCombineWithOr(t *testing.T) {
+	matcher := domain.NewTicketKeyMatcher(false)
+	mrs := []domain.MergeRequest{
+		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
+		mrTitled(2, "feat(OD-200): b", "repo/b", 2),
+		mrTitled(3, "chore: cleanup", "repo/c", 3),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{
+		TicketKeys: []string{"OD-100"}, TicketNone: true, KeyMatcher: matcher,
+	})
+	assert.ElementsMatch(t, []int{1, 3}, ids(got))
+}
+
 // FilterAndSort — sprint filter
 
 func TestFilterAndSort_SprintFilter_IncludesOnlySprintMRs(t *testing.T) {
