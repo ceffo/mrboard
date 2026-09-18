@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,7 +24,18 @@ const (
 	markerUnchecked = "[ ]"
 	markerFixed     = "[•]" // always-applied row with no toggle, e.g. the focused MR in the batch preview
 
-	filterSelectMaxVisible = 8
+	filterSelectMaxVisible    = 8 // fallback used before SetSize sizes the panel to the terminal
+	filterSelectMinVisible    = 3
+	filterSelectMaxVisibleCap = 14
+	// filterFixedChromeLines is every Filters-tab line but the list rows
+	// themselves: border+tabbar+blank+status+rule+header+indicator+blank+hint.
+	// See SetSize.
+	filterFixedChromeLines = 10
+	// filterColumnContentWidth is the label+count width inside a filter list column.
+	filterColumnContentWidth = 22
+	// filterMarkerPrefixWidth is "  " + "[x]" + " " preceding a list row's content.
+	filterMarkerPrefixWidth = 6
+	filterColumnTotalWidth  = filterMarkerPrefixWidth + filterColumnContentWidth
 )
 
 var phaseLabels = [4]string{phaseLabelDraft, phaseLabelReview, phaseLabelAuthorAc, phaseLabelReady}
@@ -41,10 +53,13 @@ const (
 	filterFocusStatus filterFocus = iota
 	filterFocusAssignee
 	filterFocusReviewer
+	filterFocusTicket
 	filterNumSections
 )
 
-// filterStatusWidget manages the Status (phase) section checkboxes.
+// filterStatusWidget manages the Status (phase) section checkboxes, rendered
+// as a single horizontal strip — Left/Right moves between them, matching how
+// the strip actually reads on screen.
 type filterStatusWidget struct {
 	phases [4]bool
 	cursor int
@@ -57,35 +72,59 @@ func (s *filterStatusWidget) toggle() {
 }
 
 func (s filterStatusWidget) render(focused bool, styles Styles) string {
-	var sb strings.Builder
+	parts := make([]string, len(phaseLabels))
 	for i, lbl := range phaseLabels {
-		var markerStyled string
+		marker := markerUnchecked
+		markerStyle := styles.PopupItemMarkerOff
 		if s.phases[i] {
-			markerStyled = styles.PopupItemMarkerOn.Render(markerChecked)
-		} else {
-			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
+			marker = markerChecked
+			markerStyle = styles.PopupItemMarkerOn
 		}
+		markerStyled := markerStyle.Render(marker)
+		var labelStyled string
 		if focused && i == s.cursor {
-			sb.WriteString("  " + markerStyled + " " + styles.PopupItemFocused.Render(lbl) + "\n")
+			labelStyled = styles.PopupItemFocused.Render(lbl)
 		} else {
-			sb.WriteString("  " + markerStyled + " " + styles.PopupItem.Render(lbl) + "\n")
+			labelStyled = styles.PopupItem.Render(lbl)
 		}
+		parts[i] = markerStyled + " " + labelStyled
 	}
-	return sb.String()
+	return strings.Join(parts, "   ")
 }
 
-// filterSelectItem is a single entry in a multi-select list (Author or Reviewer).
+// filterItemKind discriminates the pseudo-items ("All", "No ID") from a real
+// selectable value in a filterSelectWidget list.
+type filterItemKind int
+
+const (
+	filterItemAll filterItemKind = iota
+	filterItemNone
+	filterItemValue
+)
+
+// filterSelectItem is a single entry in a multi-select list (Assignee,
+// Reviewer, or Issue ID). count is an MR-count badge shown right-aligned;
+// zero means no badge unless absent is set. absent marks a value that is
+// checked in persisted state but no longer present in the current MR set
+// (e.g. a ticket ID from a closed sprint) — without this, such a selection
+// filters invisibly: still applied, but with no row to show or uncheck it.
 type filterSelectItem struct {
-	value string // "" means "All"
-	label string
+	kind   filterItemKind
+	value  string // "" for kind != filterItemValue
+	label  string
+	count  int
+	absent bool
 }
 
-// filterSelectWidget manages a scrollable multi-select list.
+// filterSelectWidget manages a scrollable multi-select list with an "All"
+// pseudo-item and, for the Issue ID list only, a "No ID" pseudo-item.
 type filterSelectWidget struct {
-	items     []filterSelectItem
-	checked   map[string]bool // nil/empty = all shown (no filter)
-	cursor    int
-	scrollOff int
+	items      []filterSelectItem
+	checked    map[string]bool // nil/empty = no specific value checked
+	none       bool            // "No ID" checked — meaningful for the Issue ID list only
+	cursor     int
+	scrollOff  int
+	maxVisible int // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
 }
 
 func (s *filterSelectWidget) moveCursor(delta int) {
@@ -96,11 +135,19 @@ func (s *filterSelectWidget) moveCursor(delta int) {
 	}
 }
 
+func (s filterSelectWidget) effectiveMaxVisible() int {
+	if s.maxVisible > 0 {
+		return s.maxVisible
+	}
+	return filterSelectMaxVisible
+}
+
 func (s *filterSelectWidget) adjustScroll() {
+	mv := s.effectiveMaxVisible()
 	if s.cursor < s.scrollOff {
 		s.scrollOff = s.cursor
-	} else if s.cursor >= s.scrollOff+filterSelectMaxVisible {
-		s.scrollOff = s.cursor - filterSelectMaxVisible + 1
+	} else if s.cursor >= s.scrollOff+mv {
+		s.scrollOff = s.cursor - mv + 1
 	}
 }
 
@@ -109,20 +156,24 @@ func (s *filterSelectWidget) toggle() {
 		return
 	}
 	item := s.items[s.cursor]
-	if item.value == "" {
+	switch item.kind {
+	case filterItemAll:
 		s.checked = nil
-		return
-	}
-	if s.checked == nil {
-		s.checked = make(map[string]bool)
-	}
-	if s.checked[item.value] {
-		delete(s.checked, item.value)
-		if len(s.checked) == 0 {
-			s.checked = nil
+		s.none = false
+	case filterItemNone:
+		s.none = !s.none
+	case filterItemValue:
+		if s.checked == nil {
+			s.checked = make(map[string]bool)
 		}
-	} else {
-		s.checked[item.value] = true
+		if s.checked[item.value] {
+			delete(s.checked, item.value)
+			if len(s.checked) == 0 {
+				s.checked = nil
+			}
+		} else {
+			s.checked[item.value] = true
+		}
 	}
 }
 
@@ -135,34 +186,96 @@ func (s filterSelectWidget) selectedSlice() []string {
 	return result
 }
 
+// activeCount is how many values are currently selected in this list — shown
+// as a badge on the column header. Not to be confused with an item's own
+// per-value MR count.
+func (s filterSelectWidget) activeCount() int {
+	n := len(s.checked)
+	if s.none {
+		n++
+	}
+	return n
+}
+
+func (s filterSelectWidget) isChecked(item filterSelectItem) bool {
+	switch item.kind {
+	case filterItemAll:
+		return len(s.checked) == 0 && !s.none
+	case filterItemNone:
+		return s.none
+	default:
+		return s.checked[item.value]
+	}
+}
+
+// render renders this list as a fixed-width, fixed-height block (padded with
+// blank rows to effectiveMaxVisible) so several lists can sit side by side
+// via lip.JoinHorizontal without ragged edges.
 func (s filterSelectWidget) render(focused bool, styles Styles) string {
 	var sb strings.Builder
-	end := min(s.scrollOff+filterSelectMaxVisible, len(s.items))
+	mv := s.effectiveMaxVisible()
+	end := min(s.scrollOff+mv, len(s.items))
+	rows := 0
 	for i := s.scrollOff; i < end; i++ {
 		item := s.items[i]
-		var checked bool
-		if item.value == "" {
-			checked = len(s.checked) == 0
-		} else {
-			checked = s.checked[item.value]
-		}
 		var markerStyled string
-		if checked {
+		if s.isChecked(item) {
 			markerStyled = styles.PopupItemMarkerOn.Render(markerChecked)
 		} else {
 			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
 		}
-		if focused && i == s.cursor {
-			sb.WriteString("  " + markerStyled + " " + styles.PopupItemFocused.Render(item.label) + "\n")
-		} else {
-			sb.WriteString("  " + markerStyled + " " + styles.PopupItem.Render(item.label) + "\n")
+		content := renderFilterRowContent(item.label, item.count, item.absent, filterColumnContentWidth)
+		var contentStyled string
+		switch {
+		case item.absent:
+			contentStyled = styles.PopupHint.Render(content)
+		case focused && i == s.cursor:
+			contentStyled = styles.PopupItemFocused.Render(content)
+		default:
+			contentStyled = styles.PopupItem.Render(content)
 		}
+		sb.WriteString("  " + markerStyled + " " + contentStyled + "\n")
+		rows++
 	}
-	if len(s.items) > filterSelectMaxVisible {
-		shown := min(s.scrollOff+filterSelectMaxVisible, len(s.items))
-		sb.WriteString(styles.PopupHint.Render(fmt.Sprintf("  %d–%d / %d", s.scrollOff+1, shown, len(s.items))) + "\n")
+	blank := strings.Repeat(" ", filterColumnTotalWidth)
+	for rows < mv {
+		sb.WriteString(blank + "\n")
+		rows++
+	}
+	if len(s.items) > mv {
+		sb.WriteString(styles.PopupHint.Render(fmt.Sprintf("  %d–%d / %d", s.scrollOff+1, end, len(s.items))) + "\n")
+	} else {
+		sb.WriteString(blank + "\n")
 	}
 	return sb.String()
+}
+
+// renderFilterRowContent lays out a label with its optional right-aligned
+// count badge inside width columns, truncating the label if it doesn't fit.
+// showZero forces the "(0)" badge for an absent-but-checked item even though
+// count itself is 0.
+func renderFilterRowContent(label string, count int, showZero bool, width int) string {
+	countStr := ""
+	if count > 0 || showZero {
+		countStr = fmt.Sprintf("(%d)", count)
+	}
+	avail := width
+	if countStr != "" {
+		avail -= lip.Width(countStr) + 1
+	}
+	if avail < 1 {
+		avail = 1
+	}
+	label = truncateWidth(label, avail)
+	pad := avail - lip.Width(label)
+	if pad < 0 {
+		pad = 0
+	}
+	content := label + strings.Repeat(" ", pad)
+	if countStr != "" {
+		content += " " + countStr
+	}
+	return content
 }
 
 func renderSectionHeader(title string, focused bool, styles Styles) string {
@@ -170,6 +283,16 @@ func renderSectionHeader(title string, focused bool, styles Styles) string {
 		return styles.PopupSectionFocused.Render("▶ " + title)
 	}
 	return styles.PopupSection.Render("  " + title)
+}
+
+// padDisplay right-pads an already-styled string to width, measuring visible
+// (ANSI-stripped) width so styled and plain strings can share a column.
+func padDisplay(s string, width int) string {
+	w := lip.Width(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
 }
 
 // --- SettingsAppliedMsg / SettingsClosedMsg ---
@@ -213,13 +336,15 @@ const (
 	settingsPickerMaxVisible = 10
 	settingsPickerListWidth  = 22
 	settingsModeWidth        = 10
+	sortColumnWidth          = 22
 )
 
 // settingsWidget is a 4-tab settings panel: General / Filters / Sorting / Theme.
 type settingsWidget struct {
-	styles Styles
-	keys   SettingsKeyMap
-	tab    settingsTab
+	styles        Styles
+	keys          SettingsKeyMap
+	tab           settingsTab
+	width, height int
 
 	// General tab
 	includeReviewerMRs bool
@@ -228,7 +353,9 @@ type settingsWidget struct {
 	filterStatus   filterStatusWidget
 	filterAssignee filterSelectWidget
 	filterReviewer filterSelectWidget
+	filterTicket   filterSelectWidget
 	filterFocused  filterFocus
+	filterLastList filterFocus // column to return to when leaving the Status strip
 
 	// Sorting tab
 	sortCursor  int // 0–4
@@ -248,11 +375,21 @@ type settingsWidget struct {
 	themeMode string
 }
 
+// TicketKeyCount pairs an extracted issue ID with how many MRs in the current
+// set carry it.
+type TicketKeyCount struct {
+	Key   string
+	Count int
+}
+
 // newSettingsWidget constructs a settingsWidget populated from current app state.
-// authors and reviewers are sorted username slices used to populate the Filters tab.
+// authors and reviewers are sorted username slices; tickets and ticketNoneCount
+// are the issue-ID breakdown (see BuildTicketKeys); totalMRs backs the Issue ID
+// list's "All" badge. All three populate the Filters tab.
 func newSettingsWidget(
 	themes []string,
 	authors, reviewers []string,
+	tickets []TicketKeyCount, ticketNoneCount, totalMRs int,
 	userMap map[string]string,
 	filter domain.FilterCriteria,
 	includeReviewerMRs bool,
@@ -271,22 +408,12 @@ func newSettingsWidget(
 			phaseState[i] = filter.Phases[domain.MRPhase(i)]
 		}
 	}
-	authorItems := buildSelectItems(authors, userMap)
-	assigneeChecked := make(map[string]bool, len(filter.Assignees))
-	for _, a := range filter.Assignees {
-		assigneeChecked[a] = true
-	}
-	if len(assigneeChecked) == 0 {
-		assigneeChecked = nil
-	}
-	reviewerItems := buildSelectItems(reviewers, userMap)
-	reviewerChecked := make(map[string]bool, len(filter.Reviewers))
-	for _, r := range filter.Reviewers {
-		reviewerChecked[r] = true
-	}
-	if len(reviewerChecked) == 0 {
-		reviewerChecked = nil
-	}
+	assigneeChecked := checkedSet(filter.Assignees)
+	reviewerChecked := checkedSet(filter.Reviewers)
+	ticketChecked := checkedSet(filter.TicketKeys)
+	authorItems := buildSelectItems(authors, userMap, assigneeChecked)
+	reviewerItems := buildSelectItems(reviewers, userMap, reviewerChecked)
+	ticketItems := buildTicketItems(tickets, ticketNoneCount, totalMRs, ticketChecked)
 
 	// --- Sorting tab init ---
 	var sc int
@@ -325,33 +452,119 @@ func newSettingsWidget(
 		tab:                initialTab,
 		includeReviewerMRs: includeReviewerMRs,
 		filterStatus:       filterStatusWidget{phases: phaseState},
-		filterAssignee:     filterSelectWidget{items: authorItems, checked: assigneeChecked},
-		filterReviewer:     filterSelectWidget{items: reviewerItems, checked: reviewerChecked},
-		filterFocused:      filterFocusStatus,
-		sortCursor:         sc,
-		sortField:          currentSortField,
-		sortDesc:           currentSortDesc,
-		themes:             themes,
-		themeCursor:        themeCursor,
-		themeScrollOff:     themeScrollOff,
-		themeModeCursor:    modeCursor,
-		themeName:          currentThemeName,
-		themeMode:          currentThemeMode,
+		filterAssignee: filterSelectWidget{
+			items: authorItems, checked: assigneeChecked, maxVisible: filterSelectMaxVisible,
+		},
+		filterReviewer: filterSelectWidget{
+			items: reviewerItems, checked: reviewerChecked, maxVisible: filterSelectMaxVisible,
+		},
+		filterTicket: filterSelectWidget{
+			items: ticketItems, checked: ticketChecked, none: filter.TicketNone,
+			maxVisible: filterSelectMaxVisible,
+		},
+		filterFocused:   filterFocusStatus,
+		filterLastList:  filterFocusAssignee,
+		sortCursor:      sc,
+		sortField:       currentSortField,
+		sortDesc:        currentSortDesc,
+		themes:          themes,
+		themeCursor:     themeCursor,
+		themeScrollOff:  themeScrollOff,
+		themeModeCursor: modeCursor,
+		themeName:       currentThemeName,
+		themeMode:       currentThemeMode,
 	}
 }
 
-// buildSelectItems builds the item list for a filterSelectWidget ("All" + sorted entries).
-func buildSelectItems(usernames []string, userMap map[string]string) []filterSelectItem {
+func checkedSet(values []string) map[string]bool {
+	if len(values) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(values))
+	for _, v := range values {
+		set[v] = true
+	}
+	return set
+}
+
+// SetSize records the terminal size and derives how many rows each filter
+// list column shows, so the panel scales with the terminal instead of
+// hard-coding a row count that can overflow a short one.
+func (w *settingsWidget) SetSize(width, height int) {
+	w.width, w.height = width, height
+	mv := height - filterFixedChromeLines
+	switch {
+	case mv < filterSelectMinVisible:
+		mv = filterSelectMinVisible
+	case mv > filterSelectMaxVisibleCap:
+		mv = filterSelectMaxVisibleCap
+	}
+	w.filterAssignee.maxVisible = mv
+	w.filterReviewer.maxVisible = mv
+	w.filterTicket.maxVisible = mv
+}
+
+// buildSelectItems builds the item list for a filterSelectWidget ("All" + sorted
+// entries), appending any value in checked that isn't in usernames — see
+// filterSelectItem.absent.
+func buildSelectItems(usernames []string, userMap map[string]string, checked map[string]bool) []filterSelectItem {
 	items := make([]filterSelectItem, 0, len(usernames)+1)
-	items = append(items, filterSelectItem{value: "", label: "All"})
+	items = append(items, filterSelectItem{kind: filterItemAll, label: "All"})
+	seen := make(map[string]bool, len(usernames))
 	for _, u := range usernames {
+		seen[u] = true
 		label := u
 		if name, ok := userMap[u]; ok && name != "" {
 			label = name + " (@" + u + ")"
 		}
-		items = append(items, filterSelectItem{value: u, label: label})
+		items = append(items, filterSelectItem{kind: filterItemValue, value: u, label: label})
+	}
+	for _, v := range absentCheckedValues(checked, seen) {
+		label := v
+		if name, ok := userMap[v]; ok && name != "" {
+			label = name + " (@" + v + ")"
+		}
+		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: label, absent: true})
 	}
 	return items
+}
+
+// filterPseudoItemCount is the "All" + "No ID" entries every Issue ID list starts with.
+const filterPseudoItemCount = 2
+
+// buildTicketItems builds the Issue ID list: "All", "No ID", then real keys
+// in the order BuildTicketKeys already sorted them, then any checked key no
+// longer present in tickets — see filterSelectItem.absent.
+func buildTicketItems(tickets []TicketKeyCount, noneCount, totalMRs int, checked map[string]bool) []filterSelectItem {
+	items := make([]filterSelectItem, 0, len(tickets)+filterPseudoItemCount)
+	items = append(items, filterSelectItem{kind: filterItemAll, label: "All", count: totalMRs})
+	items = append(items, filterSelectItem{kind: filterItemNone, label: "No ID", count: noneCount})
+	seen := make(map[string]bool, len(tickets))
+	for _, t := range tickets {
+		seen[t.Key] = true
+		items = append(items, filterSelectItem{kind: filterItemValue, value: t.Key, label: t.Key, count: t.Count})
+	}
+	for _, v := range absentCheckedValues(checked, seen) {
+		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: v, absent: true})
+	}
+	return items
+}
+
+// absentCheckedValues returns, sorted, every key of checked not present in
+// seen — a persisted selection whose value no longer exists in the current
+// MR set.
+func absentCheckedValues(checked, seen map[string]bool) []string {
+	if len(checked) == 0 {
+		return nil
+	}
+	missing := make([]string, 0, len(checked))
+	for v := range checked {
+		if !seen[v] {
+			missing = append(missing, v)
+		}
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 // BuildAuthorsReviewers extracts sorted unique assignee and reviewer username slices from the MR list.
@@ -386,6 +599,54 @@ func BuildAuthorsReviewers(mrs []domain.MergeRequest) (assignees, reviewers []st
 	return assignees, reviewers
 }
 
+// BuildTicketKeys extracts the distinct issue IDs found in mrs' titles via
+// matcher, each with how many MRs carry it, plus how many MRs have none.
+// Keys are ordered by prefix ascending, then numeric suffix descending, so
+// the newest ticket in a project sorts first without reshuffling as MRs
+// churn (sorting by count instead would move rows out from under the cursor
+// on every refresh).
+func BuildTicketKeys(
+	mrs []domain.MergeRequest, matcher domain.TicketKeyMatcher,
+) (keys []TicketKeyCount, noneCount int) {
+	counts := make(map[string]int)
+	for _, mr := range mrs {
+		key := matcher.ExtractFromTitle(mr.Title)
+		if key == "" {
+			noneCount++
+			continue
+		}
+		counts[key]++
+	}
+	keys = make([]TicketKeyCount, 0, len(counts))
+	for k, c := range counts {
+		keys = append(keys, TicketKeyCount{Key: k, Count: c})
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		pi, ni := splitTicketKey(keys[i].Key)
+		pj, nj := splitTicketKey(keys[j].Key)
+		if pi != pj {
+			return pi < pj
+		}
+		return ni > nj
+	})
+	return keys, noneCount
+}
+
+// splitTicketKey splits a "PREFIX-NUMBER" issue ID into its prefix and
+// numeric suffix for sorting. A key without that shape sorts by its whole
+// string value, numeric part 0.
+func splitTicketKey(key string) (prefix string, n int) {
+	i := strings.LastIndex(key, "-")
+	if i < 0 {
+		return key, 0
+	}
+	num, err := strconv.Atoi(key[i+1:])
+	if err != nil {
+		return key, 0
+	}
+	return key[:i], num
+}
+
 // Init implements tea.Model.
 func (w settingsWidget) Init() tea.Cmd { return nil }
 
@@ -406,16 +667,16 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	case w.keys.PrevTab.Match(kMsg):
 		w.tab = (w.tab + numSettingsTabs - 1) % numSettingsTabs
 	case w.keys.Up.Match(kMsg):
-		w.moveCursor(-1)
+		w.moveVertical(-1)
 		return w, w.emitApplied()
 	case w.keys.Down.Match(kMsg):
-		w.moveCursor(1)
+		w.moveVertical(1)
 		return w, w.emitApplied()
 	case w.keys.Left.Match(kMsg):
-		w.moveSection(-1)
+		w.moveHorizontal(-1)
 		return w, w.emitApplied()
 	case w.keys.Right.Match(kMsg):
-		w.moveSection(1)
+		w.moveHorizontal(1)
 		return w, w.emitApplied()
 	case w.keys.Toggle.Match(kMsg), w.keys.Confirm.Match(kMsg):
 		w.activate()
@@ -424,12 +685,16 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	return w, nil
 }
 
-func (w *settingsWidget) moveCursor(delta int) {
+// moveVertical handles Up/Down. On every tab but Filters it moves the cursor
+// within the focused sub-section, unchanged from before. On Filters it also
+// crosses between the Status strip and whichever list column was last
+// focused — see moveVerticalFilters.
+func (w *settingsWidget) moveVertical(delta int) {
 	switch w.tab {
 	case tabGeneral:
 		// single item, nothing to move
 	case tabFilters:
-		w.moveCursorFilters(delta)
+		w.moveVerticalFilters(delta)
 	case tabSorting:
 		var lo, hi int
 		if w.sortSection == 0 {
@@ -446,13 +711,14 @@ func (w *settingsWidget) moveCursor(delta int) {
 	}
 }
 
-func (w *settingsWidget) moveSection(delta int) {
+// moveHorizontal handles Left/Right. On Sorting/Theme this moves between the
+// tab's two side-by-side sub-sections, unchanged from before. On Filters, in
+// the Status strip it moves the phase cursor; across the list columns it
+// changes which column has focus — see moveHorizontalFilters.
+func (w *settingsWidget) moveHorizontal(delta int) {
 	switch w.tab {
 	case tabFilters:
-		next := int(w.filterFocused) + delta
-		if next >= 0 && next < int(filterNumSections) {
-			w.filterFocused = filterFocus(next)
-		}
+		w.moveHorizontalFilters(delta)
 	case tabSorting:
 		next := w.sortSection + delta
 		if next >= 0 && next <= 1 {
@@ -471,23 +737,63 @@ func (w *settingsWidget) moveSection(delta int) {
 	}
 }
 
-func (w *settingsWidget) moveCursorFilters(delta int) {
-	switch w.filterFocused {
-	case filterFocusStatus:
+// moveVerticalFilters: within a list column, moves the row cursor; from a
+// column's top row, steps up into the Status strip; from Status, steps back
+// down into filterLastList at its remembered row.
+func (w *settingsWidget) moveVerticalFilters(delta int) {
+	if w.filterFocused == filterFocusStatus {
+		if delta > 0 {
+			w.filterFocused = w.filterLastList
+		}
+		return
+	}
+	list := w.filterList(w.filterFocused)
+	if delta < 0 && list.cursor == 0 {
+		w.filterFocused = filterFocusStatus
+		return
+	}
+	list.moveCursor(delta)
+}
+
+// moveHorizontalFilters: within the Status strip, moves the phase cursor;
+// across the three list columns, changes which column has focus, carrying
+// the row index across and clamping it to the target column's length.
+func (w *settingsWidget) moveHorizontalFilters(delta int) {
+	if w.filterFocused == filterFocusStatus {
 		next := w.filterStatus.cursor + delta
 		if next >= 0 && next < len(w.filterStatus.phases) {
 			w.filterStatus.cursor = next
 		}
-	case filterFocusAssignee:
-		next := w.filterAssignee.cursor + delta
-		if next >= 0 && next < len(w.filterAssignee.items) {
-			w.filterAssignee.moveCursor(delta)
-		}
+		return
+	}
+	next := w.filterFocused + filterFocus(delta)
+	if next < filterFocusAssignee || next >= filterNumSections {
+		return
+	}
+	row := w.filterList(w.filterFocused).cursor
+	w.filterFocused = next
+	w.filterLastList = next
+	target := w.filterList(next)
+	if row >= len(target.items) {
+		row = len(target.items) - 1
+	}
+	if row < 0 {
+		row = 0
+	}
+	target.cursor = row
+	target.adjustScroll()
+}
+
+// filterList returns the list widget for a column focus value. Must not be
+// called with filterFocusStatus.
+func (w *settingsWidget) filterList(f filterFocus) *filterSelectWidget {
+	switch f {
 	case filterFocusReviewer:
-		next := w.filterReviewer.cursor + delta
-		if next >= 0 && next < len(w.filterReviewer.items) {
-			w.filterReviewer.moveCursor(delta)
-		}
+		return &w.filterReviewer
+	case filterFocusTicket:
+		return &w.filterTicket
+	default:
+		return &w.filterAssignee
 	}
 }
 
@@ -521,13 +827,10 @@ func (w *settingsWidget) activate() {
 	case tabGeneral:
 		w.includeReviewerMRs = !w.includeReviewerMRs
 	case tabFilters:
-		switch w.filterFocused {
-		case filterFocusStatus:
+		if w.filterFocused == filterFocusStatus {
 			w.filterStatus.toggle()
-		case filterFocusAssignee:
-			w.filterAssignee.toggle()
-		case filterFocusReviewer:
-			w.filterReviewer.toggle()
+		} else {
+			w.filterList(w.filterFocused).toggle()
 		}
 	case tabSorting:
 		switch w.sortCursor {
@@ -569,9 +872,11 @@ func (w settingsWidget) buildApplied() SettingsAppliedMsg {
 	}
 	return SettingsAppliedMsg{
 		Filter: domain.FilterCriteria{
-			Phases:    phaseMap,
-			Assignees: w.filterAssignee.selectedSlice(),
-			Reviewers: w.filterReviewer.selectedSlice(),
+			Phases:     phaseMap,
+			Assignees:  w.filterAssignee.selectedSlice(),
+			Reviewers:  w.filterReviewer.selectedSlice(),
+			TicketKeys: w.filterTicket.selectedSlice(),
+			TicketNone: w.filterTicket.none,
 		},
 		IncludeReviewerMRs: w.includeReviewerMRs,
 		SortField:          w.sortField.stateKey(),
@@ -597,7 +902,7 @@ func (w settingsWidget) render() string {
 		sb.WriteString(w.renderTheme())
 	}
 	sb.WriteString("\n" + w.styles.PopupHint.Render(
-		"  tab/shift+tab tabs  ↑/k ↓/j within section  ←/h →/l sections  space toggle  ,/esc close",
+		"  tab/shift+tab tabs  ↑↓←→ move  space toggle  ,/esc close",
 	))
 	return w.styles.PopupBorder.Render(sb.String())
 }
@@ -629,22 +934,59 @@ func (w settingsWidget) renderGeneral() string {
 	return sb.String()
 }
 
+// filterNumColumns is the three side-by-side list columns on the Filters tab
+// (Assignee/Reviewer/Issue ID); filterColumnDividerWidth is " │ ".
+const (
+	filterNumColumns         = 3
+	filterColumnDividerWidth = 3
+	// filterColumnChromeLines is a rendered column's non-row lines: the
+	// header and the trailing scroll-indicator/blank line.
+	filterColumnChromeLines = 2
+)
+
+// renderFilters lays out Status as a one-line horizontal strip, then
+// Assignee/Reviewer/Issue ID as three side-by-side columns — the same
+// direction the columns are navigated in, see moveHorizontalFilters.
 func (w settingsWidget) renderFilters() string {
 	var sb strings.Builder
-	sb.WriteString(renderSectionHeader("Status", w.filterFocused == filterFocusStatus, w.styles) + "\n")
-	sb.WriteString(w.filterStatus.render(w.filterFocused == filterFocusStatus, w.styles))
-	sb.WriteString("\n")
-	sb.WriteString(renderSectionHeader("Assignee", w.filterFocused == filterFocusAssignee, w.styles) + "\n")
-	sb.WriteString(w.filterAssignee.render(w.filterFocused == filterFocusAssignee, w.styles))
-	sb.WriteString("\n")
-	sb.WriteString(renderSectionHeader("Reviewer", w.filterFocused == filterFocusReviewer, w.styles) + "\n")
-	sb.WriteString(w.filterReviewer.render(w.filterFocused == filterFocusReviewer, w.styles))
+	sb.WriteString(renderSectionHeader("Status", w.filterFocused == filterFocusStatus, w.styles) + "  " +
+		w.filterStatus.render(w.filterFocused == filterFocusStatus, w.styles) + "\n")
+	ruleWidth := filterNumColumns*filterColumnTotalWidth + (filterNumColumns-1)*filterColumnDividerWidth
+	sb.WriteString(w.styles.PopupDivider.Render(strings.Repeat("─", ruleWidth)) + "\n")
+
+	assigneeCol := w.renderFilterColumn("Assignee", filterFocusAssignee, w.filterAssignee)
+	reviewerCol := w.renderFilterColumn("Reviewer", filterFocusReviewer, w.filterReviewer)
+	ticketCol := w.renderFilterColumn("Issue ID", filterFocusTicket, w.filterTicket)
+
+	rows := filterColumnChromeLines + w.filterAssignee.effectiveMaxVisible()
+	divLines := make([]string, rows)
+	for i := range divLines {
+		divLines[i] = w.styles.PopupDivider.Render(" │ ")
+	}
+	divider := strings.Join(divLines, "\n")
+
+	sb.WriteString(lip.JoinHorizontal(lip.Top, assigneeCol, divider, reviewerCol, divider, ticketCol))
 	return sb.String()
 }
 
+// renderFilterColumn renders one Filters-tab column: a header (with an
+// active-selection-count badge when the dimension is restricting anything)
+// over the list body.
+func (w settingsWidget) renderFilterColumn(title string, focus filterFocus, list filterSelectWidget) string {
+	focused := w.filterFocused == focus
+	headerLabel := title
+	if n := list.activeCount(); n > 0 {
+		headerLabel = fmt.Sprintf("%s (%d)", title, n)
+	}
+	header := padDisplay(renderSectionHeader(headerLabel, focused, w.styles), filterColumnTotalWidth)
+	return header + "\n" + list.render(focused, w.styles)
+}
+
 func (w settingsWidget) renderSorting() string {
-	var sb strings.Builder
-	sb.WriteString(w.styles.PopupSection.Render("  Sort field") + "\n")
+	fieldFocused := w.sortSection == 0
+	dirFocused := w.sortSection == 1
+
+	fieldLines := []string{padDisplay(renderSectionHeader("Sort field", fieldFocused, w.styles), sortColumnWidth)}
 	sortFieldItems := []struct {
 		label string
 		field sortField
@@ -655,11 +997,11 @@ func (w settingsWidget) renderSorting() string {
 	}
 	for i, item := range sortFieldItems {
 		selected := w.sortField == item.field
-		focused := w.sortCursor == i
-		sb.WriteString(renderRadioItem(item.label, selected, focused, w.styles))
+		focused := fieldFocused && w.sortCursor == i
+		fieldLines = append(fieldLines, padDisplay(renderRadioItem(item.label, selected, focused, w.styles), sortColumnWidth))
 	}
-	sb.WriteString("\n")
-	sb.WriteString(w.styles.PopupSection.Render("  Direction") + "\n")
+
+	dirLines := []string{padDisplay(renderSectionHeader("Direction", dirFocused, w.styles), sortColumnWidth)}
 	dirItems := []struct {
 		label string
 		desc  bool
@@ -670,10 +1012,25 @@ func (w settingsWidget) renderSorting() string {
 	}
 	for _, item := range dirItems {
 		selected := w.sortDesc == item.desc
-		focused := w.sortCursor == item.idx
-		sb.WriteString(renderRadioItem(item.label, selected, focused, w.styles))
+		focused := dirFocused && w.sortCursor == item.idx
+		dirLines = append(dirLines, padDisplay(renderRadioItem(item.label, selected, focused, w.styles), sortColumnWidth))
 	}
-	return sb.String()
+
+	rows := max(len(fieldLines), len(dirLines))
+	blank := strings.Repeat(" ", sortColumnWidth)
+	for len(fieldLines) < rows {
+		fieldLines = append(fieldLines, blank)
+	}
+	for len(dirLines) < rows {
+		dirLines = append(dirLines, blank)
+	}
+	divLines := make([]string, rows)
+	for i := range divLines {
+		divLines[i] = w.styles.PopupDivider.Render(" │ ")
+	}
+	divider := strings.Join(divLines, "\n")
+
+	return lip.JoinHorizontal(lip.Top, strings.Join(fieldLines, "\n"), divider, strings.Join(dirLines, "\n"))
 }
 
 func renderRadioItem(label string, selected, focused bool, styles Styles) string {
@@ -683,9 +1040,9 @@ func renderRadioItem(label string, selected, focused bool, styles Styles) string
 	}
 	raw := fmt.Sprintf("  %s %s", radio, label)
 	if focused {
-		return styles.PopupItemFocused.Render(raw) + "\n"
+		return styles.PopupItemFocused.Render(raw)
 	}
-	return styles.PopupItem.Render(raw) + "\n"
+	return styles.PopupItem.Render(raw)
 }
 
 func (w settingsWidget) renderTheme() string {

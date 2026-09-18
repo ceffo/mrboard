@@ -1082,9 +1082,11 @@ func (m *Model) openSettings(initialTab settingsTab) {
 		themes = []string{m.themeName}
 	}
 	authors, reviewers := BuildAuthorsReviewers(m.allMRs)
+	tickets, ticketNoneCount := BuildTicketKeys(m.allMRs, m.keyMatcher)
 	m.settings = newSettingsWidget(
 		themes,
 		authors, reviewers,
+		tickets, ticketNoneCount, len(m.allMRs),
 		m.userMap,
 		m.filter,
 		m.includeReviewerMRs,
@@ -1095,6 +1097,7 @@ func (m *Model) openSettings(initialTab settingsTab) {
 		m.settingsKeys,
 		initialTab,
 	)
+	m.settings.SetSize(m.width, m.height)
 	m.overlay.openOverlay(overlayKindSettings)
 }
 
@@ -1146,6 +1149,9 @@ func (m *Model) resizeBoard() {
 	}
 	if m.overlay.isDiffView() {
 		m.diffView.SetSize(m.width, m.height-chromeHeight)
+	}
+	if m.overlay.isSettings() {
+		m.settings.SetSize(m.width, m.height)
 	}
 }
 
@@ -1886,6 +1892,8 @@ func (m *Model) applyMRFilter() {
 		Phases:       m.filter.Phases,
 		Assignees:    m.filter.Assignees,
 		Reviewers:    m.filter.Reviewers,
+		TicketKeys:   m.filter.TicketKeys,
+		TicketNone:   m.filter.TicketNone,
 		SprintFilter: m.sprintFilterActive,
 		SprintKeys:   m.sprintIssueKeys,
 		KeyMatcher:   m.keyMatcher,
@@ -1924,7 +1932,7 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 
 func (m *Model) isFilterActive() bool {
 	return len(m.filter.Phases) > 0 || len(m.filter.Assignees) > 0 || len(m.filter.Reviewers) > 0 ||
-		m.sprintFilterActive
+		len(m.filter.TicketKeys) > 0 || m.filter.TicketNone || m.sprintFilterActive
 }
 
 func (m *Model) saveState() {

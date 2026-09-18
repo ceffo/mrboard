@@ -178,8 +178,8 @@ type SettingsKeyMap struct {
 var DefaultSettingsKeyMap = SettingsKeyMap{
 	Up:      Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
 	Down:    Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
-	Left:    Act("←/h", "prev section", PriorityCore, CategoryNavigate, "left", "h"),
-	Right:   Act("→/l", "next section", PriorityCore, CategoryNavigate, "right", "l"),
+	Left:    Act("←/h", "left", PriorityCore, CategoryNavigate, "left", "h"),
+	Right:   Act("→/l", "right", PriorityCore, CategoryNavigate, "right", "l"),
 	PrevTab: Act("shift+tab", "prev tab", PriorityModal, CategoryView),
 	NextTab: Act("tab", "next tab", PriorityCore, CategoryView),
 	Toggle:  Act("space", "toggle", PriorityCore, CategoryAct),
@@ -189,8 +189,9 @@ var DefaultSettingsKeyMap = SettingsKeyMap{
 
 // SettingsCtx is the settings-panel context.
 var SettingsCtx = NewContext("settings", "Settings", &DefaultSettingsKeyMap,
-	WithFooterGroup("↑↓", "move", &DefaultSettingsKeyMap.Up, &DefaultSettingsKeyMap.Down),
-	WithFooterGroup("←→", "section", &DefaultSettingsKeyMap.Left, &DefaultSettingsKeyMap.Right),
+	WithFooterGroup("↑↓←→", "move",
+		&DefaultSettingsKeyMap.Up, &DefaultSettingsKeyMap.Down,
+		&DefaultSettingsKeyMap.Left, &DefaultSettingsKeyMap.Right),
 )
 
 // ReviewerEditorKeyMap holds keybindings for the reviewer editor overlay

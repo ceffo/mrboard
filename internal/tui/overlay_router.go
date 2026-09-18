@@ -26,3 +26,4 @@ func (r *overlayRouter) openOverlay(k overlayKind) { r.kind = k }
 func (r *overlayRouter) closeOverlay()             { r.kind = overlayKindNone }
 func (r overlayRouter) active() overlayKind        { return r.kind }
 func (r overlayRouter) isDiffView() bool           { return r.kind == overlayKindDiffView }
+func (r overlayRouter) isSettings() bool           { return r.kind == overlayKindSettings }
