@@ -24,6 +24,8 @@ const (
 	markerUnchecked = "[ ]"
 	markerFixed     = "[•]" // always-applied row with no toggle, e.g. the focused MR in the batch preview
 
+	filterLabelAll = "All"
+
 	filterSelectMaxVisible    = 8 // fallback used before SetSize sizes the panel to the terminal
 	filterSelectMaxVisibleCap = 14
 	// settingsMinVisible is the floor SetSize clamps any tab's visible-row
@@ -120,10 +122,13 @@ const (
 // checked in persisted state but no longer present in the current MR set
 // (e.g. a ticket ID from a closed sprint) — without this, such a selection
 // filters invisibly: still applied, but with no row to show or uncheck it.
+// short is the compact-mode label (filterSelectWidget.compact); for
+// Assignee/Reviewer it's the bare "@username", for Issue ID it equals label.
 type filterSelectItem struct {
 	kind   filterItemKind
 	value  string // "" for kind != filterItemValue
 	label  string
+	short  string
 	count  int
 	absent bool
 }
@@ -136,8 +141,9 @@ type filterSelectWidget struct {
 	none       bool            // "No ID" checked — meaningful for the Issue ID list only
 	cursor     int
 	scrollOff  int
-	maxVisible int // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
-	colWidth   int // 0 falls back to filterColumnMinContentWidth; set by settingsWidget.SetSize
+	maxVisible int  // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
+	colWidth   int  // 0 falls back to filterColumnMinContentWidth; set by settingsWidget.SetSize
+	compact    bool // show filterSelectItem.short instead of .label; set by settingsWidget
 }
 
 func (s *filterSelectWidget) moveCursor(delta int) {
@@ -146,6 +152,14 @@ func (s *filterSelectWidget) moveCursor(delta int) {
 		s.cursor = next
 		s.adjustScroll()
 	}
+}
+
+// displayLabel is the label to render for item, honoring compact mode.
+func (s filterSelectWidget) displayLabel(item filterSelectItem) string {
+	if s.compact {
+		return item.short
+	}
+	return item.label
 }
 
 func (s filterSelectWidget) effectiveColWidth() int {
@@ -245,7 +259,7 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 		} else {
 			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
 		}
-		content := renderFilterRowContent(item.label, item.count, item.absent, cw)
+		content := renderFilterRowContent(s.displayLabel(item), item.short, item.count, item.absent, cw)
 		var contentStyled string
 		switch {
 		case item.absent:
@@ -272,10 +286,10 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 }
 
 // renderFilterRowContent lays out a label with its optional right-aligned
-// count badge inside width columns, truncating the label if it doesn't fit.
-// showZero forces the "(0)" badge for an absent-but-checked item even though
-// count itself is 0.
-func renderFilterRowContent(label string, count int, showZero bool, width int) string {
+// count badge inside width columns, truncating the label if it doesn't fit
+// (see fitLabel). showZero forces the "(0)" badge for an absent-but-checked
+// item even though count itself is 0.
+func renderFilterRowContent(label, short string, count int, showZero bool, width int) string {
 	countStr := ""
 	if count > 0 || showZero {
 		countStr = fmt.Sprintf("(%d)", count)
@@ -287,7 +301,7 @@ func renderFilterRowContent(label string, count int, showZero bool, width int) s
 	if avail < 1 {
 		avail = 1
 	}
-	label = truncateWidth(label, avail)
+	label = fitLabel(label, short, avail)
 	pad := avail - lip.Width(label)
 	if pad < 0 {
 		pad = 0
@@ -297,6 +311,24 @@ func renderFilterRowContent(label string, count int, showZero bool, width int) s
 		content += " " + countStr
 	}
 	return content
+}
+
+// fitLabel truncates label to fit within avail columns. When label has the
+// "Name (@user)" shape — short is the "@user" part — it elides the name
+// first and keeps "(@user)" whole, since that's the only token in the row
+// that unambiguously identifies who it is; truncateWidth's blind
+// left-to-right cut is only used as a fallback once even the "(@user)"
+// suffix alone doesn't fit.
+func fitLabel(label, short string, avail int) string {
+	if lip.Width(label) <= avail {
+		return label
+	}
+	suffix := " (" + short + ")"
+	if short != "" && strings.HasSuffix(label, suffix) && lip.Width(suffix) < avail {
+		name := strings.TrimSuffix(label, suffix)
+		return truncateWidth(name, avail-lip.Width(suffix)) + suffix
+	}
+	return truncateWidth(label, avail)
 }
 
 func renderSectionHeader(title string, focused bool, styles Styles) string {
@@ -364,7 +396,7 @@ const (
 	settingsFrameChromeHeight = 6 // border (2) + tab bar (1) + blank (1) + blank (1) + hint (1)
 	// settingsHintText is the footer hint shown under every tab; hoisted to a
 	// const so canvasSize can measure it alongside each tab's body.
-	settingsHintText = "  tab/shift+tab tabs  ↑↓←→ move  space toggle  ,/esc close"
+	settingsHintText = "  tab/shift+tab tabs  ↑↓←→ move  space toggle  n names/@ids  ,/esc close"
 )
 
 // settingsWidget is a 4-tab settings panel: General / Filters / Sorting / Theme.
@@ -385,6 +417,7 @@ type settingsWidget struct {
 	filterFocused  filterFocus
 	filterLastList filterFocus // column to return to when leaving the Status strip
 	filterColWidth int         // 0 falls back to filterColumnMinContentWidth; set by SetSize
+	filterCompact  bool        // show @username instead of "Full Name (@username)"
 
 	// Sorting tab
 	sortCursor  int // 0–4
@@ -557,24 +590,28 @@ func clampVisible(n, lo, hi int) int {
 // filterSelectItem.absent.
 func buildSelectItems(usernames []string, userMap map[string]string, checked map[string]bool) []filterSelectItem {
 	items := make([]filterSelectItem, 0, len(usernames)+1)
-	items = append(items, filterSelectItem{kind: filterItemAll, label: "All"})
+	items = append(items, filterSelectItem{kind: filterItemAll, label: filterLabelAll, short: filterLabelAll})
 	seen := make(map[string]bool, len(usernames))
 	for _, u := range usernames {
 		seen[u] = true
-		label := u
-		if name, ok := userMap[u]; ok && name != "" {
-			label = name + " (@" + u + ")"
-		}
-		items = append(items, filterSelectItem{kind: filterItemValue, value: u, label: label})
+		items = append(items, userSelectItem(u, userMap, false))
 	}
 	for _, v := range absentCheckedValues(checked, seen) {
-		label := v
-		if name, ok := userMap[v]; ok && name != "" {
-			label = name + " (@" + v + ")"
-		}
-		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: label, absent: true})
+		items = append(items, userSelectItem(v, userMap, true))
 	}
 	return items
+}
+
+// userSelectItem builds one Assignee/Reviewer row. label is "Full Name
+// (@username)" when a display name is known, else the bare username; short
+// is always the bare "@username", used in compact mode and to keep the
+// handle whole when label overflows its column (see fitLabel).
+func userSelectItem(username string, userMap map[string]string, absent bool) filterSelectItem {
+	label := username
+	if name, ok := userMap[username]; ok && name != "" {
+		label = name + " (@" + username + ")"
+	}
+	return filterSelectItem{kind: filterItemValue, value: username, label: label, short: "@" + username, absent: absent}
 }
 
 // filterPseudoItemCount is the "All" + "No ID" entries every Issue ID list starts with.
@@ -585,15 +622,17 @@ const filterPseudoItemCount = 2
 // longer present in tickets — see filterSelectItem.absent.
 func buildTicketItems(tickets []TicketKeyCount, noneCount, totalMRs int, checked map[string]bool) []filterSelectItem {
 	items := make([]filterSelectItem, 0, len(tickets)+filterPseudoItemCount)
-	items = append(items, filterSelectItem{kind: filterItemAll, label: "All", count: totalMRs})
-	items = append(items, filterSelectItem{kind: filterItemNone, label: "No ID", count: noneCount})
+	items = append(items,
+		filterSelectItem{kind: filterItemAll, label: filterLabelAll, short: filterLabelAll, count: totalMRs})
+	items = append(items, filterSelectItem{kind: filterItemNone, label: "No ID", short: "No ID", count: noneCount})
 	seen := make(map[string]bool, len(tickets))
 	for _, t := range tickets {
 		seen[t.Key] = true
-		items = append(items, filterSelectItem{kind: filterItemValue, value: t.Key, label: t.Key, count: t.Count})
+		items = append(items,
+			filterSelectItem{kind: filterItemValue, value: t.Key, label: t.Key, short: t.Key, count: t.Count})
 	}
 	for _, v := range absentCheckedValues(checked, seen) {
-		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: v, absent: true})
+		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: v, short: v, absent: true})
 	}
 	return items
 }
@@ -729,8 +768,20 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	case w.keys.Toggle.Match(kMsg), w.keys.Confirm.Match(kMsg):
 		w.activate()
 		return w, w.emitApplied()
+	case w.tab == tabFilters && w.keys.Compact.Match(kMsg):
+		w.toggleCompact()
 	}
 	return w, nil
+}
+
+// toggleCompact flips whether the Assignee/Reviewer columns show
+// "Full Name (@username)" or the bare "@username" — a display preference,
+// not part of the filter criteria, so it doesn't emit SettingsAppliedMsg.
+func (w *settingsWidget) toggleCompact() {
+	w.filterCompact = !w.filterCompact
+	w.filterAssignee.compact = w.filterCompact
+	w.filterReviewer.compact = w.filterCompact
+	w.filterTicket.compact = w.filterCompact
 }
 
 // moveVertical handles Up/Down. On every tab but Filters it moves the cursor
@@ -971,7 +1022,15 @@ func (w settingsWidget) render() string {
 
 // canvasSize is the fixed content width/height every tab body is placed
 // into — the max natural size across all four tabs' bodies (plus the tab
-// bar and hint line, which share the same border), capped to the terminal.
+// bar and hint line, which share the same border). It is not capped to the
+// terminal: lip.Place pads content narrower than the target size but never
+// crops content wider than it, so a cap here couldn't actually shrink the
+// widest tab (typically Filters, whose column width already has its own
+// floor from SetSize) — it would only make the other tabs inconsistent
+// with it again, reintroducing the very jump this method exists to remove.
+// Each tab already keeps itself within the terminal via SetSize (Filters'
+// and Theme's row counts, and Filters' column width, are all height/width
+// budget of the terminal), so this rarely needs to exceed it in practice.
 func (w settingsWidget) canvasSize() (width, height int) {
 	for _, body := range []string{w.renderGeneral(), w.renderFilters(), w.renderSorting(), w.renderTheme()} {
 		if bw := lip.Width(body); bw > width {
@@ -985,12 +1044,6 @@ func (w settingsWidget) canvasSize() (width, height int) {
 		if lw := lip.Width(line); lw > width {
 			width = lw
 		}
-	}
-	if maxW := w.width - settingsFrameChromeWidth; maxW > 0 && width > maxW {
-		width = maxW
-	}
-	if maxH := w.height - settingsFrameChromeHeight; maxH > 0 && height > maxH {
-		height = maxH
 	}
 	return width, height
 }

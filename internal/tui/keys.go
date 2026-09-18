@@ -172,6 +172,7 @@ type SettingsKeyMap struct {
 	Toggle  Action
 	Confirm Action
 	Close   Action
+	Compact Action // Filters tab only: full name vs. bare @username
 }
 
 // DefaultSettingsKeyMap is the default keybinding set for the settings panel.
@@ -185,6 +186,7 @@ var DefaultSettingsKeyMap = SettingsKeyMap{
 	Toggle:  Act("space", "toggle", PriorityCore, CategoryAct),
 	Confirm: Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
 	Close:   Act(",/esc", "close", PriorityCore, CategoryGeneral, ",", "esc"),
+	Compact: Act("n", "names/@ids", PriorityModal, CategoryView),
 }
 
 // SettingsCtx is the settings-panel context.
