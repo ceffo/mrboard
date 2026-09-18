@@ -71,7 +71,7 @@ func TestSettingsWidget_FrameSizeConsistentAcrossTabs(t *testing.T) {
 }
 
 // TestSettingsWidget_ToggleCompact_AssigneeColumn verifies the n keybinding
-// swaps "Full Name (@username)" for the bare "@username" in the Assignee
+// swaps the full display name for the bare "@username" in the Assignee
 // column, and only there — Toggle is filters-tab-scoped.
 func TestSettingsWidget_ToggleCompact_AssigneeColumn(t *testing.T) {
 	w := newTestSettingsWidget()

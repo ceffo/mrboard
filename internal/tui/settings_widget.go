@@ -38,8 +38,9 @@ const (
 	// filterColumnMinContentWidth/filterColumnMaxContentWidth bound the
 	// label+count width inside a filter list column; SetSize derives the
 	// actual width from the terminal width between these two.
-	// filterColumnMaxContentWidth covers "Jean-Philippe Dubois (@jpdubois)"
-	// (32 chars) — past it, extra width is just padding, not legibility.
+	// filterColumnMaxContentWidth comfortably covers a long full name (e.g.
+	// "Jean-Philippe Dubois" is 21 chars) — past it, extra width is just
+	// padding, not legibility.
 	filterColumnMinContentWidth = 22
 	filterColumnMaxContentWidth = 34
 	// filterMarkerPrefixWidth is "  " + "[x]" + " " preceding a list row's content.
@@ -259,7 +260,7 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 		} else {
 			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
 		}
-		content := renderFilterRowContent(s.displayLabel(item), item.short, item.count, item.absent, cw)
+		content := renderFilterRowContent(s.displayLabel(item), item.count, item.absent, cw)
 		var contentStyled string
 		switch {
 		case item.absent:
@@ -289,7 +290,7 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 // count badge inside width columns, truncating the label if it doesn't fit
 // (see fitLabel). showZero forces the "(0)" badge for an absent-but-checked
 // item even though count itself is 0.
-func renderFilterRowContent(label, short string, count int, showZero bool, width int) string {
+func renderFilterRowContent(label string, count int, showZero bool, width int) string {
 	countStr := ""
 	if count > 0 || showZero {
 		countStr = fmt.Sprintf("(%d)", count)
@@ -301,7 +302,7 @@ func renderFilterRowContent(label, short string, count int, showZero bool, width
 	if avail < 1 {
 		avail = 1
 	}
-	label = fitLabel(label, short, avail)
+	label = truncateWidth(label, avail)
 	pad := avail - lip.Width(label)
 	if pad < 0 {
 		pad = 0
@@ -311,24 +312,6 @@ func renderFilterRowContent(label, short string, count int, showZero bool, width
 		content += " " + countStr
 	}
 	return content
-}
-
-// fitLabel truncates label to fit within avail columns. When label has the
-// "Name (@user)" shape — short is the "@user" part — it elides the name
-// first and keeps "(@user)" whole, since that's the only token in the row
-// that unambiguously identifies who it is; truncateWidth's blind
-// left-to-right cut is only used as a fallback once even the "(@user)"
-// suffix alone doesn't fit.
-func fitLabel(label, short string, avail int) string {
-	if lip.Width(label) <= avail {
-		return label
-	}
-	suffix := " (" + short + ")"
-	if short != "" && strings.HasSuffix(label, suffix) && lip.Width(suffix) < avail {
-		name := strings.TrimSuffix(label, suffix)
-		return truncateWidth(name, avail-lip.Width(suffix)) + suffix
-	}
-	return truncateWidth(label, avail)
 }
 
 func renderSectionHeader(title string, focused bool, styles Styles) string {
@@ -602,14 +585,17 @@ func buildSelectItems(usernames []string, userMap map[string]string, checked map
 	return items
 }
 
-// userSelectItem builds one Assignee/Reviewer row. label is "Full Name
-// (@username)" when a display name is known, else the bare username; short
-// is always the bare "@username", used in compact mode and to keep the
-// handle whole when label overflows its column (see fitLabel).
+// userSelectItem builds one Assignee/Reviewer row. label is the display
+// name alone when one is known, else the bare username; short is always
+// the bare "@username". The n toggle (filterSelectWidget.compact) switches
+// between the two — kept as two single-purpose strings, rather than one
+// "Full Name (@username)" label, so each mode is a name a reader actually
+// knows end to end instead of a compound string a narrow column truncates
+// into something unrecognizable either way.
 func userSelectItem(username string, userMap map[string]string, absent bool) filterSelectItem {
 	label := username
 	if name, ok := userMap[username]; ok && name != "" {
-		label = name + " (@" + username + ")"
+		label = name
 	}
 	return filterSelectItem{kind: filterItemValue, value: username, label: label, short: "@" + username, absent: absent}
 }
