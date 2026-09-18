@@ -20,6 +20,7 @@ const (
 	sortAssignee = "assignee"
 	sortAge      = "age"
 	sortRepoID   = "repo_iid"
+	ticketOD100  = "OD-100"
 )
 
 func mr(
@@ -327,7 +328,7 @@ func TestFilterAndSort_TicketKeys_SingleMatch(t *testing.T) {
 		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
 		mrTitled(2, "feat(OD-200): b", "repo/b", 2),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketKeys: []string{"OD-100"}, KeyMatcher: matcher})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketKeys: []string{ticketOD100}, KeyMatcher: matcher})
 	require.Len(t, got, 1)
 	assert.Equal(t, 1, got[0].IID)
 }
@@ -361,7 +362,7 @@ func TestFilterAndSort_TicketKeys_NoneAndKeysCombineWithOr(t *testing.T) {
 		mrTitled(3, "chore: cleanup", "repo/c", 3),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{
-		TicketKeys: []string{"OD-100"}, TicketNone: true, KeyMatcher: matcher,
+		TicketKeys: []string{ticketOD100}, TicketNone: true, KeyMatcher: matcher,
 	})
 	assert.ElementsMatch(t, []int{1, 3}, ids(got))
 }
@@ -375,7 +376,7 @@ func TestFilterAndSort_SprintFilter_IncludesOnlySprintMRs(t *testing.T) {
 		{ID: 3, IID: 3, Title: "fix: no jira id"},
 		{ID: 4, IID: 4, Title: "feat(OD-999): not in sprint"},
 	}
-	sprintKeys := map[string]bool{"OD-100": true, "OD-200": true}
+	sprintKeys := map[string]bool{ticketOD100: true, "OD-200": true}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SprintFilter: true, SprintKeys: sprintKeys})
 	assert.Len(t, got, 2)
 }
@@ -403,7 +404,7 @@ func TestFilterAndSort_SprintFilter_OffShowsAll(t *testing.T) {
 		{ID: 1, IID: 1, Title: "feat(OD-100): in sprint"},
 		{ID: 2, IID: 2, Title: "feat(OD-999): not in sprint"},
 	}
-	sprintKeys := map[string]bool{"OD-100": true}
+	sprintKeys := map[string]bool{ticketOD100: true}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SprintFilter: false, SprintKeys: sprintKeys})
 	assert.Len(t, got, 2, "SprintFilter is off")
 }
