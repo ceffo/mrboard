@@ -985,7 +985,10 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.fetchDetailCmd(mr)
 		})
 	case m.keys.Settings.Match(msg):
-		m.openSettings()
+		m.openSettings(tabGeneral)
+		return m, nil
+	case m.keys.Filter.Match(msg):
+		m.openSettings(tabFilters)
 		return m, nil
 	case m.keys.Reviewers.Match(msg):
 		return m.requireFocusedMR("reviewers", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
@@ -1072,7 +1075,7 @@ func (m Model) renderDiffScreen() string {
 	return headerStr + "\n" + body + "\n" + footerStr
 }
 
-func (m *Model) openSettings() {
+func (m *Model) openSettings(initialTab settingsTab) {
 	themes, err := AllThemeNames()
 	if err != nil {
 		m.logger.Error("theme: list theme names", "err", err)
@@ -1090,6 +1093,7 @@ func (m *Model) openSettings() {
 		m.themeName, m.themeMode,
 		m.styles,
 		m.settingsKeys,
+		initialTab,
 	)
 	m.overlay.openOverlay(overlayKindSettings)
 }

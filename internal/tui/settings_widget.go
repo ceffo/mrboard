@@ -261,6 +261,7 @@ func newSettingsWidget(
 	currentThemeName, currentThemeMode string,
 	styles Styles,
 	keys SettingsKeyMap,
+	initialTab settingsTab,
 ) settingsWidget {
 	// --- Filters tab init ---
 	phaseState := [4]bool{true, true, true, true}
@@ -321,7 +322,7 @@ func newSettingsWidget(
 	return settingsWidget{
 		styles:             styles,
 		keys:               keys,
-		tab:                tabGeneral,
+		tab:                initialTab,
 		includeReviewerMRs: includeReviewerMRs,
 		filterStatus:       filterStatusWidget{phases: phaseState},
 		filterAssignee:     filterSelectWidget{items: authorItems, checked: assigneeChecked},
