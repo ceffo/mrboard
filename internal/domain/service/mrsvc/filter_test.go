@@ -274,6 +274,16 @@ func TestFilterAndSort_Assignees_EmptyShowsAll(t *testing.T) {
 	assert.Len(t, got, 2)
 }
 
+func TestFilterAndSort_Assignees_ExcludesUncheckedCurrentUser(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0),
+		mr(2, userBob, "repo/b", 2, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userBob}, CurrentUser: userAlice})
+	require.Len(t, got, 1)
+	assert.Equal(t, userBob, got[0].Assignee)
+}
+
 // FilterAndSort — multi-select Reviewers
 
 func TestFilterAndSort_Reviewers_SingleMatch(t *testing.T) {
