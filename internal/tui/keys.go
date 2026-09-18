@@ -69,6 +69,7 @@ type BoardKeyMap struct {
 	Notify     Action
 	OpenTicket Action
 	Settings   Action
+	Filter     Action
 	Update     Action
 	Undraft    Action
 }
@@ -90,6 +91,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
 	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
 	Settings:   Act(",", "settings", PriorityModal, CategoryGeneral),
+	Filter:     Act("f", "filter", PriorityModal, CategoryView),
 	Update:     Act("u", "update", PriorityModal, CategoryAct),
 	Undraft:    Act("U", "undraft", PriorityModal, CategoryAct),
 }

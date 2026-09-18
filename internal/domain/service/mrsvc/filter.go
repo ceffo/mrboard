@@ -59,10 +59,6 @@ func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merge
 		for _, a := range opts.Assignees {
 			assigneeSet[a] = true
 		}
-		// Current user's MRs always pass the assignee filter regardless of selection.
-		if opts.CurrentUser != "" {
-			assigneeSet[opts.CurrentUser] = true
-		}
 		filtered := make([]domain.MergeRequest, 0, len(mrs))
 		for _, mr := range mrs {
 			effective := mr.Assignee
