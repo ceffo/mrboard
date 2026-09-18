@@ -32,9 +32,9 @@ const (
 	// count to, however short the terminal.
 	settingsMinVisible = 3
 	// filterFixedChromeLines is every Filters-tab line but the list rows
-	// themselves: border+tabbar+blank+status+rule+header+indicator+blank+hint.
-	// See SetSize.
-	filterFixedChromeLines = 10
+	// themselves: border+tabbar+blank+status+view+rule+header+indicator+
+	// blank+hint. See SetSize.
+	filterFixedChromeLines = 11
 	// filterColumnMinContentWidth/filterColumnMaxContentWidth bound the
 	// label+count width inside a filter list column; SetSize derives the
 	// actual width from the terminal width between these two.
@@ -66,6 +66,7 @@ type filterFocus int
 
 const (
 	filterFocusStatus filterFocus = iota
+	filterFocusView
 	filterFocusAssignee
 	filterFocusReviewer
 	filterFocusTicket
@@ -101,6 +102,75 @@ func (s filterStatusWidget) render(focused bool, styles Styles) string {
 			labelStyled = styles.PopupItemFocused.Render(lbl)
 		} else {
 			labelStyled = styles.PopupItem.Render(lbl)
+		}
+		parts[i] = markerStyled + " " + labelStyled
+	}
+	return strings.Join(parts, "   ")
+}
+
+// filterViewItem is one checkbox in filterViewWidget's strip.
+type filterViewItem struct {
+	label   string
+	checked bool
+}
+
+// filterViewWidget manages the "My MRs only" / "Current sprint" checkboxes
+// — a strip surfacing the same view-scoping state the tab and S keybindings
+// already control (Model.viewMode, Model.sprintFilterActive), so it's
+// visible and toggleable from the Filters tab too instead of being
+// invisible outside a header badge. Each checkbox is omitted entirely when
+// its underlying mechanism isn't available (no current user configured, no
+// JIRA board configured), matching how those keybindings are themselves
+// disabled in that case.
+type filterViewWidget struct {
+	myMRsOnly   bool
+	myMRsAvail  bool
+	sprint      bool
+	sprintAvail bool
+	cursor      int
+}
+
+// items returns the currently available checkboxes, in display order.
+func (v filterViewWidget) items() []filterViewItem {
+	items := make([]filterViewItem, 0, 2) //nolint:mnd
+	if v.myMRsAvail {
+		items = append(items, filterViewItem{label: "My MRs only", checked: v.myMRsOnly})
+	}
+	if v.sprintAvail {
+		items = append(items, filterViewItem{label: "Current sprint", checked: v.sprint})
+	}
+	return items
+}
+
+func (v *filterViewWidget) toggle() {
+	items := v.items()
+	if v.cursor >= len(items) {
+		return
+	}
+	switch items[v.cursor].label {
+	case "My MRs only":
+		v.myMRsOnly = !v.myMRsOnly
+	case "Current sprint":
+		v.sprint = !v.sprint
+	}
+}
+
+func (v filterViewWidget) render(focused bool, styles Styles) string {
+	items := v.items()
+	parts := make([]string, len(items))
+	for i, it := range items {
+		marker := markerUnchecked
+		markerStyle := styles.PopupItemMarkerOff
+		if it.checked {
+			marker = markerChecked
+			markerStyle = styles.PopupItemMarkerOn
+		}
+		markerStyled := markerStyle.Render(marker)
+		var labelStyled string
+		if focused && i == v.cursor {
+			labelStyled = styles.PopupItemFocused.Render(it.label)
+		} else {
+			labelStyled = styles.PopupItem.Render(it.label)
 		}
 		parts[i] = markerStyled + " " + labelStyled
 	}
@@ -336,6 +406,8 @@ func padDisplay(s string, width int) string {
 // SettingsAppliedMsg is emitted on every live change in the settings panel.
 type SettingsAppliedMsg struct {
 	Filter             domain.FilterCriteria
+	ViewMine           bool // "My MRs only" — mirrors Model.viewMode == domain.ViewMine
+	SprintFilter       bool // "Current sprint" — mirrors Model.sprintFilterActive
 	IncludeReviewerMRs bool
 	SortField          string // "repo_iid" | "author" | "age"
 	SortDesc           bool
@@ -394,6 +466,7 @@ type settingsWidget struct {
 
 	// Filters tab
 	filterStatus   filterStatusWidget
+	filterView     filterViewWidget
 	filterAssignee filterSelectWidget
 	filterReviewer filterSelectWidget
 	filterTicket   filterSelectWidget
@@ -431,13 +504,16 @@ type TicketKeyCount struct {
 // newSettingsWidget constructs a settingsWidget populated from current app state.
 // authors and reviewers are sorted username slices; tickets and ticketNoneCount
 // are the issue-ID breakdown (see BuildTicketKeys); totalMRs backs the Issue ID
-// list's "All" badge. All three populate the Filters tab.
+// list's "All" badge. All three populate the Filters tab. viewState carries
+// the current on/off state of the "My MRs only" / "Current sprint" toggles
+// and which of them apply to this deployment — see filterViewWidget.
 func newSettingsWidget(
 	themes []string,
 	authors, reviewers []string,
 	tickets []TicketKeyCount, ticketNoneCount, totalMRs int,
 	userMap map[string]string,
 	filter domain.FilterCriteria,
+	viewState filterViewWidget,
 	includeReviewerMRs bool,
 	currentSortField sortField,
 	currentSortDesc bool,
@@ -498,6 +574,7 @@ func newSettingsWidget(
 		tab:                initialTab,
 		includeReviewerMRs: includeReviewerMRs,
 		filterStatus:       filterStatusWidget{phases: phaseState},
+		filterView:         viewState,
 		filterAssignee: filterSelectWidget{
 			items: authorItems, checked: assigneeChecked, maxVisible: filterSelectMaxVisible,
 		},
@@ -826,28 +903,61 @@ func (w *settingsWidget) moveHorizontal(delta int) {
 // column's top row, steps up into the Status strip; from Status, steps back
 // down into filterLastList at its remembered row.
 func (w *settingsWidget) moveVerticalFilters(delta int) {
-	if w.filterFocused == filterFocusStatus {
+	switch w.filterFocused {
+	case filterFocusStatus:
 		if delta > 0 {
+			w.filterFocused = w.nextFocusDown()
+		}
+		return
+	case filterFocusView:
+		if delta < 0 {
+			w.filterFocused = filterFocusStatus
+		} else {
 			w.filterFocused = w.filterLastList
 		}
 		return
 	}
 	list := w.filterList(w.filterFocused)
 	if delta < 0 && list.cursor == 0 {
-		w.filterFocused = filterFocusStatus
+		w.filterFocused = w.nextFocusUp()
 		return
 	}
 	list.moveCursor(delta)
 }
 
-// moveHorizontalFilters: within the Status strip, moves the phase cursor;
-// across the three list columns, changes which column has focus, carrying
-// the row index across and clamping it to the target column's length.
+// nextFocusDown/nextFocusUp cross the View strip when it has a checkbox to
+// land on, or skip straight past it (to the last list column / Status)
+// when both its toggles are unavailable for this deployment.
+func (w *settingsWidget) nextFocusDown() filterFocus {
+	if len(w.filterView.items()) > 0 {
+		return filterFocusView
+	}
+	return w.filterLastList
+}
+
+func (w *settingsWidget) nextFocusUp() filterFocus {
+	if len(w.filterView.items()) > 0 {
+		return filterFocusView
+	}
+	return filterFocusStatus
+}
+
+// moveHorizontalFilters: within the Status or View strip, moves that
+// strip's own cursor; across the three list columns, changes which column
+// has focus, carrying the row index across and clamping it to the target
+// column's length.
 func (w *settingsWidget) moveHorizontalFilters(delta int) {
-	if w.filterFocused == filterFocusStatus {
+	switch w.filterFocused {
+	case filterFocusStatus:
 		next := w.filterStatus.cursor + delta
 		if next >= 0 && next < len(w.filterStatus.phases) {
 			w.filterStatus.cursor = next
+		}
+		return
+	case filterFocusView:
+		next := w.filterView.cursor + delta
+		if next >= 0 && next < len(w.filterView.items()) {
+			w.filterView.cursor = next
 		}
 		return
 	}
@@ -870,7 +980,7 @@ func (w *settingsWidget) moveHorizontalFilters(delta int) {
 }
 
 // filterList returns the list widget for a column focus value. Must not be
-// called with filterFocusStatus.
+// called with filterFocusStatus or filterFocusView.
 func (w *settingsWidget) filterList(f filterFocus) *filterSelectWidget {
 	switch f {
 	case filterFocusReviewer:
@@ -920,9 +1030,12 @@ func (w *settingsWidget) activate() {
 	case tabGeneral:
 		w.includeReviewerMRs = !w.includeReviewerMRs
 	case tabFilters:
-		if w.filterFocused == filterFocusStatus {
+		switch w.filterFocused {
+		case filterFocusStatus:
 			w.filterStatus.toggle()
-		} else {
+		case filterFocusView:
+			w.filterView.toggle()
+		default:
 			w.filterList(w.filterFocused).toggle()
 		}
 	case tabSorting:
@@ -971,6 +1084,8 @@ func (w settingsWidget) buildApplied() SettingsAppliedMsg {
 			TicketKeys: w.filterTicket.selectedSlice(),
 			TicketNone: w.filterTicket.none,
 		},
+		ViewMine:           w.filterView.myMRsOnly,
+		SprintFilter:       w.filterView.sprint,
 		IncludeReviewerMRs: w.includeReviewerMRs,
 		SortField:          w.sortField.stateKey(),
 		SortDesc:           w.sortDesc,
@@ -1078,6 +1193,7 @@ func (w settingsWidget) renderFilters() string {
 	var sb strings.Builder
 	sb.WriteString(renderSectionHeader("Status", w.filterFocused == filterFocusStatus, w.styles) + "  " +
 		w.filterStatus.render(w.filterFocused == filterFocusStatus, w.styles) + "\n")
+	sb.WriteString(w.renderFilterView() + "\n")
 	colWidth := w.filterAssignee.effectiveColWidth()
 	ruleWidth := filterNumColumns*filterColumnTotalWidth(colWidth) + (filterNumColumns-1)*filterColumnDividerWidth
 	sb.WriteString(w.styles.PopupDivider.Render(strings.Repeat("─", ruleWidth)) + "\n")
@@ -1095,6 +1211,18 @@ func (w settingsWidget) renderFilters() string {
 
 	sb.WriteString(lip.JoinHorizontal(lip.Top, assigneeCol, divider, reviewerCol, divider, ticketCol))
 	return sb.String()
+}
+
+// renderFilterView renders the "My MRs only" / "Current sprint" row —
+// blank when neither toggle applies to this deployment (see
+// filterViewWidget), so the Filters tab's line count stays the same either
+// way for a given config, rather than depending on which checkboxes exist.
+func (w settingsWidget) renderFilterView() string {
+	if len(w.filterView.items()) == 0 {
+		return ""
+	}
+	return renderSectionHeader("View", w.filterFocused == filterFocusView, w.styles) + "    " +
+		w.filterView.render(w.filterFocused == filterFocusView, w.styles)
 }
 
 // renderFilterColumn renders one Filters-tab column: a header (with an

@@ -1083,12 +1083,19 @@ func (m *Model) openSettings(initialTab settingsTab) {
 	}
 	authors, reviewers := BuildAuthorsReviewers(m.allMRs)
 	tickets, ticketNoneCount := BuildTicketKeys(m.allMRs, m.keyMatcher)
+	viewState := filterViewWidget{
+		myMRsOnly:   m.viewMode == domain.ViewMine,
+		myMRsAvail:  m.keys.ToggleView.Enabled(),
+		sprint:      m.sprintFilterActive,
+		sprintAvail: m.keys.Sprint.Enabled(),
+	}
 	m.settings = newSettingsWidget(
 		themes,
 		authors, reviewers,
 		tickets, ticketNoneCount, len(m.allMRs),
 		m.userMap,
 		m.filter,
+		viewState,
 		m.includeReviewerMRs,
 		m.sortField,
 		m.sortDesc,
@@ -1104,6 +1111,19 @@ func (m *Model) openSettings(initialTab settingsTab) {
 // handleSettingsApplied applies all live changes from the settings panel.
 func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd) {
 	m.filter = msg.Filter
+
+	wantMine := msg.ViewMine && m.keys.ToggleView.Enabled()
+	if wantMine != (m.viewMode == domain.ViewMine) {
+		if wantMine {
+			m.viewMode = domain.ViewMine
+			m.header.SetTitle("mrboard — @" + m.currentUser)
+		} else {
+			m.viewMode = domain.ViewAll
+			m.header.SetTitle("mrboard")
+		}
+	}
+	m.sprintFilterActive = msg.SprintFilter && m.keys.Sprint.Enabled()
+
 	reviewerFetchNeeded := msg.IncludeReviewerMRs && !m.includeReviewerMRs && !m.reviewerMRsInStore
 	m.includeReviewerMRs = msg.IncludeReviewerMRs
 

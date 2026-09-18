@@ -20,12 +20,14 @@ func newTestSettingsWidget() settingsWidget {
 		"jpdubois": "Jean-Philippe Dubois",
 	}
 	styles := NewStyles(LoadThemeByName("default"), true)
+	viewState := filterViewWidget{myMRsAvail: true, sprintAvail: true}
 	return newSettingsWidget(
 		[]string{"default", "solarized"},
 		authors, reviewers,
 		tickets, 3, 6,
 		userMap,
 		domain.FilterCriteria{},
+		viewState,
 		false,
 		sortByRepoIID, false,
 		"default", themeModeAuto,
@@ -87,4 +89,46 @@ func TestSettingsWidget_ToggleCompact_AssigneeColumn(t *testing.T) {
 	compact := w.render()
 	assert.NotContains(t, compact, "Alexandra Smith")
 	assert.Contains(t, compact, "@asmith")
+}
+
+// TestSettingsWidget_FilterView_TogglesRoundTrip verifies the View strip's
+// checkboxes flip on space and round-trip through buildApplied — the path
+// handleSettingsApplied reads to update Model.viewMode/sprintFilterActive.
+func TestSettingsWidget_FilterView_TogglesRoundTrip(t *testing.T) {
+	w := newTestSettingsWidget()
+	w.SetSize(120, 40)
+	w.tab = tabFilters
+	w.filterFocused = filterFocusView
+
+	applied := w.buildApplied()
+	require.False(t, applied.ViewMine)
+	require.False(t, applied.SprintFilter)
+
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+	assert.True(t, w.buildApplied().ViewMine, "toggling the first View row should set ViewMine")
+
+	w.filterView.cursor = 1
+	updated, _ = w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+	assert.True(t, w.buildApplied().SprintFilter, "toggling the second View row should set SprintFilter")
+}
+
+// TestSettingsWidget_FilterView_OmittedWhenUnavailable verifies a toggle
+// disappears from the strip (and can't be landed on via keyboard focus)
+// when its underlying mechanism isn't available for this deployment — no
+// current user configured, no JIRA board configured.
+func TestSettingsWidget_FilterView_OmittedWhenUnavailable(t *testing.T) {
+	w := newTestSettingsWidget()
+	w.filterView = filterViewWidget{} // neither available
+	w.SetSize(120, 40)
+	w.tab = tabFilters
+
+	out := w.render()
+	assert.NotContains(t, out, "My MRs only")
+	assert.NotContains(t, out, "Current sprint")
+
+	// Moving down from Status must skip straight to the list columns.
+	w.moveVerticalFilters(1)
+	assert.Equal(t, filterFocusAssignee, w.filterFocused)
 }
