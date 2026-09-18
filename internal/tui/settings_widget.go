@@ -33,12 +33,22 @@ const (
 	// themselves: border+tabbar+blank+status+rule+header+indicator+blank+hint.
 	// See SetSize.
 	filterFixedChromeLines = 10
-	// filterColumnContentWidth is the label+count width inside a filter list column.
-	filterColumnContentWidth = 22
+	// filterColumnMinContentWidth/filterColumnMaxContentWidth bound the
+	// label+count width inside a filter list column; SetSize derives the
+	// actual width from the terminal width between these two.
+	// filterColumnMaxContentWidth covers "Jean-Philippe Dubois (@jpdubois)"
+	// (32 chars) — past it, extra width is just padding, not legibility.
+	filterColumnMinContentWidth = 22
+	filterColumnMaxContentWidth = 34
 	// filterMarkerPrefixWidth is "  " + "[x]" + " " preceding a list row's content.
 	filterMarkerPrefixWidth = 6
-	filterColumnTotalWidth  = filterMarkerPrefixWidth + filterColumnContentWidth
 )
+
+// filterColumnTotalWidth is a column's full on-screen width: the row marker
+// prefix plus the label+count content width.
+func filterColumnTotalWidth(contentWidth int) int {
+	return filterMarkerPrefixWidth + contentWidth
+}
 
 var phaseLabels = [4]string{phaseLabelDraft, phaseLabelReview, phaseLabelAuthorAc, phaseLabelReady}
 
@@ -127,6 +137,7 @@ type filterSelectWidget struct {
 	cursor     int
 	scrollOff  int
 	maxVisible int // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
+	colWidth   int // 0 falls back to filterColumnMinContentWidth; set by settingsWidget.SetSize
 }
 
 func (s *filterSelectWidget) moveCursor(delta int) {
@@ -135,6 +146,13 @@ func (s *filterSelectWidget) moveCursor(delta int) {
 		s.cursor = next
 		s.adjustScroll()
 	}
+}
+
+func (s filterSelectWidget) effectiveColWidth() int {
+	if s.colWidth > 0 {
+		return s.colWidth
+	}
+	return filterColumnMinContentWidth
 }
 
 func (s filterSelectWidget) effectiveMaxVisible() int {
@@ -216,6 +234,7 @@ func (s filterSelectWidget) isChecked(item filterSelectItem) bool {
 func (s filterSelectWidget) render(focused bool, styles Styles) string {
 	var sb strings.Builder
 	mv := s.effectiveMaxVisible()
+	cw := s.effectiveColWidth()
 	end := min(s.scrollOff+mv, len(s.items))
 	rows := 0
 	for i := s.scrollOff; i < end; i++ {
@@ -226,7 +245,7 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 		} else {
 			markerStyled = styles.PopupItemMarkerOff.Render(markerUnchecked)
 		}
-		content := renderFilterRowContent(item.label, item.count, item.absent, filterColumnContentWidth)
+		content := renderFilterRowContent(item.label, item.count, item.absent, cw)
 		var contentStyled string
 		switch {
 		case item.absent:
@@ -239,7 +258,7 @@ func (s filterSelectWidget) render(focused bool, styles Styles) string {
 		sb.WriteString("  " + markerStyled + " " + contentStyled + "\n")
 		rows++
 	}
-	blank := strings.Repeat(" ", filterColumnTotalWidth)
+	blank := strings.Repeat(" ", filterColumnTotalWidth(cw))
 	for rows < mv {
 		sb.WriteString(blank + "\n")
 		rows++
@@ -365,6 +384,7 @@ type settingsWidget struct {
 	filterTicket   filterSelectWidget
 	filterFocused  filterFocus
 	filterLastList filterFocus // column to return to when leaving the Status strip
+	filterColWidth int         // 0 falls back to filterColumnMinContentWidth; set by SetSize
 
 	// Sorting tab
 	sortCursor  int // 0–4
@@ -498,8 +518,9 @@ func checkedSet(values []string) map[string]bool {
 }
 
 // SetSize records the terminal size and derives how many rows each filter
-// list column shows, so the panel scales with the terminal instead of
-// hard-coding a row count that can overflow a short one.
+// list column shows and how wide it is, so the panel scales with the
+// terminal instead of hard-coding dimensions that can overflow a short one
+// or truncate labels a wider terminal has room for.
 func (w *settingsWidget) SetSize(width, height int) {
 	w.width, w.height = width, height
 	mv := clampVisible(height-filterFixedChromeLines, settingsMinVisible, filterSelectMaxVisibleCap)
@@ -508,6 +529,15 @@ func (w *settingsWidget) SetSize(width, height int) {
 	w.filterTicket.maxVisible = mv
 	w.themeMaxVisible = clampVisible(height-settingsFrameChromeHeight, settingsMinVisible, settingsPickerMaxVisible)
 	w.adjustThemeScroll()
+
+	budget := width - settingsFrameChromeWidth - (filterNumColumns-1)*filterColumnDividerWidth
+	colWidth := clampVisible(
+		budget/filterNumColumns-filterMarkerPrefixWidth, filterColumnMinContentWidth, filterColumnMaxContentWidth,
+	)
+	w.filterColWidth = colWidth
+	w.filterAssignee.colWidth = colWidth
+	w.filterReviewer.colWidth = colWidth
+	w.filterTicket.colWidth = colWidth
 }
 
 // clampVisible bounds n to [lo, hi].
@@ -1009,7 +1039,8 @@ func (w settingsWidget) renderFilters() string {
 	var sb strings.Builder
 	sb.WriteString(renderSectionHeader("Status", w.filterFocused == filterFocusStatus, w.styles) + "  " +
 		w.filterStatus.render(w.filterFocused == filterFocusStatus, w.styles) + "\n")
-	ruleWidth := filterNumColumns*filterColumnTotalWidth + (filterNumColumns-1)*filterColumnDividerWidth
+	colWidth := w.filterAssignee.effectiveColWidth()
+	ruleWidth := filterNumColumns*filterColumnTotalWidth(colWidth) + (filterNumColumns-1)*filterColumnDividerWidth
 	sb.WriteString(w.styles.PopupDivider.Render(strings.Repeat("─", ruleWidth)) + "\n")
 
 	assigneeCol := w.renderFilterColumn("Assignee", filterFocusAssignee, w.filterAssignee)
@@ -1036,7 +1067,8 @@ func (w settingsWidget) renderFilterColumn(title string, focus filterFocus, list
 	if n := list.activeCount(); n > 0 {
 		headerLabel = fmt.Sprintf("%s (%d)", title, n)
 	}
-	header := padDisplay(renderSectionHeader(headerLabel, focused, w.styles), filterColumnTotalWidth)
+	colWidth := filterColumnTotalWidth(list.effectiveColWidth())
+	header := padDisplay(renderSectionHeader(headerLabel, focused, w.styles), colWidth)
 	return header + "\n" + list.render(focused, w.styles)
 }
 
