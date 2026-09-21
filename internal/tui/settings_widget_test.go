@@ -185,3 +185,52 @@ func TestSettingsWidget_FilterView_OmittedWhenUnavailable(t *testing.T) {
 	w.moveVerticalFilters(1)
 	assert.Equal(t, filterFocusAssignee, w.filterFocused)
 }
+
+// TestSettingsWidget_Enter_LeavesTheFocusedItemAlone locks in the removal of
+// the panel's confirm key. Enter used to share a case with Toggle, so the act
+// of dismissing the panel re-fired activate() and flipped whatever the cursor
+// sat on — an exclusion the user had just made was silently reverted on the
+// way out.
+func TestSettingsWidget_Enter_LeavesTheFocusedItemAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tab  settingsTab
+		read func(SettingsAppliedMsg) any
+	}{
+		{"Filters excludes nothing", tabFilters, func(m SettingsAppliedMsg) any {
+			return len(m.Filter.ExcludedAssignees)
+		}},
+		{"General leaves the reviewer-MR scope", tabGeneral, func(m SettingsAppliedMsg) any {
+			return m.IncludeReviewerMRs
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestSettingsWidget()
+			w.SetSize(120, 40)
+			w.tab = tc.tab
+			w.filterFocused = filterFocusAssignee
+			before := tc.read(w.buildApplied())
+
+			updated, _ := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			w = updated.(settingsWidget) //nolint:forcetypeassert
+
+			assert.Equal(t, before, tc.read(w.buildApplied()),
+				"Enter must not toggle anything — every edit already applies live")
+		})
+	}
+}
+
+// TestSettingsWidget_Space_StillToggles guards the other half: removing the
+// confirm key must not cost the panel its one real toggle binding.
+func TestSettingsWidget_Space_StillToggles(t *testing.T) {
+	w := newTestSettingsWidget()
+	w.SetSize(120, 40)
+	w.tab = tabFilters
+	w.filterFocused = filterFocusAssignee
+	require.Empty(t, w.buildApplied().Filter.ExcludedAssignees)
+
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+
+	assert.Equal(t, []string{testAssigneeAsmith}, w.buildApplied().Filter.ExcludedAssignees)
+}

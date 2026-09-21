@@ -14,3 +14,7 @@ mrboard.toml
 # any local md file 
 **/*.local.md
 
+# ai agents 
+.agents/
+.claude/skills 
+skills-lock.json

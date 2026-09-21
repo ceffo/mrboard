@@ -842,7 +842,7 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	case w.keys.Right.Match(kMsg):
 		w.moveHorizontal(1)
 		return w, w.emitApplied()
-	case w.keys.Toggle.Match(kMsg), w.keys.Confirm.Match(kMsg):
+	case w.keys.Toggle.Match(kMsg):
 		w.activate()
 		return w, w.emitApplied()
 	case w.tab == tabFilters && w.isFilterListFocused() && w.keys.SelectAll.Match(kMsg):

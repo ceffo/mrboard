@@ -162,6 +162,11 @@ var DiffViewCtx = NewContext("diff", "Diff", &DefaultDiffViewKeyMap,
 )
 
 // SettingsKeyMap holds keybindings for the settings panel.
+//
+// There is deliberately no confirm/apply key: every edit emits
+// SettingsAppliedMsg the moment it is made, so the panel has nothing left to
+// commit and Close only dismisses it. A second key routed through activate()
+// would re-fire the toggle under the cursor on its way out.
 type SettingsKeyMap struct {
 	Up        Action
 	Down      Action
@@ -170,7 +175,6 @@ type SettingsKeyMap struct {
 	PrevTab   Action
 	NextTab   Action
 	Toggle    Action
-	Confirm   Action
 	Close     Action
 	Compact   Action // Filters tab only: full name vs. bare @username
 	SelectAll Action // Filters tab list columns only: select all / clear all
@@ -185,7 +189,6 @@ var DefaultSettingsKeyMap = SettingsKeyMap{
 	PrevTab:   Act("shift+tab", "prev tab", PriorityModal, CategoryView),
 	NextTab:   Act("tab", "next tab", PriorityCore, CategoryView),
 	Toggle:    Act("space", "toggle", PriorityCore, CategoryAct),
-	Confirm:   Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
 	Close:     Act(",/esc", "close", PriorityCore, CategoryGeneral, ",", "esc"),
 	Compact:   Act("n", "names/@ids", PriorityModal, CategoryView),
 	SelectAll: Act("^a", "select/clear all", PriorityModal, CategoryAct, "ctrl+a"),
