@@ -24,8 +24,6 @@ const (
 	markerUnchecked = "[ ]"
 	markerFixed     = "[•]" // always-applied row with no toggle, e.g. the focused MR in the batch preview
 
-	filterLabelAll = "All"
-
 	filterSelectMaxVisible    = 8 // fallback used before SetSize sizes the panel to the terminal
 	filterSelectMaxVisibleCap = 14
 	// settingsMinVisible is the floor SetSize clamps any tab's visible-row
@@ -177,22 +175,21 @@ func (v filterViewWidget) render(focused bool, styles Styles) string {
 	return strings.Join(parts, "   ")
 }
 
-// filterItemKind discriminates the pseudo-items ("All", "No ID") from a real
+// filterItemKind discriminates the "No ID" pseudo-item from a real
 // selectable value in a filterSelectWidget list.
 type filterItemKind int
 
 const (
-	filterItemAll filterItemKind = iota
+	filterItemValue filterItemKind = iota
 	filterItemNone
-	filterItemValue
 )
 
 // filterSelectItem is a single entry in a multi-select list (Assignee,
 // Reviewer, or Issue ID). count is an MR-count badge shown right-aligned;
 // zero means no badge unless absent is set. absent marks a value that is
-// checked in persisted state but no longer present in the current MR set
+// excluded in persisted state but no longer present in the current MR set
 // (e.g. a ticket ID from a closed sprint) — without this, such a selection
-// filters invisibly: still applied, but with no row to show or uncheck it.
+// filters invisibly: still applied, but with no row to show or re-include it.
 // short is the compact-mode label (filterSelectWidget.compact); for
 // Assignee/Reviewer it's the bare "@username", for Issue ID it equals label.
 type filterSelectItem struct {
@@ -204,17 +201,18 @@ type filterSelectItem struct {
 	absent bool
 }
 
-// filterSelectWidget manages a scrollable multi-select list with an "All"
-// pseudo-item and, for the Issue ID list only, a "No ID" pseudo-item.
+// filterSelectWidget manages a scrollable multi-select list: every entry is
+// shown by default (checkbox on), and unchecking one hides it from the
+// board. For the Issue ID list only, one entry is the "No ID" pseudo-item.
 type filterSelectWidget struct {
-	items      []filterSelectItem
-	checked    map[string]bool // nil/empty = no specific value checked
-	none       bool            // "No ID" checked — meaningful for the Issue ID list only
-	cursor     int
-	scrollOff  int
-	maxVisible int  // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
-	colWidth   int  // 0 falls back to filterColumnMinContentWidth; set by settingsWidget.SetSize
-	compact    bool // show filterSelectItem.short instead of .label; set by settingsWidget
+	items        []filterSelectItem
+	excluded     map[string]bool // true = hidden from the board; nil/empty = show everything
+	noneExcluded bool            // "No ID" unchecked — meaningful for the Issue ID list only
+	cursor       int
+	scrollOff    int
+	maxVisible   int  // 0 falls back to filterSelectMaxVisible; set by settingsWidget.SetSize
+	colWidth     int  // 0 falls back to filterColumnMinContentWidth; set by settingsWidget.SetSize
+	compact      bool // show filterSelectItem.short instead of .label; set by settingsWidget
 }
 
 func (s *filterSelectWidget) moveCursor(delta int) {
@@ -262,41 +260,62 @@ func (s *filterSelectWidget) toggle() {
 	}
 	item := s.items[s.cursor]
 	switch item.kind {
-	case filterItemAll:
-		s.checked = nil
-		s.none = false
 	case filterItemNone:
-		s.none = !s.none
+		s.noneExcluded = !s.noneExcluded
 	case filterItemValue:
-		if s.checked == nil {
-			s.checked = make(map[string]bool)
+		if s.excluded == nil {
+			s.excluded = make(map[string]bool)
 		}
-		if s.checked[item.value] {
-			delete(s.checked, item.value)
-			if len(s.checked) == 0 {
-				s.checked = nil
+		if s.excluded[item.value] {
+			delete(s.excluded, item.value)
+			if len(s.excluded) == 0 {
+				s.excluded = nil
 			}
 		} else {
-			s.checked[item.value] = true
+			s.excluded[item.value] = true
 		}
 	}
 }
 
-func (s filterSelectWidget) selectedSlice() []string {
-	result := make([]string, 0, len(s.checked))
-	for v := range s.checked {
+// toggleSelectAll implements the select-all/clear-all binding: when
+// everything is currently shown, it excludes every real value (and "No ID"
+// where present); otherwise it clears every exclusion back to showing
+// everything. This is a two-state toggle, not a restore of whatever was
+// excluded before the last toggle.
+func (s *filterSelectWidget) toggleSelectAll() {
+	if len(s.excluded) == 0 && !s.noneExcluded {
+		s.excluded = make(map[string]bool, len(s.items))
+		hasNone := false
+		for _, it := range s.items {
+			switch it.kind {
+			case filterItemValue:
+				s.excluded[it.value] = true
+			case filterItemNone:
+				hasNone = true
+			}
+		}
+		s.noneExcluded = hasNone
+		return
+	}
+	s.excluded = nil
+	s.noneExcluded = false
+}
+
+func (s filterSelectWidget) excludedSlice() []string {
+	result := make([]string, 0, len(s.excluded))
+	for v := range s.excluded {
 		result = append(result, v)
 	}
 	sort.Strings(result)
 	return result
 }
 
-// activeCount is how many values are currently selected in this list — shown
-// as a badge on the column header. Not to be confused with an item's own
-// per-value MR count.
+// activeCount is how many values are currently excluded from this list —
+// shown as a badge on the column header. Not to be confused with an item's
+// own per-value MR count.
 func (s filterSelectWidget) activeCount() int {
-	n := len(s.checked)
-	if s.none {
+	n := len(s.excluded)
+	if s.noneExcluded {
 		n++
 	}
 	return n
@@ -304,12 +323,10 @@ func (s filterSelectWidget) activeCount() int {
 
 func (s filterSelectWidget) isChecked(item filterSelectItem) bool {
 	switch item.kind {
-	case filterItemAll:
-		return len(s.checked) == 0 && !s.none
 	case filterItemNone:
-		return s.none
+		return !s.noneExcluded
 	default:
-		return s.checked[item.value]
+		return !s.excluded[item.value]
 	}
 }
 
@@ -451,7 +468,7 @@ const (
 	settingsFrameChromeHeight = 6 // border (2) + tab bar (1) + blank (1) + blank (1) + hint (1)
 	// settingsHintText is the footer hint shown under every tab; hoisted to a
 	// const so canvasSize can measure it alongside each tab's body.
-	settingsHintText = "  tab/shift+tab tabs  ↑↓←→ move  space toggle  n names/@ids  ,/esc close"
+	settingsHintText = "  tab/shift+tab tabs  ↑↓←→ move  space toggle  ^a select/clear all  n names/@ids  ,/esc close"
 )
 
 // settingsWidget is a 4-tab settings panel: General / Filters / Sorting / Theme.
@@ -503,14 +520,14 @@ type TicketKeyCount struct {
 
 // newSettingsWidget constructs a settingsWidget populated from current app state.
 // authors and reviewers are sorted username slices; tickets and ticketNoneCount
-// are the issue-ID breakdown (see BuildTicketKeys); totalMRs backs the Issue ID
-// list's "All" badge. All three populate the Filters tab. viewState carries
-// the current on/off state of the "My MRs only" / "Current sprint" toggles
-// and which of them apply to this deployment — see filterViewWidget.
+// are the issue-ID breakdown (see BuildTicketKeys). All three populate the
+// Filters tab. viewState carries the current on/off state of the "My MRs
+// only" / "Current sprint" toggles and which of them apply to this
+// deployment — see filterViewWidget.
 func newSettingsWidget(
 	themes []string,
 	authors, reviewers []string,
-	tickets []TicketKeyCount, ticketNoneCount, totalMRs int,
+	tickets []TicketKeyCount, ticketNoneCount int,
 	userMap map[string]string,
 	filter domain.FilterCriteria,
 	viewState filterViewWidget,
@@ -530,12 +547,12 @@ func newSettingsWidget(
 			phaseState[i] = filter.Phases[domain.MRPhase(i)]
 		}
 	}
-	assigneeChecked := checkedSet(filter.Assignees)
-	reviewerChecked := checkedSet(filter.Reviewers)
-	ticketChecked := checkedSet(filter.TicketKeys)
-	authorItems := buildSelectItems(authors, userMap, assigneeChecked)
-	reviewerItems := buildSelectItems(reviewers, userMap, reviewerChecked)
-	ticketItems := buildTicketItems(tickets, ticketNoneCount, totalMRs, ticketChecked)
+	assigneeExcluded := excludedSet(filter.ExcludedAssignees)
+	reviewerExcluded := excludedSet(filter.ExcludedReviewers)
+	ticketExcluded := excludedSet(filter.ExcludedTicketKeys)
+	authorItems := buildSelectItems(authors, userMap, assigneeExcluded)
+	reviewerItems := buildSelectItems(reviewers, userMap, reviewerExcluded)
+	ticketItems := buildTicketItems(tickets, ticketNoneCount, ticketExcluded)
 
 	// --- Sorting tab init ---
 	var sc int
@@ -576,13 +593,13 @@ func newSettingsWidget(
 		filterStatus:       filterStatusWidget{phases: phaseState},
 		filterView:         viewState,
 		filterAssignee: filterSelectWidget{
-			items: authorItems, checked: assigneeChecked, maxVisible: filterSelectMaxVisible,
+			items: authorItems, excluded: assigneeExcluded, maxVisible: filterSelectMaxVisible,
 		},
 		filterReviewer: filterSelectWidget{
-			items: reviewerItems, checked: reviewerChecked, maxVisible: filterSelectMaxVisible,
+			items: reviewerItems, excluded: reviewerExcluded, maxVisible: filterSelectMaxVisible,
 		},
 		filterTicket: filterSelectWidget{
-			items: ticketItems, checked: ticketChecked, none: filter.TicketNone,
+			items: ticketItems, excluded: ticketExcluded, noneExcluded: filter.ExcludeTicketless,
 			maxVisible: filterSelectMaxVisible,
 		},
 		filterFocused:   filterFocusStatus,
@@ -599,7 +616,7 @@ func newSettingsWidget(
 	}
 }
 
-func checkedSet(values []string) map[string]bool {
+func excludedSet(values []string) map[string]bool {
 	if len(values) == 0 {
 		return nil
 	}
@@ -645,18 +662,17 @@ func clampVisible(n, lo, hi int) int {
 	}
 }
 
-// buildSelectItems builds the item list for a filterSelectWidget ("All" + sorted
-// entries), appending any value in checked that isn't in usernames — see
+// buildSelectItems builds the item list for a filterSelectWidget (sorted
+// entries), appending any value in excluded that isn't in usernames — see
 // filterSelectItem.absent.
-func buildSelectItems(usernames []string, userMap map[string]string, checked map[string]bool) []filterSelectItem {
-	items := make([]filterSelectItem, 0, len(usernames)+1)
-	items = append(items, filterSelectItem{kind: filterItemAll, label: filterLabelAll, short: filterLabelAll})
+func buildSelectItems(usernames []string, userMap map[string]string, excluded map[string]bool) []filterSelectItem {
+	items := make([]filterSelectItem, 0, len(usernames))
 	seen := make(map[string]bool, len(usernames))
 	for _, u := range usernames {
 		seen[u] = true
 		items = append(items, userSelectItem(u, userMap, false))
 	}
-	for _, v := range absentCheckedValues(checked, seen) {
+	for _, v := range absentExcludedValues(excluded, seen) {
 		items = append(items, userSelectItem(v, userMap, true))
 	}
 	return items
@@ -677,16 +693,14 @@ func userSelectItem(username string, userMap map[string]string, absent bool) fil
 	return filterSelectItem{kind: filterItemValue, value: username, label: label, short: "@" + username, absent: absent}
 }
 
-// filterPseudoItemCount is the "All" + "No ID" entries every Issue ID list starts with.
-const filterPseudoItemCount = 2
+// filterPseudoItemCount is the "No ID" entry every Issue ID list starts with.
+const filterPseudoItemCount = 1
 
-// buildTicketItems builds the Issue ID list: "All", "No ID", then real keys
-// in the order BuildTicketKeys already sorted them, then any checked key no
-// longer present in tickets — see filterSelectItem.absent.
-func buildTicketItems(tickets []TicketKeyCount, noneCount, totalMRs int, checked map[string]bool) []filterSelectItem {
+// buildTicketItems builds the Issue ID list: "No ID", then real keys in the
+// order BuildTicketKeys already sorted them, then any excluded key no longer
+// present in tickets — see filterSelectItem.absent.
+func buildTicketItems(tickets []TicketKeyCount, noneCount int, excluded map[string]bool) []filterSelectItem {
 	items := make([]filterSelectItem, 0, len(tickets)+filterPseudoItemCount)
-	items = append(items,
-		filterSelectItem{kind: filterItemAll, label: filterLabelAll, short: filterLabelAll, count: totalMRs})
 	items = append(items, filterSelectItem{kind: filterItemNone, label: "No ID", short: "No ID", count: noneCount})
 	seen := make(map[string]bool, len(tickets))
 	for _, t := range tickets {
@@ -694,21 +708,21 @@ func buildTicketItems(tickets []TicketKeyCount, noneCount, totalMRs int, checked
 		items = append(items,
 			filterSelectItem{kind: filterItemValue, value: t.Key, label: t.Key, short: t.Key, count: t.Count})
 	}
-	for _, v := range absentCheckedValues(checked, seen) {
+	for _, v := range absentExcludedValues(excluded, seen) {
 		items = append(items, filterSelectItem{kind: filterItemValue, value: v, label: v, short: v, absent: true})
 	}
 	return items
 }
 
-// absentCheckedValues returns, sorted, every key of checked not present in
-// seen — a persisted selection whose value no longer exists in the current
+// absentExcludedValues returns, sorted, every key of excluded not present in
+// seen — a persisted exclusion whose value no longer exists in the current
 // MR set.
-func absentCheckedValues(checked, seen map[string]bool) []string {
-	if len(checked) == 0 {
+func absentExcludedValues(excluded, seen map[string]bool) []string {
+	if len(excluded) == 0 {
 		return nil
 	}
-	missing := make([]string, 0, len(checked))
-	for v := range checked {
+	missing := make([]string, 0, len(excluded))
+	for v := range excluded {
 		if !seen[v] {
 			missing = append(missing, v)
 		}
@@ -830,6 +844,9 @@ func (w settingsWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 		return w, w.emitApplied()
 	case w.keys.Toggle.Match(kMsg), w.keys.Confirm.Match(kMsg):
 		w.activate()
+		return w, w.emitApplied()
+	case w.tab == tabFilters && w.isFilterListFocused() && w.keys.SelectAll.Match(kMsg):
+		w.filterList(w.filterFocused).toggleSelectAll()
 		return w, w.emitApplied()
 	case w.tab == tabFilters && w.keys.Compact.Match(kMsg):
 		w.toggleCompact()
@@ -979,6 +996,15 @@ func (w *settingsWidget) moveHorizontalFilters(delta int) {
 	target.adjustScroll()
 }
 
+// isFilterListFocused reports whether one of the three Assignee/Reviewer/
+// Issue ID list columns — as opposed to the Status or View strip — owns
+// focus, i.e. whether filterList(w.filterFocused) is valid to call.
+func (w settingsWidget) isFilterListFocused() bool {
+	return w.filterFocused == filterFocusAssignee ||
+		w.filterFocused == filterFocusReviewer ||
+		w.filterFocused == filterFocusTicket
+}
+
 // filterList returns the list widget for a column focus value. Must not be
 // called with filterFocusStatus or filterFocusView.
 func (w *settingsWidget) filterList(f filterFocus) *filterSelectWidget {
@@ -1078,11 +1104,11 @@ func (w settingsWidget) buildApplied() SettingsAppliedMsg {
 	}
 	return SettingsAppliedMsg{
 		Filter: domain.FilterCriteria{
-			Phases:     phaseMap,
-			Assignees:  w.filterAssignee.selectedSlice(),
-			Reviewers:  w.filterReviewer.selectedSlice(),
-			TicketKeys: w.filterTicket.selectedSlice(),
-			TicketNone: w.filterTicket.none,
+			Phases:             phaseMap,
+			ExcludedAssignees:  w.filterAssignee.excludedSlice(),
+			ExcludedReviewers:  w.filterReviewer.excludedSlice(),
+			ExcludedTicketKeys: w.filterTicket.excludedSlice(),
+			ExcludeTicketless:  w.filterTicket.noneExcluded,
 		},
 		ViewMine:           w.filterView.myMRsOnly,
 		SprintFilter:       w.filterView.sprint,

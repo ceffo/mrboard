@@ -163,30 +163,32 @@ var DiffViewCtx = NewContext("diff", "Diff", &DefaultDiffViewKeyMap,
 
 // SettingsKeyMap holds keybindings for the settings panel.
 type SettingsKeyMap struct {
-	Up      Action
-	Down    Action
-	Left    Action
-	Right   Action
-	PrevTab Action
-	NextTab Action
-	Toggle  Action
-	Confirm Action
-	Close   Action
-	Compact Action // Filters tab only: full name vs. bare @username
+	Up        Action
+	Down      Action
+	Left      Action
+	Right     Action
+	PrevTab   Action
+	NextTab   Action
+	Toggle    Action
+	Confirm   Action
+	Close     Action
+	Compact   Action // Filters tab only: full name vs. bare @username
+	SelectAll Action // Filters tab list columns only: select all / clear all
 }
 
 // DefaultSettingsKeyMap is the default keybinding set for the settings panel.
 var DefaultSettingsKeyMap = SettingsKeyMap{
-	Up:      Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
-	Down:    Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
-	Left:    Act("←/h", "left", PriorityCore, CategoryNavigate, "left", "h"),
-	Right:   Act("→/l", "right", PriorityCore, CategoryNavigate, "right", "l"),
-	PrevTab: Act("shift+tab", "prev tab", PriorityModal, CategoryView),
-	NextTab: Act("tab", "next tab", PriorityCore, CategoryView),
-	Toggle:  Act("space", "toggle", PriorityCore, CategoryAct),
-	Confirm: Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
-	Close:   Act(",/esc", "close", PriorityCore, CategoryGeneral, ",", "esc"),
-	Compact: Act("n", "names/@ids", PriorityModal, CategoryView),
+	Up:        Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:      Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Left:      Act("←/h", "left", PriorityCore, CategoryNavigate, "left", "h"),
+	Right:     Act("→/l", "right", PriorityCore, CategoryNavigate, "right", "l"),
+	PrevTab:   Act("shift+tab", "prev tab", PriorityModal, CategoryView),
+	NextTab:   Act("tab", "next tab", PriorityCore, CategoryView),
+	Toggle:    Act("space", "toggle", PriorityCore, CategoryAct),
+	Confirm:   Act("↵", "apply", PriorityCore, CategoryGeneral, "enter"),
+	Close:     Act(",/esc", "close", PriorityCore, CategoryGeneral, ",", "esc"),
+	Compact:   Act("n", "names/@ids", PriorityModal, CategoryView),
+	SelectAll: Act("^a", "select/clear all", PriorityModal, CategoryAct, "ctrl+a"),
 }
 
 // SettingsCtx is the settings-panel context.

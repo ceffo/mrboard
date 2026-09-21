@@ -11,20 +11,25 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
+const (
+	testAssigneeAsmith = "asmith"
+	testAssigneeCwu    = "cwu"
+)
+
 func newTestSettingsWidget() settingsWidget {
-	authors := []string{"asmith", "cwu"}
+	authors := []string{testAssigneeAsmith, testAssigneeCwu}
 	reviewers := []string{"bwilson", "jpdubois"}
 	tickets := []TicketKeyCount{{Key: "OD-100", Count: 2}, {Key: "OD-200", Count: 1}}
 	userMap := map[string]string{
-		"asmith":   "Alexandra Smith",
-		"jpdubois": "Jean-Philippe Dubois",
+		testAssigneeAsmith: "Alexandra Smith",
+		"jpdubois":         "Jean-Philippe Dubois",
 	}
 	styles := NewStyles(LoadThemeByName("default"), true)
 	viewState := filterViewWidget{myMRsAvail: true, sprintAvail: true}
 	return newSettingsWidget(
 		[]string{"default", "solarized"},
 		authors, reviewers,
-		tickets, 3, 6,
+		tickets, 3,
 		userMap,
 		domain.FilterCriteria{},
 		viewState,
@@ -112,6 +117,54 @@ func TestSettingsWidget_FilterView_TogglesRoundTrip(t *testing.T) {
 	updated, _ = w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
 	w = updated.(settingsWidget) //nolint:forcetypeassert
 	assert.True(t, w.buildApplied().SprintFilter, "toggling the second View row should set SprintFilter")
+}
+
+// TestSettingsWidget_FilterAssignee_DefaultsToEveryoneShown verifies a fresh
+// widget (no persisted exclusions) starts with every real assignee checked
+// and nothing excluded — there is no separate "All" entry to represent that
+// state.
+func TestSettingsWidget_FilterAssignee_DefaultsToEveryoneShown(t *testing.T) {
+	w := newTestSettingsWidget()
+	assert.Empty(t, w.filterAssignee.excludedSlice())
+	for _, item := range w.filterAssignee.items {
+		assert.True(t, w.filterAssignee.isChecked(item), "%q should start checked", item.value)
+	}
+}
+
+// TestSettingsWidget_FilterAssignee_UncheckingOneExcludesOnlyThatOne is the
+// behavior this feature exists for: unchecking a single entry must exclude
+// just that entry, not require checking every other entry first.
+func TestSettingsWidget_FilterAssignee_UncheckingOneExcludesOnlyThatOne(t *testing.T) {
+	w := newTestSettingsWidget()
+	w.SetSize(120, 40)
+	w.tab = tabFilters
+	w.filterFocused = filterFocusAssignee
+	w.filterAssignee.cursor = 0 // testAssigneeAsmith, the first real item
+
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+
+	assert.Equal(t, []string{testAssigneeAsmith}, w.filterAssignee.excludedSlice())
+	assert.Equal(t, []string{testAssigneeAsmith}, w.buildApplied().Filter.ExcludedAssignees)
+}
+
+// TestSettingsWidget_FilterAssignee_SelectAllTogglesBetweenShowAllAndHideAll
+// verifies ctrl+a excludes every entry on the first press (from the default
+// "everyone shown" state) and clears every exclusion on the second.
+func TestSettingsWidget_FilterAssignee_SelectAllTogglesBetweenShowAllAndHideAll(t *testing.T) {
+	w := newTestSettingsWidget()
+	w.SetSize(120, 40)
+	w.tab = tabFilters
+	w.filterFocused = filterFocusAssignee
+
+	selectAll := tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}
+	updated, _ := w.Update(selectAll)
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+	assert.ElementsMatch(t, []string{testAssigneeAsmith, testAssigneeCwu}, w.filterAssignee.excludedSlice())
+
+	updated, _ = w.Update(selectAll)
+	w = updated.(settingsWidget) //nolint:forcetypeassert
+	assert.Empty(t, w.filterAssignee.excludedSlice())
 }
 
 // TestSettingsWidget_FilterView_OmittedWhenUnavailable verifies a toggle

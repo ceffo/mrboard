@@ -243,76 +243,77 @@ func TestFilterAndSort_SortAge_Descending(t *testing.T) {
 	assert.Equal(t, wantIDs, ids(got))
 }
 
-// FilterAndSort — multi-select Assignees
+// FilterAndSort — multi-select excluded Assignees
 
-func TestFilterAndSort_Assignees_SingleMatch(t *testing.T) {
+func TestFilterAndSort_ExcludedAssignees_SingleMatchHidesIt(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
 		mr(3, userCarol, "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userAlice}})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedAssignees: []string{userAlice}})
+	assert.ElementsMatch(t, []int{2, 3}, ids(got))
+}
+
+func TestFilterAndSort_ExcludedAssignees_MultiMatchHidesBoth(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, userAlice, "repo/a", 1, t0),
+		mr(2, userBob, "repo/b", 2, t0),
+		mr(3, userCarol, "repo/c", 3, t0),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedAssignees: []string{userAlice, userBob}})
 	require.Len(t, got, 1)
-	assert.Equal(t, userAlice, got[0].Assignee)
+	assert.Equal(t, userCarol, got[0].Assignee)
 }
 
-func TestFilterAndSort_Assignees_MultiMatch(t *testing.T) {
+func TestFilterAndSort_ExcludedAssignees_EmptyShowsAll(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
-		mr(3, userCarol, "repo/c", 3, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userAlice, userBob}})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedAssignees: nil})
 	assert.Len(t, got, 2)
 }
 
-func TestFilterAndSort_Assignees_EmptyShowsAll(t *testing.T) {
+func TestFilterAndSort_ExcludedAssignees_HidesOwnMRsWhenCurrentUserExcluded(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userAlice, "repo/a", 1, t0),
 		mr(2, userBob, "repo/b", 2, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: nil})
-	assert.Len(t, got, 2)
-}
-
-func TestFilterAndSort_Assignees_ExcludesUncheckedCurrentUser(t *testing.T) {
-	mrs := []domain.MergeRequest{
-		mr(1, userAlice, "repo/a", 1, t0),
-		mr(2, userBob, "repo/b", 2, t0),
-	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Assignees: []string{userBob}, CurrentUser: userAlice})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedAssignees: []string{userAlice}, CurrentUser: userAlice})
 	require.Len(t, got, 1)
 	assert.Equal(t, userBob, got[0].Assignee)
 }
 
-// FilterAndSort — multi-select Reviewers
+// FilterAndSort — multi-select excluded Reviewers
 
-func TestFilterAndSort_Reviewers_SingleMatch(t *testing.T) {
+func TestFilterAndSort_ExcludedReviewers_SingleMatchHidesIt(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
 		mr(2, userCarol, "repo/b", 2, t0, domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted}),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: []string{userAlice}})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedReviewers: []string{userAlice}})
 	require.Len(t, got, 1)
-	assert.Equal(t, 1, got[0].IID)
+	assert.Equal(t, 2, got[0].IID)
 }
 
-func TestFilterAndSort_Reviewers_MultiMatch(t *testing.T) {
+func TestFilterAndSort_ExcludedReviewers_MultiMatchHidesBoth(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
 		mr(2, userCarol, "repo/b", 2, t0, domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted}),
 		mr(3, userAlice, "repo/c", 3, t0, domain.ReviewerInfo{Username: userCarol, State: domain.ReviewerNotStarted}),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: []string{userAlice, userBob}})
-	assert.Len(t, got, 2)
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedReviewers: []string{userAlice, userBob}})
+	require.Len(t, got, 1)
+	assert.Equal(t, 3, got[0].IID)
 }
 
-func TestFilterAndSort_Reviewers_EmptyShowsAll(t *testing.T) {
+func TestFilterAndSort_ExcludedReviewers_EmptyShowsAll(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, userBob, "repo/a", 1, t0, domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted}),
 		mr(2, userCarol, "repo/b", 2, t0),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{Reviewers: nil})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedReviewers: nil})
 	assert.Len(t, got, 2)
 }
 
@@ -322,29 +323,29 @@ func mrTitled(id int, title, repo string, iid int) domain.MergeRequest {
 	return domain.MergeRequest{ID: id, IID: iid, ProjectPath: repo, Title: title, CreatedAt: t0}
 }
 
-func TestFilterAndSort_TicketKeys_SingleMatch(t *testing.T) {
+func TestFilterAndSort_ExcludedTicketKeys_SingleMatchHidesIt(t *testing.T) {
 	matcher := domain.NewTicketKeyMatcher(false)
 	mrs := []domain.MergeRequest{
 		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
 		mrTitled(2, "feat(OD-200): b", "repo/b", 2),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketKeys: []string{ticketOD100}, KeyMatcher: matcher})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludedTicketKeys: []string{ticketOD100}, KeyMatcher: matcher})
 	require.Len(t, got, 1)
-	assert.Equal(t, 1, got[0].IID)
+	assert.Equal(t, 2, got[0].IID)
 }
 
-func TestFilterAndSort_TicketKeys_NoneShowsOnlyUntitled(t *testing.T) {
+func TestFilterAndSort_ExcludeTicketless_HidesUntitledOnly(t *testing.T) {
 	matcher := domain.NewTicketKeyMatcher(false)
 	mrs := []domain.MergeRequest{
 		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
 		mrTitled(2, "chore: cleanup", "repo/b", 2),
 	}
-	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{TicketNone: true, KeyMatcher: matcher})
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{ExcludeTicketless: true, KeyMatcher: matcher})
 	require.Len(t, got, 1)
-	assert.Equal(t, 2, got[0].IID)
+	assert.Equal(t, 1, got[0].IID)
 }
 
-func TestFilterAndSort_TicketKeys_EmptyAndNoneFalseShowsAll(t *testing.T) {
+func TestFilterAndSort_ExcludedTicketKeys_EmptyAndTicketlessNotExcludedShowsAll(t *testing.T) {
 	matcher := domain.NewTicketKeyMatcher(false)
 	mrs := []domain.MergeRequest{
 		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
@@ -354,7 +355,7 @@ func TestFilterAndSort_TicketKeys_EmptyAndNoneFalseShowsAll(t *testing.T) {
 	assert.Len(t, got, 2)
 }
 
-func TestFilterAndSort_TicketKeys_NoneAndKeysCombineWithOr(t *testing.T) {
+func TestFilterAndSort_ExcludedTicketKeys_AndTicketlessCombineWithOr(t *testing.T) {
 	matcher := domain.NewTicketKeyMatcher(false)
 	mrs := []domain.MergeRequest{
 		mrTitled(1, "feat(OD-100): a", "repo/a", 1),
@@ -362,9 +363,10 @@ func TestFilterAndSort_TicketKeys_NoneAndKeysCombineWithOr(t *testing.T) {
 		mrTitled(3, "chore: cleanup", "repo/c", 3),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{
-		TicketKeys: []string{ticketOD100}, TicketNone: true, KeyMatcher: matcher,
+		ExcludedTicketKeys: []string{ticketOD100}, ExcludeTicketless: true, KeyMatcher: matcher,
 	})
-	assert.ElementsMatch(t, []int{1, 3}, ids(got))
+	require.Len(t, got, 1)
+	assert.Equal(t, 2, got[0].IID)
 }
 
 // FilterAndSort — sprint filter

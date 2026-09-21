@@ -16,18 +16,19 @@ type FilterOptions struct {
 	// Phases restricts visible MRs to those whose Phase is true in the map.
 	// nil or empty map means all phases are shown.
 	Phases map[domain.MRPhase]bool
-	// Assignees restricts visible MRs to those whose assignee is in the set.
-	// nil or empty slice means all assignees are shown.
-	Assignees []string
-	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
-	// nil or empty slice means all reviewers are shown.
-	Reviewers []string
-	// TicketKeys restricts visible MRs to those whose extracted issue ID is in the set.
-	// Ignored when TicketNone is true. nil or empty means all issue IDs are shown.
-	TicketKeys []string
-	// TicketNone, when true, additionally shows MRs with no detectable issue ID,
-	// combined with TicketKeys the same way another key would be: by OR.
-	TicketNone bool
+	// ExcludedAssignees hides MRs whose assignee is in the set.
+	// nil or empty slice means every assignee is shown.
+	ExcludedAssignees []string
+	// ExcludedReviewers hides MRs that include any of the given reviewer usernames.
+	// nil or empty slice means every reviewer is shown.
+	ExcludedReviewers []string
+	// ExcludedTicketKeys hides MRs whose extracted issue ID is in the set.
+	// nil or empty means no issue ID is excluded on its own account.
+	ExcludedTicketKeys []string
+	// ExcludeTicketless, when true, additionally hides MRs with no detectable
+	// issue ID, combined with ExcludedTicketKeys the same way another key
+	// would be: by OR.
+	ExcludeTicketless bool
 	// SprintFilter, when true and SprintKeys is non-empty, shows only MRs whose
 	// extracted JIRA key is present in the active sprint.
 	SprintFilter bool
@@ -78,12 +79,12 @@ func filterByPhases(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merg
 }
 
 func filterByAssignees(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
-	if len(opts.Assignees) == 0 {
+	if len(opts.ExcludedAssignees) == 0 {
 		return mrs
 	}
-	assigneeSet := make(map[string]bool, len(opts.Assignees))
-	for _, a := range opts.Assignees {
-		assigneeSet[a] = true
+	excluded := make(map[string]bool, len(opts.ExcludedAssignees))
+	for _, a := range opts.ExcludedAssignees {
+		excluded[a] = true
 	}
 	filtered := make([]domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
@@ -91,7 +92,7 @@ func filterByAssignees(mrs []domain.MergeRequest, opts FilterOptions) []domain.M
 		if effective == "" {
 			effective = mr.Author
 		}
-		if assigneeSet[effective] {
+		if !excluded[effective] {
 			filtered = append(filtered, mr)
 		}
 	}
@@ -99,41 +100,46 @@ func filterByAssignees(mrs []domain.MergeRequest, opts FilterOptions) []domain.M
 }
 
 func filterByReviewers(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
-	if len(opts.Reviewers) == 0 {
+	if len(opts.ExcludedReviewers) == 0 {
 		return mrs
 	}
-	reviewerSet := make(map[string]bool, len(opts.Reviewers))
-	for _, r := range opts.Reviewers {
-		reviewerSet[r] = true
+	excluded := make(map[string]bool, len(opts.ExcludedReviewers))
+	for _, r := range opts.ExcludedReviewers {
+		excluded[r] = true
 	}
 	filtered := make([]domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
+		hasExcludedReviewer := false
 		for _, r := range mr.Reviewers {
-			if reviewerSet[r.Username] {
-				filtered = append(filtered, mr)
+			if excluded[r.Username] {
+				hasExcludedReviewer = true
 				break
 			}
+		}
+		if !hasExcludedReviewer {
+			filtered = append(filtered, mr)
 		}
 	}
 	return filtered
 }
 
-// filterByTicket applies the Issue ID filter: TicketKeys and TicketNone
-// combine with OR, same as unioning another key into the set.
+// filterByTicket applies the Issue ID filter: ExcludedTicketKeys and
+// ExcludeTicketless combine with OR, same as unioning another key into the set.
 func filterByTicket(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
-	if !opts.TicketNone && len(opts.TicketKeys) == 0 {
+	if !opts.ExcludeTicketless && len(opts.ExcludedTicketKeys) == 0 {
 		return mrs
 	}
-	keySet := make(map[string]bool, len(opts.TicketKeys))
-	for _, k := range opts.TicketKeys {
-		keySet[k] = true
+	excluded := make(map[string]bool, len(opts.ExcludedTicketKeys))
+	for _, k := range opts.ExcludedTicketKeys {
+		excluded[k] = true
 	}
 	filtered := make([]domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
 		k := opts.KeyMatcher.ExtractFromTitle(mr.Title)
-		if (k == "" && opts.TicketNone) || (k != "" && keySet[k]) {
-			filtered = append(filtered, mr)
+		if (k == "" && opts.ExcludeTicketless) || (k != "" && excluded[k]) {
+			continue
 		}
+		filtered = append(filtered, mr)
 	}
 	return filtered
 }

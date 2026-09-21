@@ -1092,7 +1092,7 @@ func (m *Model) openSettings(initialTab settingsTab) {
 	m.settings = newSettingsWidget(
 		themes,
 		authors, reviewers,
-		tickets, ticketNoneCount, len(m.allMRs),
+		tickets, ticketNoneCount,
 		m.userMap,
 		m.filter,
 		viewState,
@@ -1905,18 +1905,18 @@ func (m *Model) applyMRFilter() {
 		src = filtered
 	}
 	mrs := mrsvc.FilterAndSort(src, mrsvc.FilterOptions{
-		MyView:       m.viewMode == domain.ViewMine,
-		CurrentUser:  m.currentUser,
-		SortField:    m.sortField.stateKey(),
-		SortDesc:     m.sortDesc,
-		Phases:       m.filter.Phases,
-		Assignees:    m.filter.Assignees,
-		Reviewers:    m.filter.Reviewers,
-		TicketKeys:   m.filter.TicketKeys,
-		TicketNone:   m.filter.TicketNone,
-		SprintFilter: m.sprintFilterActive,
-		SprintKeys:   m.sprintIssueKeys,
-		KeyMatcher:   m.keyMatcher,
+		MyView:             m.viewMode == domain.ViewMine,
+		CurrentUser:        m.currentUser,
+		SortField:          m.sortField.stateKey(),
+		SortDesc:           m.sortDesc,
+		Phases:             m.filter.Phases,
+		ExcludedAssignees:  m.filter.ExcludedAssignees,
+		ExcludedReviewers:  m.filter.ExcludedReviewers,
+		ExcludedTicketKeys: m.filter.ExcludedTicketKeys,
+		ExcludeTicketless:  m.filter.ExcludeTicketless,
+		SprintFilter:       m.sprintFilterActive,
+		SprintKeys:         m.sprintIssueKeys,
+		KeyMatcher:         m.keyMatcher,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
@@ -1951,8 +1951,8 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 }
 
 func (m *Model) isFilterActive() bool {
-	return len(m.filter.Phases) > 0 || len(m.filter.Assignees) > 0 || len(m.filter.Reviewers) > 0 ||
-		len(m.filter.TicketKeys) > 0 || m.filter.TicketNone || m.sprintFilterActive
+	return len(m.filter.Phases) > 0 || len(m.filter.ExcludedAssignees) > 0 || len(m.filter.ExcludedReviewers) > 0 ||
+		len(m.filter.ExcludedTicketKeys) > 0 || m.filter.ExcludeTicketless || m.sprintFilterActive
 }
 
 func (m *Model) saveState() {
