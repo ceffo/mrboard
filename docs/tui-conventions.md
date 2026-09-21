@@ -243,14 +243,18 @@ type Styles struct {
     // Status / duration
     DurationUrgent, DurationWarning, DurationOk lip.Style
 
+    // Header
+    Header, HeaderTitle, HeaderStats                  lip.Style
+    HeaderFilterBar, HeaderFilterSep                  lip.Style
+    HeaderFilterScope, HeaderFilterReduce             lip.Style
+    HeaderCountShown, HeaderCountTotal                lip.Style
+
     // Misc
-    Header, HeaderTitle, HeaderStats lip.Style
-    Footer, FooterVersion            lip.Style
-    EmptyColumn                      lip.Style
-    ErrorMsg                         lip.Style
-    FilterActive                     lip.Style
-    ScrollIndicator                  lip.Style
-    MRNumberBang                     lip.Style
+    Footer, FooterVersion lip.Style
+    EmptyColumn           lip.Style
+    ErrorMsg              lip.Style
+    ScrollIndicator       lip.Style
+    MRNumberBang          lip.Style
 }
 ```
 

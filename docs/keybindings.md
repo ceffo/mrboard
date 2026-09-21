@@ -199,11 +199,34 @@ log of shadowed pairs so intentional shadowing stays visible in review.
 
 ## Header state indicators
 
-Sort mode and view mode move out of key labels into the header stats area:
+State that a keybinding changes is reported by the header, never by the key's own
+label. The header has three zones, each with one job:
 
 ```
-                    mrboard                    sort repo·id↑ • team • Total:12
+  6/26 mrs · me · sprint · asg×3          mrboard              just now  sort age↓
+  └──────── filter bar ────────┘          └ identity ┘         └── board chrome ──┘
 ```
+
+| Zone | Owns |
+|---|---|
+| left | every active filter, and the MR count they produce |
+| centre | app or view identity; never carries state |
+| right | snapshot age, refresh spinner, sort mode |
+
+The filter bar uses two segment shapes. A bare word is a *scope* the user is standing
+in and toggles (`me` for `tab`, `sprint` for `S`). A `tag×n` segment counts how many
+values an exclusion list hides (`col`, `asg`, `rev`, `tkt` — all set from the Filters
+tab). Names never appear: the bar says a dimension is narrowing the board and by how
+much, and the Filters tab answers which.
+
+The count leads the bar and is never dropped. With nothing filtered it reads `26 mrs`
+on the plain header background; as soon as any filter is on it becomes `6/26 mrs` on a
+tinted strip — the slash is what signals that filtering is active at all.
+
+Pieces are dropped whole as the terminal narrows, never truncated, in this order:
+title, sort, `tkt`, `rev`, `col`, `asg`, age, `sprint`, `me`. Anything dropped from the
+bar is counted by a trailing `+n`, and the refresh spinner outlives the age label it
+belongs to.
 
 ## File layout
 

@@ -31,7 +31,6 @@ type Styles struct {
 	DurationWarning             lip.Style
 	EmptyColumn                 lip.Style
 	ErrorMsg                    lip.Style
-	FilterActive                lip.Style
 	Footer                      lip.Style
 	FooterKey                   lip.Style
 	FooterSep                   lip.Style
@@ -44,6 +43,12 @@ type Styles struct {
 	Header                      lip.Style
 	HeaderStats                 lip.Style
 	HeaderTitle                 lip.Style
+	HeaderCountShown            lip.Style // visible-MR numerator in the filter bar
+	HeaderCountTotal            lip.Style // "/total mrs" denominator and the "+N" overflow marker
+	HeaderFilterBar             lip.Style // background strip behind the whole filter bar
+	HeaderFilterReduce          lip.Style // exclusion segments: col×N, asg×N, rev×N, tkt×N
+	HeaderFilterScope           lip.Style // scope segments the user toggles: me, sprint
+	HeaderFilterSep             lip.Style // separator between filter-bar segments
 	MRNumberBang                lip.Style
 	PillApproved                lip.Style
 	PillCommented               lip.Style
@@ -91,6 +96,18 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Bold(true),
 		HeaderStats: lip.NewStyle().
 			Foreground(c(FgMedium)),
+		HeaderFilterBar: lip.NewStyle().
+			Background(c(BgElevated)),
+		HeaderFilterScope: lip.NewStyle().
+			Foreground(c(Accent)).Bold(true),
+		HeaderFilterReduce: lip.NewStyle().
+			Foreground(c(Warning)),
+		HeaderFilterSep: lip.NewStyle().
+			Foreground(c(FgLow)),
+		HeaderCountShown: lip.NewStyle().
+			Foreground(c(FgHigh)).Bold(true),
+		HeaderCountTotal: lip.NewStyle().
+			Foreground(c(FgLow)),
 		Footer: lip.NewStyle().
 			Foreground(c(FgLow)),
 		FooterKey: lip.NewStyle().
@@ -159,7 +176,6 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		PopupItemMarkerOn:   lip.NewStyle().Foreground(c(Success)).Bold(true),
 		PopupItemMarkerOff:  lip.NewStyle().Foreground(c(FgLow)),
 		PopupHint:           lip.NewStyle().Foreground(c(FgLow)),
-		FilterActive:        lip.NewStyle().Foreground(c(Warning)).Bold(true),
 		ReviewerName:        lip.NewStyle().Foreground(c(FgMedium)),
 		ApproverName:        lip.NewStyle().Foreground(c(ColorApprover)).Bold(true),
 		PillBracket:         lip.NewStyle().Foreground(c(FgLow)),

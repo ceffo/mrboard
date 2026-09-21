@@ -439,9 +439,6 @@ func New(
 			WithMinWidth(toastMinWidth).
 			WithQueueDepth(toastQueueDepth),
 	}
-	if viewMode == domain.ViewMine {
-		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
-	}
 	m.header.SetSort(sortLabel(sf, st.SortDesc))
 
 	// Boot from the cached snapshot, at any age, so the board is interactive
@@ -968,10 +965,8 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case m.keys.ToggleView.Match(msg):
 		if m.viewMode == domain.ViewMine {
 			m.viewMode = domain.ViewAll
-			m.header.SetTitle("mrboard")
 		} else {
 			m.viewMode = domain.ViewMine
-			m.header.SetTitle("mrboard — @" + m.currentUser)
 		}
 		m.applyMRFilter()
 		m.saveState()
@@ -1112,15 +1107,9 @@ func (m *Model) openSettings(initialTab settingsTab) {
 func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd) {
 	m.filter = msg.Filter
 
-	wantMine := msg.ViewMine && m.keys.ToggleView.Enabled()
-	if wantMine != (m.viewMode == domain.ViewMine) {
-		if wantMine {
-			m.viewMode = domain.ViewMine
-			m.header.SetTitle("mrboard — @" + m.currentUser)
-		} else {
-			m.viewMode = domain.ViewAll
-			m.header.SetTitle("mrboard")
-		}
+	m.viewMode = domain.ViewAll
+	if msg.ViewMine && m.keys.ToggleView.Enabled() {
+		m.viewMode = domain.ViewMine
 	}
 	m.sprintFilterActive = msg.SprintFilter && m.keys.Sprint.Enabled()
 
@@ -1921,8 +1910,34 @@ func (m *Model) applyMRFilter() {
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
 	m.header.SetMRs(displayMRs)
-	m.header.SetFilterActive(m.isFilterActive())
-	m.header.SetSprintFilterActive(m.sprintFilterActive)
+	m.header.SetFilterState(len(src), m.headerFilterState())
+}
+
+// headerFilterState summarizes the active filters for the header bar. Counts
+// are of values hidden, not of values kept: the bar reports what the board is
+// withholding. The denominator paired with it is the population the filters ran
+// against — src, not allMRs — so that every segment on the bar accounts for
+// part of the gap, and the reviewer-MR fetch scope (which grows the population
+// rather than trimming it) stays out of the arithmetic.
+func (m *Model) headerFilterState() headerFilterState {
+	s := headerFilterState{
+		Mine:      m.viewMode == domain.ViewMine,
+		Sprint:    m.sprintFilterActive,
+		Assignees: len(m.filter.ExcludedAssignees),
+		Reviewers: len(m.filter.ExcludedReviewers),
+		Tickets:   len(m.filter.ExcludedTicketKeys),
+	}
+	// A nil Phases map means every phase is shown; a non-nil one always carries
+	// all four, so the hidden count is however many are set false.
+	for _, shown := range m.filter.Phases {
+		if !shown {
+			s.Columns++
+		}
+	}
+	if m.filter.ExcludeTicketless {
+		s.Tickets++
+	}
+	return s
 }
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
@@ -1948,11 +1963,6 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 		return nil
 	}
 	return m.ticketIndex[issueKey]
-}
-
-func (m *Model) isFilterActive() bool {
-	return len(m.filter.Phases) > 0 || len(m.filter.ExcludedAssignees) > 0 || len(m.filter.ExcludedReviewers) > 0 ||
-		len(m.filter.ExcludedTicketKeys) > 0 || m.filter.ExcludeTicketless || m.sprintFilterActive
 }
 
 func (m *Model) saveState() {
