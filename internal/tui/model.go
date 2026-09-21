@@ -439,9 +439,6 @@ func New(
 			WithMinWidth(toastMinWidth).
 			WithQueueDepth(toastQueueDepth),
 	}
-	if viewMode == domain.ViewMine {
-		m.header.SetTitle("mrboard — @" + cfg.CurrentUser)
-	}
 	m.header.SetSort(sortLabel(sf, st.SortDesc))
 
 	// Boot from the cached snapshot, at any age, so the board is interactive
@@ -968,10 +965,8 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case m.keys.ToggleView.Match(msg):
 		if m.viewMode == domain.ViewMine {
 			m.viewMode = domain.ViewAll
-			m.header.SetTitle("mrboard")
 		} else {
 			m.viewMode = domain.ViewMine
-			m.header.SetTitle("mrboard — @" + m.currentUser)
 		}
 		m.applyMRFilter()
 		m.saveState()
@@ -1082,11 +1077,20 @@ func (m *Model) openSettings(initialTab settingsTab) {
 		themes = []string{m.themeName}
 	}
 	authors, reviewers := BuildAuthorsReviewers(m.allMRs)
+	tickets, ticketNoneCount := BuildTicketKeys(m.allMRs, m.keyMatcher)
+	viewState := filterViewWidget{
+		myMRsOnly:   m.viewMode == domain.ViewMine,
+		myMRsAvail:  m.keys.ToggleView.Enabled(),
+		sprint:      m.sprintFilterActive,
+		sprintAvail: m.keys.Sprint.Enabled(),
+	}
 	m.settings = newSettingsWidget(
 		themes,
 		authors, reviewers,
+		tickets, ticketNoneCount,
 		m.userMap,
 		m.filter,
+		viewState,
 		m.includeReviewerMRs,
 		m.sortField,
 		m.sortDesc,
@@ -1095,12 +1099,20 @@ func (m *Model) openSettings(initialTab settingsTab) {
 		m.settingsKeys,
 		initialTab,
 	)
+	m.settings.SetSize(m.width, m.height)
 	m.overlay.openOverlay(overlayKindSettings)
 }
 
 // handleSettingsApplied applies all live changes from the settings panel.
 func (m Model) handleSettingsApplied(msg SettingsAppliedMsg) (tea.Model, tea.Cmd) {
 	m.filter = msg.Filter
+
+	m.viewMode = domain.ViewAll
+	if msg.ViewMine && m.keys.ToggleView.Enabled() {
+		m.viewMode = domain.ViewMine
+	}
+	m.sprintFilterActive = msg.SprintFilter && m.keys.Sprint.Enabled()
+
 	reviewerFetchNeeded := msg.IncludeReviewerMRs && !m.includeReviewerMRs && !m.reviewerMRsInStore
 	m.includeReviewerMRs = msg.IncludeReviewerMRs
 
@@ -1146,6 +1158,9 @@ func (m *Model) resizeBoard() {
 	}
 	if m.overlay.isDiffView() {
 		m.diffView.SetSize(m.width, m.height-chromeHeight)
+	}
+	if m.overlay.isSettings() {
+		m.settings.SetSize(m.width, m.height)
 	}
 }
 
@@ -1879,22 +1894,50 @@ func (m *Model) applyMRFilter() {
 		src = filtered
 	}
 	mrs := mrsvc.FilterAndSort(src, mrsvc.FilterOptions{
-		MyView:       m.viewMode == domain.ViewMine,
-		CurrentUser:  m.currentUser,
-		SortField:    m.sortField.stateKey(),
-		SortDesc:     m.sortDesc,
-		Phases:       m.filter.Phases,
-		Assignees:    m.filter.Assignees,
-		Reviewers:    m.filter.Reviewers,
-		SprintFilter: m.sprintFilterActive,
-		SprintKeys:   m.sprintIssueKeys,
-		KeyMatcher:   m.keyMatcher,
+		MyView:             m.viewMode == domain.ViewMine,
+		CurrentUser:        m.currentUser,
+		SortField:          m.sortField.stateKey(),
+		SortDesc:           m.sortDesc,
+		Phases:             m.filter.Phases,
+		ExcludedAssignees:  m.filter.ExcludedAssignees,
+		ExcludedReviewers:  m.filter.ExcludedReviewers,
+		ExcludedTicketKeys: m.filter.ExcludedTicketKeys,
+		ExcludeTicketless:  m.filter.ExcludeTicketless,
+		SprintFilter:       m.sprintFilterActive,
+		SprintKeys:         m.sprintIssueKeys,
+		KeyMatcher:         m.keyMatcher,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
 	m.header.SetMRs(displayMRs)
-	m.header.SetFilterActive(m.isFilterActive())
-	m.header.SetSprintFilterActive(m.sprintFilterActive)
+	m.header.SetFilterState(len(src), m.headerFilterState())
+}
+
+// headerFilterState summarizes the active filters for the header bar. Counts
+// are of values hidden, not of values kept: the bar reports what the board is
+// withholding. The denominator paired with it is the population the filters ran
+// against — src, not allMRs — so that every segment on the bar accounts for
+// part of the gap, and the reviewer-MR fetch scope (which grows the population
+// rather than trimming it) stays out of the arithmetic.
+func (m *Model) headerFilterState() headerFilterState {
+	s := headerFilterState{
+		Mine:      m.viewMode == domain.ViewMine,
+		Sprint:    m.sprintFilterActive,
+		Assignees: len(m.filter.ExcludedAssignees),
+		Reviewers: len(m.filter.ExcludedReviewers),
+		Tickets:   len(m.filter.ExcludedTicketKeys),
+	}
+	// A nil Phases map means every phase is shown; a non-nil one always carries
+	// all four, so the hidden count is however many are set false.
+	for _, shown := range m.filter.Phases {
+		if !shown {
+			s.Columns++
+		}
+	}
+	if m.filter.ExcludeTicketless {
+		s.Tickets++
+	}
+	return s
 }
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
@@ -1920,11 +1963,6 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 		return nil
 	}
 	return m.ticketIndex[issueKey]
-}
-
-func (m *Model) isFilterActive() bool {
-	return len(m.filter.Phases) > 0 || len(m.filter.Assignees) > 0 || len(m.filter.Reviewers) > 0 ||
-		m.sprintFilterActive
 }
 
 func (m *Model) saveState() {

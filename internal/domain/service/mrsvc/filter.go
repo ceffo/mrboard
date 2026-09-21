@@ -16,12 +16,19 @@ type FilterOptions struct {
 	// Phases restricts visible MRs to those whose Phase is true in the map.
 	// nil or empty map means all phases are shown.
 	Phases map[domain.MRPhase]bool
-	// Assignees restricts visible MRs to those whose assignee is in the set.
-	// nil or empty slice means all assignees are shown.
-	Assignees []string
-	// Reviewers restricts visible MRs to those that include any of the given reviewer usernames.
-	// nil or empty slice means all reviewers are shown.
-	Reviewers []string
+	// ExcludedAssignees hides MRs whose assignee is in the set.
+	// nil or empty slice means every assignee is shown.
+	ExcludedAssignees []string
+	// ExcludedReviewers hides MRs that include any of the given reviewer usernames.
+	// nil or empty slice means every reviewer is shown.
+	ExcludedReviewers []string
+	// ExcludedTicketKeys hides MRs whose extracted issue ID is in the set.
+	// nil or empty means no issue ID is excluded on its own account.
+	ExcludedTicketKeys []string
+	// ExcludeTicketless, when true, additionally hides MRs with no detectable
+	// issue ID, combined with ExcludedTicketKeys the same way another key
+	// would be: by OR.
+	ExcludeTicketless bool
 	// SprintFilter, when true and SprintKeys is non-empty, shows only MRs whose
 	// extracted JIRA key is present in the active sprint.
 	SprintFilter bool
@@ -36,67 +43,118 @@ type FilterOptions struct {
 // FilterAndSort applies all active filters and then sorts the slice.
 // It always returns a new slice; mrs is never mutated.
 func FilterAndSort(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
-	if opts.MyView && opts.CurrentUser != "" {
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			if mrIsRelevantToUser(mr, opts.CurrentUser) {
-				filtered = append(filtered, mr)
-			}
-		}
-		mrs = filtered
-	}
-	if len(opts.Phases) > 0 {
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			if opts.Phases[mr.Phase] {
-				filtered = append(filtered, mr)
-			}
-		}
-		mrs = filtered
-	}
-	if len(opts.Assignees) > 0 {
-		assigneeSet := make(map[string]bool, len(opts.Assignees))
-		for _, a := range opts.Assignees {
-			assigneeSet[a] = true
-		}
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			effective := mr.Assignee
-			if effective == "" {
-				effective = mr.Author
-			}
-			if assigneeSet[effective] {
-				filtered = append(filtered, mr)
-			}
-		}
-		mrs = filtered
-	}
-	if len(opts.Reviewers) > 0 {
-		reviewerSet := make(map[string]bool, len(opts.Reviewers))
-		for _, r := range opts.Reviewers {
-			reviewerSet[r] = true
-		}
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			for _, r := range mr.Reviewers {
-				if reviewerSet[r.Username] {
-					filtered = append(filtered, mr)
-					break
-				}
-			}
-		}
-		mrs = filtered
-	}
-	if opts.SprintFilter && len(opts.SprintKeys) > 0 {
-		filtered := make([]domain.MergeRequest, 0, len(mrs))
-		for _, mr := range mrs {
-			if k := opts.KeyMatcher.ExtractFromTitle(mr.Title); k != "" && opts.SprintKeys[k] {
-				filtered = append(filtered, mr)
-			}
-		}
-		mrs = filtered
-	}
+	mrs = filterByMyView(mrs, opts)
+	mrs = filterByPhases(mrs, opts)
+	mrs = filterByAssignees(mrs, opts)
+	mrs = filterByReviewers(mrs, opts)
+	mrs = filterByTicket(mrs, opts)
+	mrs = filterBySprint(mrs, opts)
 	return sortedMRs(mrs, opts.SortField, opts.SortDesc)
+}
+
+func filterByMyView(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if !opts.MyView || opts.CurrentUser == "" {
+		return mrs
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if mrIsRelevantToUser(mr, opts.CurrentUser) {
+			filtered = append(filtered, mr)
+		}
+	}
+	return filtered
+}
+
+func filterByPhases(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if len(opts.Phases) == 0 {
+		return mrs
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if opts.Phases[mr.Phase] {
+			filtered = append(filtered, mr)
+		}
+	}
+	return filtered
+}
+
+func filterByAssignees(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if len(opts.ExcludedAssignees) == 0 {
+		return mrs
+	}
+	excluded := make(map[string]bool, len(opts.ExcludedAssignees))
+	for _, a := range opts.ExcludedAssignees {
+		excluded[a] = true
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		effective := mr.Assignee
+		if effective == "" {
+			effective = mr.Author
+		}
+		if !excluded[effective] {
+			filtered = append(filtered, mr)
+		}
+	}
+	return filtered
+}
+
+func filterByReviewers(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if len(opts.ExcludedReviewers) == 0 {
+		return mrs
+	}
+	excluded := make(map[string]bool, len(opts.ExcludedReviewers))
+	for _, r := range opts.ExcludedReviewers {
+		excluded[r] = true
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		hasExcludedReviewer := false
+		for _, r := range mr.Reviewers {
+			if excluded[r.Username] {
+				hasExcludedReviewer = true
+				break
+			}
+		}
+		if !hasExcludedReviewer {
+			filtered = append(filtered, mr)
+		}
+	}
+	return filtered
+}
+
+// filterByTicket applies the Issue ID filter: ExcludedTicketKeys and
+// ExcludeTicketless combine with OR, same as unioning another key into the set.
+func filterByTicket(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if !opts.ExcludeTicketless && len(opts.ExcludedTicketKeys) == 0 {
+		return mrs
+	}
+	excluded := make(map[string]bool, len(opts.ExcludedTicketKeys))
+	for _, k := range opts.ExcludedTicketKeys {
+		excluded[k] = true
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		k := opts.KeyMatcher.ExtractFromTitle(mr.Title)
+		if (k == "" && opts.ExcludeTicketless) || (k != "" && excluded[k]) {
+			continue
+		}
+		filtered = append(filtered, mr)
+	}
+	return filtered
+}
+
+func filterBySprint(mrs []domain.MergeRequest, opts FilterOptions) []domain.MergeRequest {
+	if !opts.SprintFilter || len(opts.SprintKeys) == 0 {
+		return mrs
+	}
+	filtered := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if k := opts.KeyMatcher.ExtractFromTitle(mr.Title); k != "" && opts.SprintKeys[k] {
+			filtered = append(filtered, mr)
+		}
+	}
+	return filtered
 }
 
 // mrIsRelevantToUser reports whether an MR should appear in "my view".

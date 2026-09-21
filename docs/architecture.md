@@ -174,7 +174,7 @@ mrboard/
       command_argv.go      # Resolves external-command argv templates against MR metadata (adr/0004)
       jira_icons.go        # Issue-type icon lookup for JIRA-linked MR titles
       footer.go            # Help/keybinding bar
-      header.go            # Header bar (title + stats)
+      header.go            # Header bar (filter bar + title + board chrome)
       spinner.go           # Loading overlay
       state.go             # Shared TUI state types
       viewport.go          # Viewport helper

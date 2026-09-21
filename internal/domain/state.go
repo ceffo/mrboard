@@ -3,13 +3,28 @@ package domain
 import "time"
 
 // FilterCriteria is the persisted filter state. Zero value means no filtering.
+//
+// Assignee/Reviewer/Issue-ID selection is exclusion-based: every value is
+// shown by default, and a list names what to hide. This is the inverse of
+// an older inclusion-based format (an "assignees"/"reviewers"/"ticket_keys"
+// list once meant "show only these") — a state.yaml written by that version
+// uses the same YAML shape under different keys, so it simply fails to
+// populate these fields and any previously-active filter resets to "show
+// all" rather than being silently reinterpreted as its own opposite.
 type FilterCriteria struct {
 	// Phases is nil/empty = show all phases; otherwise only listed phases are shown.
 	Phases map[MRPhase]bool `yaml:"phases,omitempty"`
-	// Assignees is nil/empty = show all assignees.
-	Assignees []string `yaml:"assignees,omitempty"`
-	// Reviewers is nil/empty = show all reviewers.
-	Reviewers []string `yaml:"reviewers,omitempty"`
+	// ExcludedAssignees is nil/empty = show every assignee; otherwise MRs
+	// assigned to a listed username are hidden.
+	ExcludedAssignees []string `yaml:"excluded_assignees,omitempty"`
+	// ExcludedReviewers is nil/empty = show every reviewer; otherwise MRs
+	// that have a listed username among their reviewers are hidden.
+	ExcludedReviewers []string `yaml:"excluded_reviewers,omitempty"`
+	// ExcludedTicketKeys is nil/empty = show every issue ID; otherwise MRs
+	// whose extracted issue ID is listed are hidden.
+	ExcludedTicketKeys []string `yaml:"excluded_ticket_keys,omitempty"`
+	// ExcludeTicketless, when true, hides MRs with no detectable issue ID.
+	ExcludeTicketless bool `yaml:"exclude_ticketless,omitempty"`
 }
 
 // ViewMode controls whether the board shows all MRs or only the current user's.

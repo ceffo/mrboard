@@ -336,3 +336,39 @@ func TestModel_FetchSwap_KeepsSameMRSelected(t *testing.T) {
 	require.NotNil(t, m2.board.FocusedMR())
 	assert.Equal(t, want.IID, m2.board.FocusedMR().IID)
 }
+
+func TestModel_HeaderFilterState_CountsHiddenValuesPerDimension(t *testing.T) {
+	m := &Model{
+		viewMode:           domain.ViewMine,
+		sprintFilterActive: true,
+		filter: domain.FilterCriteria{
+			Phases: map[domain.MRPhase]bool{
+				domain.PhaseDraft:             false,
+				domain.PhaseNeedsReview:       true,
+				domain.PhaseNeedsAuthorAction: true,
+				domain.PhaseReadyToMerge:      false,
+			},
+			ExcludedAssignees:  []string{"a", "b", "c"},
+			ExcludedReviewers:  []string{"d", "e"},
+			ExcludedTicketKeys: []string{"OD-1", "OD-2"},
+			ExcludeTicketless:  true,
+		},
+	}
+
+	assert.Equal(t, headerFilterState{
+		Mine:      true,
+		Sprint:    true,
+		Columns:   2,
+		Assignees: 3,
+		Reviewers: 2,
+		Tickets:   3, // two excluded keys plus "no ID"
+	}, m.headerFilterState())
+}
+
+func TestModel_HeaderFilterState_ZeroFilterIsInactive(t *testing.T) {
+	m := &Model{viewMode: domain.ViewAll}
+
+	s := m.headerFilterState()
+	assert.False(t, s.active(), "an unfiltered board must render no filter bar")
+	assert.Zero(t, s.Columns, "a nil Phases map means every phase is shown")
+}
