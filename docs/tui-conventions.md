@@ -139,7 +139,7 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `overlay_router.go` | `overlayKind` — which exclusive overlay owns key input and rendering focus |
 | `jira_icons.go` | Issue-type icon lookup for JIRA-linked MR titles |
 | `footer.go` | Footer bar — priority-filled keybinding hints, with `version.go`'s segment pinned right |
-| `header.go` | Header bar — title + MR stats |
+| `header.go` | Header bar — filter bar, title, and board chrome, each in its own zone (docs/adr/0012-header-filter-state.md) |
 | `spinner.go` | Loading overlay |
 | `state.go` | Shared TUI state types |
 | `viewport.go` | Viewport helper |

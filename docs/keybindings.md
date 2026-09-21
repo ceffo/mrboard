@@ -200,7 +200,8 @@ log of shadowed pairs so intentional shadowing stays visible in review.
 ## Header state indicators
 
 State that a keybinding changes is reported by the header, never by the key's own
-label. The header has three zones, each with one job:
+label. The header has three zones, each with one job — see
+[adr/0012-header-filter-state.md](adr/0012-header-filter-state.md) for why:
 
 ```
   6/26 mrs · me · sprint · asg×3          mrboard              just now  sort age↓
