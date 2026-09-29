@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+
+	"charm.land/huh/v2"
 
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	"github.com/ceffo/mrboard/internal/selfupdate"
@@ -47,6 +50,72 @@ func runUpgrade(out io.Writer) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run %q: %w", selfupdate.Command, err)
 	}
-	fmt.Fprintln(out, "done — restart mrboard to use the new version")
+	fmt.Fprintln(out, selfupdate.SuccessMessage)
 	return nil
+}
+
+// checkAndOfferUpdate runs the launch-time update check (root.go's RunE,
+// docs/adr/0010-self-update-check.md): before the TUI starts, check for a
+// newer release and, when interactive is true, offer to install it via
+// confirm. It returns the check result so the caller can seed the TUI's own
+// badge without forcing a second live check moments later, and whether it
+// already ran the upgrade — the caller must not launch the TUI in that case,
+// since the process in memory would still be the old binary. interactive is
+// decided by the caller (an isatty check on the real stdin), and confirm is
+// injected (production passes confirmUpdate, its huh dialog), so this
+// function stays testable without a real terminal.
+//
+// A disabled checker or a non-release build (selfupdate.DevVersion) skips the
+// network call entirely, matching the version widget's own gating. A check
+// failure is logged and swallowed rather than blocking launch: the check is a
+// background nicety, not something the user asked for directly the way
+// `mrboard --update` is.
+func checkAndOfferUpdate(
+	ctx context.Context, checker updatesvc.UpdateChecker, version string, interactive bool,
+	confirm func(version, latest string) bool, out io.Writer, logger *slog.Logger,
+) (updatesvc.Info, bool) {
+	if checker == nil || version == selfupdate.DevVersion {
+		return updatesvc.Info{}, false
+	}
+
+	info, err := checker.CheckForUpdate(ctx, version, updatesvc.CheckOptions{Force: true})
+	if err != nil {
+		logger.Debug("update check failed", "err", err)
+		return updatesvc.Info{}, false
+	}
+	if !info.Available || !interactive {
+		return info, false
+	}
+
+	if !confirm(version, info.Latest) {
+		return info, false
+	}
+
+	if err := runUpgrade(out); err != nil {
+		fmt.Fprintf(out, "update failed: %s\n", err)
+		return info, false
+	}
+	return info, true
+}
+
+// confirmUpdate shows huh's interactive Yes/No dialog offering to install the
+// available update. Cancelling (Esc/Ctrl-C, huh.ErrUserAborted) counts as
+// declining, same as answering no.
+func confirmUpdate(version, latest string) bool {
+	var yes bool
+	if err := updateConfirmField(version, latest).Value(&yes).Run(); err != nil {
+		return false
+	}
+	return yes
+}
+
+// updateConfirmField builds the confirm prompt offering to install an
+// update. Split out from confirmUpdate so its wording and default can be
+// verified deterministically (Confirm.RunAccessible) without a real terminal.
+func updateConfirmField(version, latest string) *huh.Confirm {
+	return huh.NewConfirm().
+		Title(fmt.Sprintf("mrboard %s → %s is available", version, latest)).
+		Description(fmt.Sprintf("Run `%s`?", selfupdate.Command)).
+		Affirmative("Update").
+		Negative("Not now")
 }

@@ -4,8 +4,10 @@ package mrboardcmd
 import (
 	"context"
 	"errors"
+	"os"
 
 	"charm.land/fang/v2"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/ceffo/mrboard/internal/config"
@@ -94,11 +96,18 @@ func buildRootCmd() *cobra.Command {
 			if updateOnly {
 				return runSelfUpdate(cmd.Context(), c.UpdateChecker, Version, cmd.OutOrStdout())
 			}
-			opts := tui.Options{
-				ThemeOverride: themeOverride,
-				ModeOverride:  modeOverride,
+			info, updated := checkAndOfferUpdate(
+				cmd.Context(), c.UpdateChecker, Version, isatty.IsTerminal(os.Stdin.Fd()),
+				confirmUpdate, cmd.OutOrStdout(), c.Logger)
+			if updated {
+				return nil
 			}
-			return execBoard(cmd.Context(), c, Version, opts)
+			opts := tui.Options{
+				ThemeOverride:    themeOverride,
+				ModeOverride:     modeOverride,
+				PrecheckedUpdate: &info,
+			}
+			return execBoard(cmd.Context(), c, Version, opts, cmd.OutOrStdout())
 		},
 	}
 

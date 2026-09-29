@@ -117,7 +117,7 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		FooterVersion: lip.NewStyle().
 			Foreground(c(FgLow)),
 		FooterUpdateBadge: lip.NewStyle().
-			Foreground(c(Warning)),
+			Foreground(c(Danger)).Bold(true),
 		HelpTitle:    lip.NewStyle().Bold(true).Foreground(c(Accent)),
 		HelpSection:  lip.NewStyle().Bold(true).Foreground(c(FgMedium)),
 		HelpKey:      lip.NewStyle().Foreground(c(Accent)),

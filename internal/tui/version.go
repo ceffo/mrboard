@@ -14,11 +14,6 @@ import (
 	"github.com/ceffo/mrboard/internal/selfupdate"
 )
 
-// devVersion is the version string of a build not produced by goreleaser.
-// Such a build has no meaningful "latest release" to compare against, so it
-// never checks (docs/adr/0010-self-update-check.md).
-const devVersion = "dev"
-
 // updateCheckResultMsg carries the result of one release check.
 type updateCheckResultMsg struct {
 	info updatesvc.Info
@@ -33,6 +28,12 @@ type selfUpdateRequestedMsg struct{}
 
 // selfUpdateResultMsg carries the outcome of the self-update run.
 type selfUpdateResultMsg struct{ err error }
+
+// selfUpdateSucceededMsg asks the root model to quit and print message once
+// the terminal is restored: the running process is still the old binary even
+// after a successful update, so mrboard cannot simply resume as if nothing
+// happened (docs/adr/0010-self-update-check.md).
+type selfUpdateSucceededMsg struct{ message string }
 
 // versionWidget owns everything about the running build's version: rendering
 // it into the footer, checking whether a newer release exists, enabling the
@@ -49,7 +50,17 @@ type versionWidget struct {
 	action   *Action // the update keybinding, enabled only while available
 	baseCtx  context.Context
 	logger   *slog.Logger
+
+	// precheckedInfo, when set, is the result of a check already performed
+	// before the TUI started (root.go, docs/adr/0010-self-update-check.md).
+	// Init() applies it directly instead of forcing a second live check
+	// moments after the first.
+	precheckedInfo *updatesvc.Info
 }
+
+// setPrecheckedInfo records a check performed before the TUI started. Must be
+// called before Init().
+func (w *versionWidget) setPrecheckedInfo(info *updatesvc.Info) { w.precheckedInfo = info }
 
 // newVersionWidget returns the widget for the given build version. checker is
 // nil when the update check is disabled or unconfigured, and interval is the
@@ -80,11 +91,16 @@ func newVersionWidget(
 // SetStyles updates the widget's style set.
 func (w *versionWidget) SetStyles(s Styles) { w.styles = s }
 
-// Init fires the launch check and starts the recurring one. The launch check
-// forces a live lookup: a cache entry written by a previous run says what was
-// true then, and the user opening mrboard is exactly when a stale badge (or a
-// missing one) is most visible.
+// Init applies a precheck done before the TUI started if there is one,
+// otherwise forces a live lookup itself: a cache entry written by a previous
+// run says what was true then, and the user opening mrboard is exactly when a
+// stale badge (or a missing one) is most visible. Either way it starts the
+// recurring re-check.
 func (w *versionWidget) Init() tea.Cmd {
+	if w.precheckedInfo != nil {
+		w.applyCheckResult(updateCheckResultMsg{info: *w.precheckedInfo})
+		return w.tickCmd()
+	}
 	return tea.Batch(w.checkCmd(updatesvc.CheckOptions{Force: true}), w.tickCmd())
 }
 
@@ -98,7 +114,7 @@ func (w *versionWidget) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:iret
 	case selfUpdateRequestedMsg:
 		return w, w.selfUpdateCmd()
 	case selfUpdateResultMsg:
-		return w, w.selfUpdateToastCmd(msg)
+		return w, w.selfUpdateResultCmd(msg)
 	}
 	return w, nil
 }
@@ -153,7 +169,9 @@ func (w *versionWidget) tickCmd() tea.Cmd {
 	return tea.Tick(w.interval, func(time.Time) tea.Msg { return updateCheckTickMsg{} })
 }
 
-func (w *versionWidget) checks() bool { return w.checker != nil && w.version != devVersion }
+func (w *versionWidget) checks() bool {
+	return w.checker != nil && w.version != selfupdate.DevVersion
+}
 
 // applyCheckResult records the outcome of a check. A failure is logged at
 // Debug and not surfaced: the check is a background nicety, not an action the
@@ -177,15 +195,17 @@ func (w *versionWidget) selfUpdateCmd() tea.Cmd {
 	})
 }
 
-// selfUpdateToastCmd reports the run's outcome. Unlike a configured command,
-// success still toasts: the running process is still the old binary until
-// mrboard is restarted, so the redrawn board is not itself a sufficient
-// signal that anything changed.
-func (w *versionWidget) selfUpdateToastCmd(msg selfUpdateResultMsg) tea.Cmd {
+// selfUpdateResultCmd reports the run's outcome. A failure toasts and leaves
+// the TUI running so the user can retry or dismiss it. Success instead quits
+// the program: the process in memory is still the old binary even after
+// `brew upgrade` finishes on disk, so resuming the redrawn board would wrongly
+// imply the running session is now current. selfUpdateSucceededMsg carries the
+// message the root model prints once the terminal is restored.
+func (w *versionWidget) selfUpdateResultCmd(msg selfUpdateResultMsg) tea.Cmd {
 	if msg.err != nil {
 		w.logger.Error("tui: self-update failed", "err", msg.err)
 		return toastCmd(toast.ErrorAlert, "update failed: "+msg.err.Error())
 	}
 	w.logger.Info("tui: self-update finished")
-	return toastCmd(toast.InfoAlert, "updated — restart mrboard to use the new version")
+	return func() tea.Msg { return selfUpdateSucceededMsg{message: selfupdate.SuccessMessage} }
 }

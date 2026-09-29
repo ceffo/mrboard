@@ -153,10 +153,58 @@ func TestVersionWidget_DevBuild_NeverChecks(t *testing.T) {
 	action := DefaultBoardKeyMap.Update
 	v := newVersionWidget(
 		context.Background(), NewStyles(LoadThemeByName("default"), true),
-		devVersion, checker, time.Hour, &action, slog.Default(),
+		selfupdate.DevVersion, checker, time.Hour, &action, slog.Default(),
 	)
 
 	assert.Nil(t, v.Init(), "a dev build has no release to compare against")
+}
+
+// TestVersionWidget_Init_UsesPrecheckedInfo covers the pre-launch check
+// (root.go, docs/adr/0010-self-update-check.md): when Init() has a precheck
+// result to apply, it must not force a second live check moments later.
+func TestVersionWidget_Init_UsesPrecheckedInfo(t *testing.T) {
+	checker := mocks.NewMockUpdateChecker(t) // no CheckForUpdate expectation set — any call fails the test
+
+	action := DefaultBoardKeyMap.Update
+	v := newVersionWidget(
+		context.Background(), NewStyles(LoadThemeByName("default"), true),
+		"1.2.3", checker, time.Hour, &action, slog.Default(),
+	)
+	v.setPrecheckedInfo(&updatesvc.Info{Available: true, Latest: testLatestTag})
+
+	cmd := v.Init()
+
+	assert.True(t, v.available, "want the precheck applied immediately")
+	assert.Equal(t, testLatestTag, v.latest)
+	// cmd is a bare tea.Tick, not a batch: asserting non-nil is as far as this
+	// can go without actually sleeping for the real interval (see batchCmds).
+	assert.NotNil(t, cmd, "want the recurring re-check still scheduled")
+}
+
+// TestVersionWidget_SelfUpdateSucceeded_EmitsQuitMessage covers the app
+// closing itself after a successful update (docs/adr/0010-self-update-check.md):
+// unlike a failed run, success must not toast and keep the TUI open — the
+// process in memory is still the old binary.
+func TestVersionWidget_SelfUpdateSucceeded_EmitsQuitMessage(t *testing.T) {
+	v := newTestVersionWidget("1.2.3")
+
+	_, cmd := v.Update(selfUpdateResultMsg{})
+
+	require.NotNil(t, cmd)
+	assert.Equal(t, selfUpdateSucceededMsg{message: selfupdate.SuccessMessage}, cmd())
+}
+
+// TestVersionWidget_SelfUpdateFailed_Toasts pins that a failed run still
+// toasts and leaves the widget in place, unlike a successful one.
+func TestVersionWidget_SelfUpdateFailed_Toasts(t *testing.T) {
+	v := newTestVersionWidget("1.2.3")
+
+	_, cmd := v.Update(selfUpdateResultMsg{err: errors.New("boom")})
+
+	require.NotNil(t, cmd)
+	msg, ok := cmd().(toastMsg)
+	require.True(t, ok, "want a toastMsg")
+	assert.Contains(t, msg.text, "boom")
 }
 
 func TestVersionWidget_ConfirmDialog_RunsUpdateOnYes(t *testing.T) {
