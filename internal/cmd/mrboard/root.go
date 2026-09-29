@@ -98,7 +98,7 @@ func buildRootCmd() *cobra.Command {
 			}
 			info, updated := checkAndOfferUpdate(
 				cmd.Context(), c.UpdateChecker, Version, isatty.IsTerminal(os.Stdin.Fd()),
-				os.Stdin, cmd.OutOrStdout(), c.Logger)
+				confirmUpdate, cmd.OutOrStdout(), c.Logger)
 			if updated {
 				return nil
 			}

@@ -1,14 +1,14 @@
 package mrboardcmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"strings"
+
+	"charm.land/huh/v2"
 
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	"github.com/ceffo/mrboard/internal/selfupdate"
@@ -56,13 +56,14 @@ func runUpgrade(out io.Writer) error {
 
 // checkAndOfferUpdate runs the launch-time update check (root.go's RunE,
 // docs/adr/0010-self-update-check.md): before the TUI starts, check for a
-// newer release and, when interactive is true, offer to install it. It
-// returns the check result so the caller can seed the TUI's own badge without
-// forcing a second live check moments later, and whether it already ran the
-// upgrade — the caller must not launch the TUI in that case, since the
-// process in memory would still be the old binary. interactive is decided by
-// the caller (an isatty check on the real stdin) so this function stays
-// testable without a real terminal.
+// newer release and, when interactive is true, offer to install it via
+// confirm. It returns the check result so the caller can seed the TUI's own
+// badge without forcing a second live check moments later, and whether it
+// already ran the upgrade — the caller must not launch the TUI in that case,
+// since the process in memory would still be the old binary. interactive is
+// decided by the caller (an isatty check on the real stdin), and confirm is
+// injected (production passes confirmUpdate, its huh dialog), so this
+// function stays testable without a real terminal.
 //
 // A disabled checker or a non-release build (selfupdate.DevVersion) skips the
 // network call entirely, matching the version widget's own gating. A check
@@ -71,7 +72,7 @@ func runUpgrade(out io.Writer) error {
 // `mrboard --update` is.
 func checkAndOfferUpdate(
 	ctx context.Context, checker updatesvc.UpdateChecker, version string, interactive bool,
-	in io.Reader, out io.Writer, logger *slog.Logger,
+	confirm func(version, latest string) bool, out io.Writer, logger *slog.Logger,
 ) (updatesvc.Info, bool) {
 	if checker == nil || version == selfupdate.DevVersion {
 		return updatesvc.Info{}, false
@@ -86,8 +87,7 @@ func checkAndOfferUpdate(
 		return info, false
 	}
 
-	fmt.Fprintf(out, "mrboard update available: %s → %s\n", version, info.Latest)
-	if !confirmYesNo(in, out, "Update now?") {
+	if !confirm(version, info.Latest) {
 		return info, false
 	}
 
@@ -98,18 +98,24 @@ func checkAndOfferUpdate(
 	return info, true
 }
 
-// confirmYesNo asks a plain y/N question on the terminal. Anything other than
-// "y"/"yes" (case-insensitive), including EOF, counts as no.
-func confirmYesNo(in io.Reader, out io.Writer, question string) bool {
-	fmt.Fprintf(out, "%s [y/N] ", question)
-	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
+// confirmUpdate shows huh's interactive Yes/No dialog offering to install the
+// available update. Cancelling (Esc/Ctrl-C, huh.ErrUserAborted) counts as
+// declining, same as answering no.
+func confirmUpdate(version, latest string) bool {
+	var yes bool
+	if err := updateConfirmField(version, latest).Value(&yes).Run(); err != nil {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(scanner.Text())) {
-	case "y", "yes":
-		return true
-	default:
-		return false
-	}
+	return yes
+}
+
+// updateConfirmField builds the confirm prompt offering to install an
+// update. Split out from confirmUpdate so its wording and default can be
+// verified deterministically (Confirm.RunAccessible) without a real terminal.
+func updateConfirmField(version, latest string) *huh.Confirm {
+	return huh.NewConfirm().
+		Title(fmt.Sprintf("mrboard %s → %s is available", version, latest)).
+		Description(fmt.Sprintf("Run `%s`?", selfupdate.Command)).
+		Affirmative("Update").
+		Negative("Not now")
 }

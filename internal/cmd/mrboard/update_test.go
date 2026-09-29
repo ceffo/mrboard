@@ -25,6 +25,24 @@ const (
 	testNewTag         = "v1.0.0"
 )
 
+// declineConfirm and acceptConfirm stand in for confirmUpdate in tests, since
+// the real one runs a real huh dialog against a real terminal. They record
+// the version/latest they were called with so tests can assert on it.
+func declineConfirm(gotVersion, gotLatest *string) func(string, string) bool {
+	return func(version, latest string) bool {
+		*gotVersion, *gotLatest = version, latest
+		return false
+	}
+}
+
+func neverConfirm(t *testing.T) func(string, string) bool {
+	t.Helper()
+	return func(string, string) bool {
+		t.Fatal("confirm must not be called")
+		return false
+	}
+}
+
 func TestRunSelfUpdate_UpToDate(t *testing.T) {
 	checker := mocks.NewMockUpdateChecker(t)
 	checker.EXPECT().
@@ -86,7 +104,7 @@ func TestCheckAndOfferUpdate_CheckerDisabled(t *testing.T) {
 	var out bytes.Buffer
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), nil, testCurrentVersion, true, strings.NewReader(""), &out, slog.Default())
+		context.Background(), nil, testCurrentVersion, true, neverConfirm(t), &out, slog.Default())
 
 	assert.Zero(t, info)
 	assert.False(t, updated)
@@ -101,7 +119,7 @@ func TestCheckAndOfferUpdate_DevBuild_NeverChecks(t *testing.T) {
 	var out bytes.Buffer
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), checker, selfupdate.DevVersion, true, strings.NewReader(""), &out, slog.Default())
+		context.Background(), checker, selfupdate.DevVersion, true, neverConfirm(t), &out, slog.Default())
 
 	assert.Zero(t, info)
 	assert.False(t, updated)
@@ -119,7 +137,7 @@ func TestCheckAndOfferUpdate_CheckFails_LaunchesAnyway(t *testing.T) {
 	var out bytes.Buffer
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), checker, testCurrentVersion, true, strings.NewReader(""), &out, slog.Default())
+		context.Background(), checker, testCurrentVersion, true, neverConfirm(t), &out, slog.Default())
 
 	assert.Zero(t, info)
 	assert.False(t, updated)
@@ -137,7 +155,7 @@ func TestCheckAndOfferUpdate_NotAvailable_NoPrompt(t *testing.T) {
 	var out bytes.Buffer
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), checker, testCurrentVersion, true, strings.NewReader(""), &out, slog.Default())
+		context.Background(), checker, testCurrentVersion, true, neverConfirm(t), &out, slog.Default())
 
 	assert.Equal(t, updatesvc.Info{Latest: testCurrentTag}, info)
 	assert.False(t, updated)
@@ -156,7 +174,7 @@ func TestCheckAndOfferUpdate_Available_NonInteractive_NoPrompt(t *testing.T) {
 	var out bytes.Buffer
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), checker, testCurrentVersion, false, strings.NewReader(""), &out, slog.Default())
+		context.Background(), checker, testCurrentVersion, false, neverConfirm(t), &out, slog.Default())
 
 	assert.Equal(t, updatesvc.Info{Available: true, Latest: testNewTag}, info)
 	assert.False(t, updated)
@@ -164,7 +182,7 @@ func TestCheckAndOfferUpdate_Available_NonInteractive_NoPrompt(t *testing.T) {
 }
 
 // TestCheckAndOfferUpdate_Available_Interactive_Declines covers the prompt
-// path up to the point where the user says no — it must not attempt the real
+// path up to the point where the user declines — it must not attempt the real
 // upgrade run (docs/adr/0010-self-update-check.md notes that path is verified
 // manually, not by automated tests, since it shells out to the real `brew`).
 func TestCheckAndOfferUpdate_Available_Interactive_Declines(t *testing.T) {
@@ -174,39 +192,44 @@ func TestCheckAndOfferUpdate_Available_Interactive_Declines(t *testing.T) {
 		Return(updatesvc.Info{Available: true, Latest: testNewTag}, nil).
 		Once()
 	var out bytes.Buffer
+	var gotVersion, gotLatest string
 
 	info, updated := checkAndOfferUpdate(
-		context.Background(), checker, testCurrentVersion, true, strings.NewReader("n\n"), &out, slog.Default())
+		context.Background(), checker, testCurrentVersion, true,
+		declineConfirm(&gotVersion, &gotLatest), &out, slog.Default())
 
 	assert.Equal(t, updatesvc.Info{Available: true, Latest: testNewTag}, info)
 	assert.False(t, updated)
-	assert.Contains(t, out.String(), "0.12.0 → v1.0.0")
-	assert.Contains(t, out.String(), "Update now?")
+	assert.Equal(t, testCurrentVersion, gotVersion, "want confirm called with the running version")
+	assert.Equal(t, testNewTag, gotLatest, "want confirm called with the release it found")
+	assert.Empty(t, out.String(), "declining must not run the upgrade")
 }
 
-func TestConfirmYesNo(t *testing.T) {
+// TestUpdateConfirmField covers the huh dialog's wording and default via
+// RunAccessible — the same field confirmUpdate shows interactively, exercised
+// here without a real terminal.
+func TestUpdateConfirmField(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  bool
 	}{
-		{"lowercase y", "y\n", true},
-		{"uppercase Y", "Y\n", true},
-		{"yes", "yes\n", true},
-		{"YES with whitespace", "  YES  \n", true},
-		{"lowercase n", "n\n", false},
-		{"empty line", "\n", false},
-		{"garbage", "sure\n", false},
-		{"EOF, no input at all", "", false},
+		{"accepts", "y\n", true},
+		{"declines", "n\n", false},
+		{"empty line defaults to no", "\n", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
+			var yes bool
+			field := updateConfirmField(testCurrentVersion, testNewTag).Value(&yes)
 
-			got := confirmYesNo(strings.NewReader(tt.input), &out, "Update now?")
+			err := field.RunAccessible(&out, strings.NewReader(tt.input))
 
-			assert.Equal(t, tt.want, got)
-			assert.Contains(t, out.String(), "Update now?")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, yes)
+			assert.Contains(t, out.String(), testCurrentVersion)
+			assert.Contains(t, out.String(), testNewTag)
 		})
 	}
 }
