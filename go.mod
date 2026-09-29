@@ -12,6 +12,7 @@ require (
 	github.com/ceffo/toast v0.2.1
 	github.com/eko/gocache/lib/v4 v4.2.4
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -162,7 +163,6 @@ require (
 	github.com/maratori/testpackage v1.1.2 // indirect
 	github.com/matoous/godox v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/mgechev/revive v1.15.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect

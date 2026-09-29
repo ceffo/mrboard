@@ -245,6 +245,13 @@ type TeamResolvedMsg struct {
 type Options struct {
 	ThemeOverride string // --theme flag; "" means use state
 	ModeOverride  string // --mode flag; "" means use state
+
+	// PrecheckedUpdate is the result of an update check already performed
+	// before the TUI started (root.go). When set, the version widget applies
+	// it directly instead of forcing a second live check moments after the
+	// first (docs/adr/0010-self-update-check.md). nil means no pre-launch
+	// check was performed — the widget checks on its own as before.
+	PrecheckedUpdate *updatesvc.Info
 }
 
 // Model is the root Bubble Tea model for mrboard.
@@ -316,7 +323,14 @@ type Model struct {
 	dirty              dirtySet                         // locally-written MRs unconfirmed by a fetch, see docs/adr/0005
 	refreshInterval    time.Duration                    // auto-refresh cadence; <= 0 disables it, see docs/adr/0005
 	refreshGen         int                              // bumped on manual refresh to invalidate pending ticks
+	exitMessage        string                           // set on a successful self-update; printed after Run() returns
 }
+
+// ExitMessage returns the message to print after the terminal is restored,
+// or "" for an ordinary quit. Set only by a successful self-update, since the
+// process in memory is still the old binary until mrboard is relaunched
+// (docs/adr/0010-self-update-check.md).
+func (m Model) ExitMessage() string { return m.exitMessage }
 
 // New creates a ready-to-run mrboard model. It loads persisted UI state from
 // store; on error it logs and falls back to DefaultState().
@@ -390,6 +404,7 @@ func New(
 
 	versionw := newVersionWidget(
 		ctx, styles, version, updateChecker, cfg.UpdateCheck.CacheTTL, &keys.Update, logger)
+	versionw.setPrecheckedInfo(opts.PrecheckedUpdate)
 
 	m := Model{
 		state:              stateLoading,
@@ -734,7 +749,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCommandResult(msg)
 
 	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg,
-		dismissOverlayMsg, toastMsg:
+		selfUpdateSucceededMsg, dismissOverlayMsg, toastMsg:
 		return m.handleWidgetMsg(msg)
 
 	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
@@ -1236,6 +1251,9 @@ func (m Model) handleWidgetMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toastMsg:
 		return m, m.toast(msg.spec, msg.text)
+	case selfUpdateSucceededMsg:
+		m.exitMessage = msg.message
+		return m, tea.Quit
 	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg:
 		_, cmd := m.versionw.Update(msg)
 		return m, cmd

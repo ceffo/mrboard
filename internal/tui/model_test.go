@@ -87,6 +87,24 @@ func TestModel_FetchErrMsg_TransitionsToErrorState(t *testing.T) {
 	assert.NotEmpty(t, m2.ErrMsg(), "expected non-empty error message")
 }
 
+// --- Self-update success (docs/adr/0010-self-update-check.md) ---
+
+// TestModel_SelfUpdateSucceededMsg_QuitsWithExitMessage covers the app
+// closing itself after a successful self-update: the root model, not the
+// version widget, owns quitting (a screen-wide action), and stashes the
+// message execBoard prints once the terminal is restored.
+func TestModel_SelfUpdateSucceededMsg_QuitsWithExitMessage(t *testing.T) {
+	m := makeModel(t, someMRs(), "")
+	assert.Empty(t, m.ExitMessage(), "want no exit message before a successful self-update")
+
+	next, cmd := m.Update(selfUpdateSucceededMsg{message: "mrboard updated — restart mrboard to use the new version"})
+	m2 := next.(Model)
+
+	assert.Equal(t, "mrboard updated — restart mrboard to use the new version", m2.ExitMessage())
+	require.NotNil(t, cmd)
+	assert.Equal(t, tea.QuitMsg{}, cmd())
+}
+
 // --- Partial results ---
 
 func TestModel_FetchResultMsg_PartialResults_ShowsMRsAndErrors(t *testing.T) {
