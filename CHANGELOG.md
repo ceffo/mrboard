@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.19.0] - 2026-09-29
+
+### Added
+- mrboard now checks for a new release before the board opens and, on an interactive terminal, offers to install it through a confirmation dialog. Declining (or pressing Esc) carries on to the board.
+
+### Changed
+- A successful self-update now quits the TUI and prints the result once the terminal is restored, since the running process is still the old binary. `mrboard --update` and the TUI share the same message.
+- The footer update badge uses a bolder, more visible color.
+
+## [0.18.0] - 2026-09-21
+
+### Added
+- MRs can be filtered by ticket key: all, none, or specific keys, combining with the other filters.
+
+### Changed
+- The Filters tab lays Assignee, Reviewer and Issue ID out as side-by-side columns, matching the Left/Right navigation between them.
+- Active filters are shown on the left of the header title bar, replacing the `[filtered]` and `[sprint]` tags and the `— @user` title suffix.
+
+## [0.17.2] - 2026-09-18
+
+### Fixed
+- The assignee filter now includes the current user.
+
+## [0.17.1] - 2026-09-15
+
+### Fixed
+- The Homebrew formula no longer passes a redundant argument when generating shell completions, which had regressed completion installation.
+
+## [0.17.0] - 2026-09-14
+
+### Added
+- A keybinding to mark a draft MR as ready (undraft) straight from the board.
+
+## [0.16.0] - 2026-09-10
+
+### Changed
+- **Breaking:** mrboard is now distributed as a Homebrew formula instead of a cask, which adds Linux support and removes the deprecated `preflight` warning. Existing installs need a one-time `brew uninstall --cask mrboard && brew install mrboard`.
+
+## [0.15.1] - 2026-09-10
+
+### Fixed
+- A reviewer's state could stay stale after they approved an MR, because incremental fetches reused cached reviewer data for MRs GitLab reported as unchanged.
+
+## [0.15.0] - 2026-09-09
+
+### Changed
+- The reviewer/approver editor is easier to read: rows in the sibling panel and batch preview show the MR's phase icon, and added/removed approvers appear inline as `-@user +@user`, with a details pane below the list.
+- The batch preview pins the focused MR as a non-selectable first row so its own change is visible.
+- The editor opens and cancels with `a` instead of `v`, which is now free.
+
+### Fixed
+- An approver added or removed in the editor no longer also shows up as a redundant plain-reviewer change.
+
+## [0.14.0] - 2026-09-09
+
+### Added
+- The README now documents how to update mrboard; contributor docs moved to their own page. Releases are now published automatically when a PR merges.
+
+## [0.13.0] - 2026-09-08
+
+### Added
+- Self-update: the footer shows an update badge when a newer release exists, and `u` opens a confirmation to install it. `mrboard --update` does the same from the command line.
+
+### Changed
+- The CLI now uses a styled help and error output.
+
+## [0.12.0] - 2026-09-08
+
+### Changed
+- The hourglass icon and its waiting time now appear only for approvers. Regular reviewers aren't held to a review SLA, so a not-started one shows no icon and a re-review request keeps its icon without a timer.
+
+### Fixed
+- The waiting time for a not-started approver never rendered; it now counts from the first review request.
+
 ## [0.11.0] - 2026-09-02
 
 ### Added
