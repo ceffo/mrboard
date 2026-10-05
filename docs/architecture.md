@@ -150,7 +150,7 @@ mrboard/
         snapshotstore.go   # domain.SnapshotStore — versioned JSON cache (XDG cache dir)
       demoadpt/
         demoadpt.go        # every driven port, backed by an in-memory dataset (--demo)
-        fixture/board.yaml # the embedded demo dataset; see adr/0006-demo-mode.md
+        fixture/*.yaml     # the embedded demo datasets (gif, reviewers, auto-assign); see adr/0006-demo-mode.md
     log/
       log.go               # slog wrapper (file + stderr)
     tui/

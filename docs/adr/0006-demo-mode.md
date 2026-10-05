@@ -23,9 +23,9 @@ interaction ones.
   directly from the TUI with no port to substitute. Introducing one means changing
   `internal/tui`, which this design deliberately avoids. The recording does not press
   them; see Consequences.
-- **No runtime-loadable fixture.** A `--demo-fixture <path>` flag would make recordings
-  depend on the current directory and would not work for an installed binary. Worth
-  adding later for iteration; not now.
+- **No runtime-loadable fixture.** A flag taking a *path* would make recordings depend on
+  the current directory and would not work for an installed binary. Fixtures are embedded
+  and selected by name — see "Several named fixtures".
 - **No in-UI "DEMO" badge.** Honesty is carried by the data (`demo-corp/*` projects,
   `.invalid` hostnames), by `--help`, and by the README. A badge would require threading
   a title suffix through `internal/tui`, breaking the zero-TUI-changes property below.
@@ -102,7 +102,7 @@ what every other domain consumer does.
 
 ### The fixture is embedded YAML with relative ages
 
-A checked-in `fixture/board.yaml`, embedded with `go:embed` — the pattern the repo
+Checked-in `fixture/<name>.yaml` files, embedded with `go:embed` — the pattern the repo
 already uses for themes. YAML rather than Go literals because the content is multi-line
 markdown and unified diffs, which block scalars make readable and diffable; adding an MR
 to show off a new feature should be a data edit, not a code change.
@@ -126,6 +126,42 @@ build.
 
 MRs the fixture does not give an explicit diff get a small generated one, so the diff view
 is useful from any card rather than answering "no files changed".
+
+### Several named fixtures (amended 2026-10-05)
+
+The demo began as one dataset that also feeds the README recording, so a scenario added to
+exercise behaviour changed the GIF and the column assertions with it. The embedded dataset is
+now a directory of fixtures, selected by name:
+
+- **`gif`** is the default and the recording's dataset. It stays a small curated narrative; a
+  scenario that exists only to exercise behaviour does not belong in it.
+- **`reviewers`** has the reviewer editor and the batch preview's scenarios: a group of related
+  MRs larger than a screenful, each in a different reviewer state, very long titles and paths,
+  and an MR with no related MRs. Automatic reviewer assignment is off.
+- **`auto-assign`** has the feature on, with one MR that qualifies and one for each reason a
+  candidate is skipped.
+
+Each file opens with a comment saying what it is for. A fixture may carry a `settings:` block —
+`current_user`, `team`, `auto_assign_reviewers` — which `core.NewDemo` applies onto the
+`config.DemoConfig()` it started from; a field left out keeps its default, so `gif` has none and
+behaves as it always did. Settings live in the fixture because they are part of the scenario:
+`reviewers` and `auto-assign` need contradictory setups, and with the feature on the board
+rewrites reviewers by itself before anyone can edit them. Two datasets is the answer, not a branch
+in Go.
+
+`--demo` is unchanged. A hidden `--demo-fixture <name>` selects another (it errors without
+`--demo`, and an unknown name lists the embedded ones), and `scripts/demo-tui.sh [name]` passes it
+through. It is hidden because it is for development: the recording and a user's `--demo` never
+need it. Fixtures stay self-contained rather than extending one another, so the `people` and
+`projects` blocks repeat; that is cheaper than an inheritance mechanism until there are many.
+
+The invariants below hold for **every** fixture, in one test that runs over all of them (plus
+unique MR identities and a team that exists); scenario assertions live next to the fixture they
+describe, and drive the real write path (`mrsvc.ApplyReviewerChanges`, `AutoAssignReviewers`) against
+it. Generated data (`gofakeit` and the like) is deliberately not used for committed fixtures: it
+makes recordings and assertions unreproducible, and coverage here comes from the shape of each
+scenario, which random data does not guarantee. A seeded generator belongs only in a future
+large-board stress fixture.
 
 ### Writes mutate the dataset; the real cache is never touched
 
@@ -211,9 +247,11 @@ broken app rather than a small window. The tape is set to the smallest grid that
   search path, nothing in `mrboard.yaml.example`.
 - The demo dataset is a second consumer of the domain rules, so it doubles as a
   regression check on them: the column-placement test fails if the phase rules change.
-- Adding an MR to the fixture means honouring the whole-minute rule and the back-link
-  marker rule. Both are enforced by tests, but the tests are the only thing stopping the
-  recording from quietly becoming non-reproducible.
+- Adding an MR to a fixture means honouring the whole-minute rule and the back-link
+  marker rule. Both are enforced by tests over every fixture, but the tests are the only
+  thing stopping the recording from quietly becoming non-reproducible.
+- Behaviour that needs its own demo data gets its own fixture and, if its setup contradicts
+  another's, its own `settings:` — the `gif` fixture is not touched for it.
 - `o` and `J` remain live in demo mode and will open a browser at a `.invalid` URL. The
   tape avoids them. Giving the TUI a URL-opener port is the follow-up that would close
   this, at the cost of the zero-TUI-changes property.
