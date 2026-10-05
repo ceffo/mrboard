@@ -1,0 +1,126 @@
+# FIXTURE `auto-assign`: automatic reviewer assignment is ON. Run it with
+# `scripts/demo-tui.sh auto-assign`.
+#
+# The board assigns the team on its own as soon as it lands the first fetch, so
+# this dataset is only good for watching that happen. It is kept apart from
+# `reviewers` because the two setups contradict each other: with the feature on,
+# every MR below that qualifies is rewritten before you can interact with it.
+#
+# An MR qualifies when its author is on the team, its title carries a ticket key,
+# it has no reviewers yet, and it is not a draft:
+#
+#   !601  qualifies                                — gets the team minus its author
+#   !602  already has a reviewer                   — left alone
+#   !603  draft                                    — left alone until it is undrafted
+#   !604  author is not on the team (ops-bot)      — left alone
+#   !605  no ticket key                            — left alone
+#
+# SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes, and
+# every MR whose title carries a ticket key ends its description with the
+# `<!-- mrboard -->` marker. Both are enforced by a test over all fixtures.
+schema: 1
+
+settings:
+  current_user: ada
+  team: [ada, grace, linus, margaret, katherine]
+  auto_assign_reviewers: true
+
+snapshot_written_ago: 14m
+
+people:
+  - {username: ada, name: Ada Lovelace, user_id: 1}
+  - {username: grace, name: Grace Hopper, user_id: 2}
+  - {username: linus, name: Linus Torvalds, user_id: 3}
+  - {username: margaret, name: Margaret Hamilton, user_id: 4}
+  - {username: katherine, name: Katherine Johnson, user_id: 5}
+  - {username: ops-bot, name: Ops Bot, user_id: 6}
+
+projects:
+  - id: 101
+    path: demo-corp/platform-api
+    members: [ada, grace, linus, margaret, katherine, ops-bot]
+  - id: 102
+    path: demo-corp/web-console
+    members: [ada, grace, linus, margaret, katherine, ops-bot]
+
+issue_types:
+  AUTO-1: Story
+  AUTO-2: Story
+  AUTO-3: Task
+  AUTO-4: Task
+
+merge_requests:
+  - project_id: 101
+    iid: 601
+    id: 9601
+    title: "feat(AUTO-1): cache token introspection results"
+    author: ada
+    merge_status: mergeable
+    source_branch: auto-1-cache
+    created_ago: 2h
+    updated_ago: 2h
+    description: |-
+      Qualifies: team author, ticket key, no reviewers, not a draft.
+
+      ---
+      🎫 [AUTO-1](https://tickets.demo.invalid/browse/AUTO-1) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 602
+    id: 9602
+    title: "feat(AUTO-2): paginate the audit endpoint"
+    author: grace
+    merge_status: mergeable
+    source_branch: auto-2-paginate
+    created_ago: 5h
+    updated_ago: 1h
+    reviewers:
+      - {username: linus, state: not_started, waiting_ago: 5h}
+    description: |-
+      Already has a reviewer: left alone.
+
+      ---
+      🎫 [AUTO-2](https://tickets.demo.invalid/browse/AUTO-2) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 603
+    id: 9603
+    title: "wip(AUTO-3): redesign the settings page"
+    author: margaret
+    draft: true
+    merge_status: draft_status
+    source_branch: auto-3-settings
+    created_ago: 3h
+    updated_ago: 3h
+    description: |-
+      A draft: left alone until it is undrafted, which then qualifies it.
+
+      ---
+      🎫 [AUTO-3](https://tickets.demo.invalid/browse/AUTO-3) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 604
+    id: 9604
+    title: "chore(AUTO-4): refresh the dependency lockfile"
+    author: ops-bot
+    merge_status: mergeable
+    source_branch: auto-4-lockfile
+    created_ago: 1h
+    updated_ago: 1h
+    description: |-
+      Authored by someone outside the team: left alone.
+
+      ---
+      🎫 [AUTO-4](https://tickets.demo.invalid/browse/AUTO-4) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 605
+    id: 9605
+    title: "fix: typo in the error message"
+    author: linus
+    merge_status: mergeable
+    source_branch: typo
+    created_ago: 30m
+    updated_ago: 30m
+    description: |-
+      No ticket key: left alone.

@@ -34,6 +34,7 @@ func buildRootCmd() *cobra.Command {
 	var themeOverride string
 	var modeOverride string
 	var demoMode bool
+	var demoFixture string
 	var updateOnly bool
 	var c *core.Core
 
@@ -48,6 +49,9 @@ func buildRootCmd() *cobra.Command {
 		// so it works with no config file and no network at all.
 		var cfg *config.AppConfig
 		var err error
+		if demoFixture != "" && !demoMode {
+			return errors.New("--demo-fixture only applies together with --demo")
+		}
 		if demoMode {
 			if cfgPath != "" {
 				return errors.New("--demo uses the built-in dataset and cannot be combined with --config")
@@ -64,7 +68,9 @@ func buildRootCmd() *cobra.Command {
 		}
 		boot := core.New
 		if demoMode {
-			boot = core.NewDemo
+			boot = func(ctx context.Context, cfg *config.AppConfig) (*core.Core, error) {
+				return core.NewDemo(ctx, cfg, demoFixture)
+			}
 		}
 		built, err := boot(cmd.Context(), cfg)
 		if err != nil {
@@ -116,6 +122,11 @@ func buildRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&logFile, "log-file", "", "log file path override (default: config's log.path)")
 	root.PersistentFlags().BoolVar(&demoMode, "demo", false,
 		"run against the built-in demo dataset — no config file, no token, no network")
+	root.PersistentFlags().StringVar(&demoFixture, "demo-fixture", "",
+		"with --demo, the named dataset to run against instead of the default (for development)")
+	if err := root.PersistentFlags().MarkHidden("demo-fixture"); err != nil {
+		panic(err) // the flag was registered on the line above
+	}
 	root.Flags().BoolVar(&updateOnly, "update", false,
 		"check for a newer mrboard release, install it if there is one, and exit")
 	root.Flags().StringVar(&themeOverride, "theme", "", "session theme (default, dracula, nord, tokyo-night, monokai)")

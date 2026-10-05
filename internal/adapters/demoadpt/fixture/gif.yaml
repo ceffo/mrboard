@@ -1,5 +1,10 @@
 # Demo dataset for `mrboard --demo`. Everything here is invented.
 #
+# FIXTURE `gif`: the default dataset and the one the README recording is made
+# from. Keep it a small, curated narrative — scenarios that exist only to
+# exercise behaviour belong in their own fixture file beside this one, because
+# every MR added here changes the GIF and the column assertions below.
+#
 # TWO RULES WHEN EDITING:
 #
 # 1. Every `*_ago` offset must be a WHOLE NUMBER OF MINUTES. Card ages are

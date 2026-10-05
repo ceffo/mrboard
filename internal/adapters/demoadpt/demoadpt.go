@@ -35,6 +35,9 @@ type Config struct {
 	// Now anchors every relative age in the dataset. Ages are stored as offsets
 	// from this instant, so the fixture never drifts as it ages in git.
 	Now time.Time
+	// Fixture names the embedded dataset to load (see Fixtures). Empty means
+	// DefaultFixture.
+	Fixture string
 	// BaseURL is used to build MR web URLs. Nothing dereferences them in demo
 	// mode, but they must look real in the detail pane.
 	BaseURL string
@@ -70,14 +73,21 @@ func New(cfg Config) (*Adapter, error) {
 		latency = 0
 	}
 
-	ds, err := loadFixture(now, cfg.BaseURL)
+	fixture := cfg.Fixture
+	if fixture == "" {
+		fixture = DefaultFixture
+	}
+	ds, err := loadFixture(fixture, now, cfg.BaseURL)
 	if err != nil {
 		return nil, err
 	}
 	ds.savedState = domain.DefaultAppState()
-	logger.Info("demo: dataset loaded", "mrs", len(ds.mrs), "projects", len(ds.projectPaths))
+	logger.Info("demo: dataset loaded", "fixture", fixture, "mrs", len(ds.mrs), "projects", len(ds.projectPaths))
 	return &Adapter{ds: ds, logger: logger, latency: latency}, nil
 }
+
+// Settings returns the loaded fixture's overrides of the demo's default config.
+func (a *Adapter) Settings() Settings { return a.ds.settings }
 
 // MRSource returns the merge-request source port.
 func (a *Adapter) MRSource() mrsvc.MergeRequestSource { return &mrSource{a: a} }

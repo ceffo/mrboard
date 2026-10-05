@@ -17,9 +17,26 @@ var anchor = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 
 func newTestAdapter(t *testing.T) *Adapter {
 	t.Helper()
-	a, err := New(Config{Now: anchor, BaseURL: "https://gitlab.demo.invalid", Latency: -1})
+	return newTestAdapterFor(t, "")
+}
+
+// newTestAdapterFor loads the named fixture; "" loads the default.
+func newTestAdapterFor(t *testing.T, fixture string) *Adapter {
+	t.Helper()
+	a, err := New(Config{Now: anchor, Fixture: fixture, BaseURL: "https://gitlab.demo.invalid", Latency: -1})
 	require.NoError(t, err)
 	return a
+}
+
+// forEachFixture runs fn once per embedded fixture, as a named subtest, for the
+// invariants every dataset must hold regardless of what it is for.
+func forEachFixture(t *testing.T, fn func(t *testing.T, a *Adapter)) {
+	t.Helper()
+	names := Fixtures()
+	require.NotEmpty(t, names)
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) { fn(t, newTestAdapterFor(t, name)) })
+	}
 }
 
 func TestFixtureLoads(t *testing.T) {
@@ -113,42 +130,82 @@ func TestAgeBucketsAreCovered(t *testing.T) {
 // truncated to the minute, so a sub-minute component would make the first frame
 // of a recording differ from the next.
 func TestOffsetsAreWholeMinutes(t *testing.T) {
-	a := newTestAdapter(t)
-
-	check := func(label string, ts time.Time) {
-		if ts.IsZero() {
-			return
+	forEachFixture(t, func(t *testing.T, a *Adapter) {
+		check := func(label string, ts time.Time) {
+			if ts.IsZero() {
+				return
+			}
+			assert.Zero(t, anchor.Sub(ts)%time.Minute, "%s is not a whole number of minutes from the anchor", label)
 		}
-		assert.Zero(t, anchor.Sub(ts)%time.Minute, "%s is not a whole number of minutes from the anchor", label)
-	}
-	for _, mr := range a.ds.all() {
-		check("created_ago", mr.CreatedAt)
-		check("updated_ago", mr.UpdatedAt)
-		for _, r := range mr.Reviewers {
-			check("waiting_ago", r.WaitingSince)
-			check("approved_ago", r.ApprovedAt)
+		for _, mr := range a.ds.all() {
+			check("created_ago", mr.CreatedAt)
+			check("updated_ago", mr.UpdatedAt)
+			for _, r := range mr.Reviewers {
+				check("waiting_ago", r.WaitingSince)
+				check("approved_ago", r.ApprovedAt)
+			}
 		}
-	}
-	check("snapshot_written_ago", a.ds.snapshotWrittenAt)
+		check("snapshot_written_ago", a.ds.snapshotWrittenAt)
+	})
 }
 
 // TestTicketedMRsCarryBackLinkMarker is the guard against the demo mutating
 // itself: without the marker the board considers the back-link missing and
 // issues a description write on every fetch.
 func TestTicketedMRsCarryBackLinkMarker(t *testing.T) {
-	a := newTestAdapter(t)
-
-	km := domain.NewTicketKeyMatcher(false)
-	ticketed := 0
-	for _, mr := range a.ds.all() {
-		if km.ExtractFromTitle(mr.Title) == "" {
-			continue
+	forEachFixture(t, func(t *testing.T, a *Adapter) {
+		km := domain.NewTicketKeyMatcher(false)
+		ticketed := 0
+		for _, mr := range a.ds.all() {
+			if km.ExtractFromTitle(mr.Title) == "" {
+				continue
+			}
+			ticketed++
+			_, ok := domain.ExtractLinkedTicketKey(mr.Description)
+			assert.True(t, ok, "MR !%d has a ticket key but no back-link marker in its description", mr.IID)
 		}
-		ticketed++
-		_, ok := domain.ExtractLinkedTicketKey(mr.Description)
-		assert.True(t, ok, "MR !%d has a ticket key but no back-link marker in its description", mr.IID)
-	}
-	assert.Positive(t, ticketed, "the demo must show some ticketed MRs")
+		assert.Positive(t, ticketed, "every fixture must hold some ticketed MRs")
+	})
+}
+
+// TestEveryFixtureIsSelfConsistent holds each dataset to the invariants that
+// make it safe to run: unique MR identities, and a team that exists.
+func TestEveryFixtureIsSelfConsistent(t *testing.T) {
+	forEachFixture(t, func(t *testing.T, a *Adapter) {
+		seen := map[domain.MRKey]bool{}
+		ids := map[int]bool{}
+		for _, mr := range a.ds.all() {
+			assert.False(t, seen[mr.Key()], "duplicate MR %d!%d", mr.ProjectID, mr.IID)
+			assert.False(t, ids[mr.ID], "duplicate MR id %d", mr.ID)
+			seen[mr.Key()] = true
+			ids[mr.ID] = true
+		}
+		s := a.Settings()
+		if s.CurrentUser != "" {
+			assert.Contains(t, a.ds.people, s.CurrentUser, "settings.current_user is not a person in the fixture")
+		}
+		for _, u := range s.Team {
+			assert.Contains(t, a.ds.people, u, "settings.team lists someone who is not a person in the fixture")
+		}
+	})
+}
+
+func TestFixtures_ListsEveryEmbeddedDataset(t *testing.T) {
+	assert.Contains(t, Fixtures(), DefaultFixture, "the default fixture must be embedded")
+	assert.Equal(t, []string{"auto-assign", "gif", "reviewers"}, Fixtures())
+}
+
+func TestNew_UnknownFixtureNamesTheAvailableOnes(t *testing.T) {
+	_, err := New(Config{Now: anchor, Fixture: "nope", Latency: -1})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"nope"`)
+	assert.Contains(t, err.Error(), DefaultFixture, "the error should list what is available")
+}
+
+func TestDefaultFixtureNeedsNoSettings(t *testing.T) {
+	assert.Equal(t, Settings{}, newTestAdapter(t).Settings(),
+		"the default dataset must leave the demo config exactly as it has always been")
 }
 
 func TestReviewerStateVocabularyIsExhaustive(t *testing.T) {
