@@ -131,8 +131,8 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `detail.go` | Detail panel widget — MR description + discussion threads |
 | `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
 | `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
-| `approver_editor.go` | Reviewer/approver editor overlay (`v`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs |
-| `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — include/exclude toggle + change/conflict indicators |
+| `approver_editor.go` | Reviewer/approver editor overlay (`a`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs, previewing what applying the edit would add to each. Fixed-height body in every mode |
+| `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — siblings start unchecked (opt-in), each row shows its additions-only diff, fixed layout (docs/adr/0008-reviewer-write-use-case.md) |
 | `version.go` | Version widget — footer version segment, release check cadence, update badge + `u` hint, and the self-update run (docs/adr/0010-self-update-check.md) |
 | `confirm.go` | Reusable yes/no dialog — parameterized by title, body, and the message to emit on yes |
 | `settings_widget.go` | Settings overlay (`,`) — Filters/Sorting/Theme tabs |
@@ -332,3 +332,12 @@ render into for the duration of the call.
 - Refresh (`r`) shows the spinner overlay; board is not interactive while loading
 - If the focused card is removed after a refresh, focus moves to the card above it (or the column header if empty)
 - Error messages are shown inline below the board, not as a modal
+- **Never move what the user is looking at because of their own input.** Toggling a checkbox,
+  switching a panel, removing a row or typing in a search changes the content of the widget, not its
+  size or the position of anything else. Concretely, in the reviewer editor and the batch preview:
+  every mode renders to the same number of lines (pad the body, don't let it shrink); a row that
+  can show extra information (a diff) always shows it and only restyles it when its state changes;
+  variable text goes in a fixed-width slot (truncate and pad) and every line is padded to the
+  widest one any row can produce, measured over all rows and not only the visible window; anything
+  that appears for the focused row gets its height reserved for the tallest case. New overlays
+  should assert this in a test by comparing `layoutShape(render())` before and after the input.

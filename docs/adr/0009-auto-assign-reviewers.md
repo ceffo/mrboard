@@ -57,8 +57,26 @@ GitLab writes the TUI wouldn't currently make.
 
 The check re-runs, unmemoized, every time it's invoked. If a human clears an eligible MR's
 reviewers, the next TUI fetch cycle (or `mrboard auto` run) reassigns the whole team — criterion
-3 is a live read of GitLab state, not a one-time trigger, so there is no session flag to remember
-or reset. An empty `teamRoster` (no `sources: type: user` entries) is not a config error: the
+3 is evaluated afresh each time, not a one-time trigger, so there is no session flag to remember
+or reset.
+
+### The write re-reads the MR first (amended 2026-10-05)
+
+Criterion 3 is decided on the board snapshot, which can be a refresh interval old (or the cache the
+board booted from), and `SetReviewers` replaces the whole reviewer set. Writing from the snapshot
+alone could therefore overwrite reviewers someone had added since. `mrsvc.AutoAssignReviewers`
+now re-reads the MR (`FetchMR`) immediately before writing and writes only if it still has no
+reviewers; it returns whether it wrote. An MR that gained reviewers in the meantime is left
+untouched, logged as skipped, and neither toasted nor marked dirty. Both the TUI and
+`mrboard auto` get this because it lives in the use case, not in either caller. A failed re-read
+fails the assignment rather than writing unverified.
+
+The snapshot's own reviewer list is also made trustworthy: the incremental fetch no longer reuses
+a cached MR whose live reviewer set differs from the cache (`docs/adr/0005`). The re-read is what
+guarantees correctness; the fetch fix keeps the board, and so the candidate list, accurate.
+
+A few milliseconds remain between the re-read and the write; GitLab has no compare-and-set on
+reviewers (see `docs/adr/0008`). An empty `teamRoster` (no `sources: type: user` entries) is not a config error: the
 feature loads, matches nothing, and logs a runtime warning once so the silent no-op is discoverable
 rather than mysterious. Partial failure (one reviewer rejected, others succeed) logs a warning and
 keeps whatever succeeded; there is no dedicated retry mechanism beyond the next invocation
@@ -75,3 +93,5 @@ re-evaluating criterion 3, which stays true until reviewers are actually present
 - Toast volume scales with how many MRs newly qualify in a single TUI fetch cycle — enabling the
   feature against an existing backlog of eligible MRs produces one toast per MR in that first
   cycle.
+- Each candidate costs one extra read (`FetchMR`) per fetch cycle for as long as the board still
+  lists it as reviewer-less. Candidates are rare, and the read is what keeps the write safe.
