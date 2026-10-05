@@ -114,6 +114,7 @@ func TestHandleUndraftResult_ChainsAutoAssign(t *testing.T) {
 	updated := original
 	updated.Phase = domain.PhaseNeedsReview
 
+	src.EXPECT().FetchMR(mock.Anything, int64(updated.ProjectID), int64(updated.IID)).Return(updated, nil).Once()
 	src.EXPECT().SetReviewers(mock.Anything, int64(updated.ProjectID), int64(updated.IID), []int64{2}).
 		Return(nil).Once()
 

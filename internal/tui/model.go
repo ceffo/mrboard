@@ -230,7 +230,10 @@ type AutoAssignResultMsg struct {
 	MRIID     int
 	IssueKey  string
 	Reviewers []domain.User // team members the reviewer set was written with
-	Err       error
+	// Assigned is false when nothing was written because the MR had gained
+	// reviewers since the board snapshot the candidates came from.
+	Assigned bool
+	Err      error
 }
 
 // TeamResolvedMsg carries the result of resolving team usernames to domain.Users at startup.
@@ -1513,7 +1516,7 @@ func (m Model) handleDetailFetchResult(msg DetailFetchResultMsg) (tea.Model, tea
 
 func (m Model) handleBatchEditorPreview(msg BatchReviewerEditorPreviewMsg) (tea.Model, tea.Cmd) {
 	m.batchPreview = newBatchPreviewWidget(
-		msg.Staged, msg.Siblings, msg.FocusedMR, msg.KnownIDs, m.styles, m.batchPreviewKeys,
+		msg.Staged, msg.Baseline, msg.Siblings, msg.FocusedMR, msg.KnownIDs, m.styles, m.batchPreviewKeys,
 	)
 	m.overlay.openOverlay(overlayKindBatchPreview)
 	return m, nil
@@ -1526,17 +1529,25 @@ func (m Model) handleBatchPreviewConfirmed(msg BatchPreviewConfirmedMsg) (tea.Mo
 	}
 	cmds := make([]tea.Cmd, len(msg.Targets))
 	for i, mr := range msg.Targets {
-		cmds[i] = makeReviewerWriteCmd(m.baseCtx, m.src, mr, msg.Staged, msg.KnownIDs)
+		mode := mrsvc.ReviewerWriteUnion
+		if mr.Key() == msg.FocusedMR.Key() {
+			mode = mrsvc.ReviewerWriteEdit
+		}
+		cmds[i] = makeReviewerWriteCmd(m.baseCtx, m.src, mr, msg.Staged, msg.Baseline, mode, msg.KnownIDs)
 	}
 	return m, tea.Batch(cmds...)
 }
 
 // makeReviewerWriteCmd is the single reviewer-write use case: it wraps
-// mrsvc.ApplyReviewerChanges with the snapshot + ID-resolution + origApprovers
-// setup shared by both the single-edit save path (reviewerEditorWidget.saveCmd)
-// and each per-target write in a batch apply (handleBatchPreviewConfirmed), so
-// that setup — previously duplicated and diverging between the two callers —
-// can no longer drift out of sync.
+// mrsvc.ApplyReviewerChanges with the snapshot + ID-resolution setup shared by
+// both the single-edit save path (reviewerEditorWidget.saveCmd) and each
+// per-target write in a batch apply (handleBatchPreviewConfirmed), so that
+// setup — previously duplicated and diverging between the two callers — can no
+// longer drift out of sync.
+//
+// mode is mrsvc.ReviewerWriteEdit for the MR the edit was made on and
+// mrsvc.ReviewerWriteUnion for any other target, which only ever gains
+// reviewers and approvers. baseline is the reviewer list the edit started from.
 //
 // knownIDs seeds already-resolved usernames, e.g. from the project-members
 // fetch the single-edit path ran against its own MR. GitLab user IDs are
@@ -1547,34 +1558,38 @@ func makeReviewerWriteCmd(
 	base context.Context,
 	src reviewerWriter,
 	target domain.MergeRequest,
-	staged []stagedReviewer,
+	staged, baseline []stagedReviewer,
+	mode mrsvc.ReviewerWriteMode,
 	knownIDs map[string]int64,
 ) tea.Cmd {
 	projectID := int64(target.ProjectID)
 	mrIID := int64(target.IID)
 
 	// Snapshot everything so the closure captures stable data.
-	edits := make([]mrsvc.ReviewerEdit, len(staged))
-	for i, s := range staged {
-		edits[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
+	change := mrsvc.ReviewerChange{
+		Staged:   reviewerEdits(staged),
+		Baseline: reviewerEdits(baseline),
+		Mode:     mode,
 	}
 	ids := make(map[string]int64, len(knownIDs))
 	for k, v := range knownIDs {
 		ids[k] = v
 	}
-	origApprovers := make(map[string]bool, len(target.Reviewers))
-	for _, r := range target.Reviewers {
-		if r.IsApprover {
-			origApprovers[r.Username] = true
-		}
-	}
 
 	ctx, cancel := context.WithTimeout(base, fetchTimeout)
 	return func() tea.Msg {
 		defer cancel()
-		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, edits, ids, origApprovers)
+		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, change, ids)
 		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
 	}
+}
+
+func reviewerEdits(staged []stagedReviewer) []mrsvc.ReviewerEdit {
+	edits := make([]mrsvc.ReviewerEdit, len(staged))
+	for i, s := range staged {
+		edits[i] = mrsvc.ReviewerEdit{Username: s.Username, IsApprover: s.IsApprover, UserID: s.UserID}
+	}
+	return edits
 }
 
 // makeTicketEnrichCmds returns one fetch command per unique issue key found
@@ -1787,8 +1802,10 @@ func makeAutoAssignReviewersCmd(
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
-		err := mrsvc.AutoAssignReviewers(ctx, src, int64(mr.ProjectID), int64(mr.IID), reviewers)
-		return AutoAssignResultMsg{ProjectID: mr.ProjectID, MRIID: mr.IID, IssueKey: issueKey, Reviewers: reviewers, Err: err}
+		assigned, err := mrsvc.AutoAssignReviewers(ctx, src, int64(mr.ProjectID), int64(mr.IID), reviewers)
+		return AutoAssignResultMsg{
+			ProjectID: mr.ProjectID, MRIID: mr.IID, IssueKey: issueKey, Reviewers: reviewers, Assigned: assigned, Err: err,
+		}
 	}
 }
 
@@ -1804,6 +1821,11 @@ func (m Model) handleAutoAssignResult(msg AutoAssignResultMsg) (tea.Model, tea.C
 		m.logger.Warn("tui: auto-assign reviewers failed",
 			"project_id", msg.ProjectID, "mr_iid", msg.MRIID, "ticket", msg.IssueKey, "err", msg.Err)
 		return m, m.toast(toast.ErrorAlert, "Auto-assign failed: "+mrRef)
+	}
+	if !msg.Assigned {
+		m.logger.Info("tui: auto-assign skipped, MR already has reviewers",
+			"project_id", msg.ProjectID, "mr_iid", msg.MRIID, "ticket", msg.IssueKey)
+		return m, nil
 	}
 	m.dirty.Mark(domain.MRKey{ProjectID: msg.ProjectID, IID: msg.MRIID}, time.Now())
 	m.logger.Info("tui: auto-assigned reviewers",

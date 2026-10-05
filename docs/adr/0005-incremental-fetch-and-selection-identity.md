@@ -82,10 +82,11 @@ standup ≈ 400ms, total ≈ 0.6s against today's 2–9s. A cold cache degenerat
 unique MR — still strictly better than today, because it fetches each MR once instead of up to five
 times.
 
-`updated_at` is a faithful version marker for most note-derived data: GitLab bumps it on notes,
-reviewer changes, and title/draft edits. It is **not** faithful for approvals — see "`updated_at`
-does not cover approvals" below, discovered after this ADR was first written. Three known gaps are
-handled explicitly below.
+`updated_at` is a faithful version marker for most note-derived data: GitLab bumps it on notes
+and title/draft edits. It is **not** faithful for approvals — see "`updated_at` does not cover
+approvals" below, discovered after this ADR was first written — and nothing here verifies that it
+moves on every reviewer change, so the reviewer set is compared directly (see "The reviewer set is
+a second signal"). Three known gaps are handled explicitly below.
 
 ### What the cache is allowed to answer for (resolved 2026-07-30)
 
@@ -125,6 +126,20 @@ phase-1 query — see `approverSetFromGQLRules` above for the same always-fresh 
 matches which reviewers the cached MR recorded as approved. Either signal alone is insufficient;
 either one moving forces a real phase-2 refetch. This does not change what phase-1 fetches, only
 how phase-2 skip eligibility is decided.
+
+### The reviewer set is a second signal (resolved 2026-10-05)
+
+`MergeMRFromGraphQL` takes `Reviewers` from the cached MR when `diffGQLStage` judges an MR
+unchanged, and discards the live `reviewers` list phase 1 had just fetched. That is only safe if the
+cached list is current, and the only thing vouching for it was `updated_at` — the marker the
+section above shows to be unreliable for approvals. A cached MR with no reviewers that had gained
+some on GitLab would keep showing none, and a board that shows none is what makes an MR look
+eligible for automatic reviewer assignment (`docs/adr/0009`).
+
+`diffGQLStage` now also requires `reviewerSetUnchanged`: the live reviewer usernames must equal the
+cached MR's, as a set. It costs nothing, since phase 1 already returns `reviewers { nodes { username
+name } }`, and either signal moving forces the phase-2 refetch. It guards what the board displays;
+the write-time re-read in `docs/adr/0009` and `docs/adr/0008` is what guards GitLab.
 
 This is the same class of gap the next section's `resolvedDiscussionsCount`/
 `resolvableDiscussionsCount` scalars were added to eventually close for thread resolution — that
