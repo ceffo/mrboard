@@ -87,10 +87,15 @@ func execAuto(ctx context.Context, opts autoCmdOptions) error {
 				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "reviewers", domain.Usernames(reviewers))
 			continue
 		}
-		writeErr := mrsvc.AutoAssignReviewers(updateCtx, c.MRSource, int64(mr.ProjectID), int64(mr.IID), reviewers)
+		wrote, writeErr := mrsvc.AutoAssignReviewers(updateCtx, c.MRSource, int64(mr.ProjectID), int64(mr.IID), reviewers)
 		if writeErr != nil {
 			logger.Warn("mrboard: auto-assign reviewers failed",
 				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey, "err", writeErr)
+			continue
+		}
+		if !wrote {
+			logger.Info("mrboard: auto-assign skipped, MR already has reviewers",
+				"project_id", mr.ProjectID, "mr_iid", mr.IID, "ticket", issueKey)
 			continue
 		}
 		assigned++

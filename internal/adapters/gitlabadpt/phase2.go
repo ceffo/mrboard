@@ -35,7 +35,8 @@ func diffGQLStage(
 		k := gqlMRKey(mr)
 		if cached, ok := cachedByKey[k]; ok && !forceStale[k] {
 			updatedAt, err := time.Parse(time.RFC3339, mr.UpdatedAt)
-			if err == nil && cached.UpdatedAt.Equal(updatedAt) && approvedBySetUnchanged(mr, cached) {
+			if err == nil && cached.UpdatedAt.Equal(updatedAt) &&
+				reviewerSetUnchanged(mr, cached) && approvedBySetUnchanged(mr, cached) {
 				unchanged = append(unchanged, mr)
 				continue
 			}
@@ -43,6 +44,27 @@ func diffGQLStage(
 		changed = append(changed, mr)
 	}
 	return unchanged, changed, cachedByKey
+}
+
+// reviewerSetUnchanged reports whether the phase-1 GraphQL MR's live reviewer
+// usernames still match the cached MR's. Phase 1 fetches reviewers fresh, so
+// this costs nothing; it keeps a reviewer change that updatedAt failed to
+// reflect from being masked by cached discussion-derived data — the reviewer
+// list is what decides whether an MR is eligible for a reviewer write.
+func reviewerSetUnchanged(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest) bool {
+	if len(cached.Reviewers) != len(mr.Reviewers.Nodes) {
+		return false
+	}
+	cachedNames := make(map[string]bool, len(cached.Reviewers))
+	for _, r := range cached.Reviewers {
+		cachedNames[r.Username] = true
+	}
+	for _, u := range mr.Reviewers.Nodes {
+		if !cachedNames[u.Username] {
+			return false
+		}
+	}
+	return true
 }
 
 // approvedBySetUnchanged reports whether the phase-1 GraphQL MR's live

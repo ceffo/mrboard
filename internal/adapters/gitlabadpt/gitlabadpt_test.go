@@ -218,6 +218,7 @@ func TestFetchAll_Phase2SkipsUnchangedMRs(t *testing.T) {
 	client := newFakeFetchClient()
 	sharedMR := gqlMR("gid://gitlab/Project/123", "42", "group/project")
 	sharedMR.ApprovedBy.Nodes = []pkggitlab.GQLUser{{Username: testUserBob}}
+	sharedMR.Reviewers.Nodes = []pkggitlab.GQLUser{{Username: testUserBob, Name: testUserBobName}}
 	client.userMRs[testUserPriya] = []pkggitlab.GQLMergeRequest{sharedMR}
 
 	updatedAt, err := time.Parse(time.RFC3339, sharedMR.UpdatedAt)

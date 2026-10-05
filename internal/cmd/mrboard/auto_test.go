@@ -94,8 +94,31 @@ func TestExecAuto_AssignsReviewers(t *testing.T) {
 		ResolveUsers(mock.Anything, []string{userAlice, userBob}).
 		Return([]domain.User{{ID: 1, Username: userAlice}, {ID: 2, Username: userBob}}, nil).Once()
 	src.EXPECT().
+		FetchMR(mock.Anything, int64(autoTestProjectID), int64(autoTestMRIID)).
+		Return(eligibleMR(), nil).Once()
+	src.EXPECT().
 		SetReviewers(mock.Anything, int64(autoTestProjectID), int64(autoTestMRIID), []int64{2}).
 		Return(nil).Once()
+	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
+
+	err := execAuto(ctx, autoCmdOptions{dryRun: false})
+
+	require.NoError(t, err)
+}
+
+func TestExecAuto_SkipsMRThatGainedReviewersSinceTheFetch(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t) // no SetReviewers EXPECT() — it would replace the live reviewers
+	src.EXPECT().
+		FetchAll(mock.Anything, mrsvc.FetchOptions{IncludeReviewerMRs: false}).
+		Return([]domain.MergeRequest{eligibleMR()}, nil).Once()
+	src.EXPECT().
+		ResolveUsers(mock.Anything, []string{userAlice, userBob}).
+		Return([]domain.User{{ID: 1, Username: userAlice}, {ID: 2, Username: userBob}}, nil).Once()
+	live := eligibleMR()
+	live.Reviewers = []domain.ReviewerInfo{{Username: userAlice}}
+	src.EXPECT().
+		FetchMR(mock.Anything, int64(autoTestProjectID), int64(autoTestMRIID)).
+		Return(live, nil).Once()
 	ctx := context.WithValue(context.Background(), coreKey{}, newTestCore(t, src, teamConfig()))
 
 	err := execAuto(ctx, autoCmdOptions{dryRun: false})

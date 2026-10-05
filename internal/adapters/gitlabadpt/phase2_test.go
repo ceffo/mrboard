@@ -11,6 +11,8 @@ import (
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 )
 
+const phase2TestReviewer = "moncef"
+
 func gqlMRWithIID(iid string) pkggitlab.GQLMergeRequest {
 	mr := pkggitlab.GQLMergeRequest{}
 	mr.IID = iid
@@ -65,6 +67,13 @@ func gqlMRWithApprovedBy(projectID, iid string, updatedAt time.Time, approvedBy 
 	return mr
 }
 
+func withLiveReviewers(mr pkggitlab.GQLMergeRequest, usernames ...string) pkggitlab.GQLMergeRequest {
+	for _, u := range usernames {
+		mr.Reviewers.Nodes = append(mr.Reviewers.Nodes, pkggitlab.GQLUser{Username: u})
+	}
+	return mr
+}
+
 func cachedMRWithReviewers(
 	projectID, iid int, updatedAt time.Time, reviewers ...domain.ReviewerInfo,
 ) domain.MergeRequest {
@@ -73,17 +82,19 @@ func cachedMRWithReviewers(
 
 func TestDiffGQLStage_MatchingUpdatedAtAndApprovedByIsUnchanged(t *testing.T) {
 	updatedAt := time.Date(2026, 9, 10, 14, 54, 48, 0, time.UTC)
-	mrs := []pkggitlab.GQLMergeRequest{gqlMRWithApprovedBy("1", "858", updatedAt, "mtherreault")}
+	mrs := []pkggitlab.GQLMergeRequest{
+		withLiveReviewers(gqlMRWithApprovedBy("1", "858", updatedAt, "mtherreault"), "mtherreault", phase2TestReviewer),
+	}
 	previous := []domain.MergeRequest{
 		cachedMRWithReviewers(1, 858, updatedAt,
 			domain.ReviewerInfo{Username: "mtherreault", State: domain.ReviewerApproved},
-			domain.ReviewerInfo{Username: "moncef", State: domain.ReviewerNotStarted},
+			domain.ReviewerInfo{Username: phase2TestReviewer, State: domain.ReviewerNotStarted},
 		),
 	}
 
 	unchanged, changed, _ := diffGQLStage(mrs, previous, nil)
 
-	assert.Len(t, unchanged, 1, "same updatedAt and same approvedBy set: reuse cache")
+	assert.Len(t, unchanged, 1, "same updatedAt, reviewers and approvedBy set: reuse cache")
 	assert.Empty(t, changed)
 }
 
@@ -92,11 +103,16 @@ func TestDiffGQLStage_ApprovalWithUnchangedUpdatedAtIsStillChanged(t *testing.T)
 	// it, so a fresh approval can arrive with updatedAt still matching the
 	// cache. approvedBy must independently force a refetch — see MR 858.
 	updatedAt := time.Date(2026, 9, 10, 14, 54, 48, 0, time.UTC)
-	mrs := []pkggitlab.GQLMergeRequest{gqlMRWithApprovedBy("1", "858", updatedAt, "mtherreault", "moncef")}
+	mrs := []pkggitlab.GQLMergeRequest{
+		withLiveReviewers(
+			gqlMRWithApprovedBy("1", "858", updatedAt, "mtherreault", phase2TestReviewer),
+			"mtherreault", phase2TestReviewer,
+		),
+	}
 	previous := []domain.MergeRequest{
 		cachedMRWithReviewers(1, 858, updatedAt,
 			domain.ReviewerInfo{Username: "mtherreault", State: domain.ReviewerApproved},
-			domain.ReviewerInfo{Username: "moncef", State: domain.ReviewerNotStarted},
+			domain.ReviewerInfo{Username: phase2TestReviewer, State: domain.ReviewerNotStarted},
 		),
 	}
 
@@ -105,4 +121,34 @@ func TestDiffGQLStage_ApprovalWithUnchangedUpdatedAtIsStillChanged(t *testing.T)
 	assert.Empty(t, unchanged)
 	require.Len(t, changed, 1, "approvedBy grew even though updatedAt didn't move: must refetch")
 	assert.Equal(t, "858", changed[0].IID)
+}
+
+func TestDiffGQLStage_ReviewerChangeWithUnchangedUpdatedAtIsStillChanged(t *testing.T) {
+	// A reviewer set that changed without moving updatedAt must not be hidden by
+	// the cache: a cached "no reviewers" MR would otherwise look eligible for an
+	// automatic reviewer write although it has reviewers on GitLab.
+	updatedAt := time.Date(2026, 9, 10, 14, 54, 48, 0, time.UTC)
+	cases := []struct {
+		name   string
+		cached []domain.ReviewerInfo
+		live   []string
+	}{
+		{name: "reviewer added", cached: nil, live: []string{phase2TestReviewer}},
+		{
+			name:   "reviewer swapped",
+			cached: []domain.ReviewerInfo{{Username: phase2TestReviewer}},
+			live:   []string{"someone-else"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mrs := []pkggitlab.GQLMergeRequest{withLiveReviewers(gqlMRWithApprovedBy("1", "5", updatedAt), tc.live...)}
+			previous := []domain.MergeRequest{cachedMRWithReviewers(1, 5, updatedAt, tc.cached...)}
+
+			unchanged, changed, _ := diffGQLStage(mrs, previous, nil)
+
+			assert.Empty(t, unchanged)
+			assert.Len(t, changed, 1, "reviewer set differs from cache: must refetch")
+		})
+	}
 }

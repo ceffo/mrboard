@@ -3,12 +3,14 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 // MembersLoadedMsg carries the result of a lazy project-member fetch.
@@ -39,6 +41,9 @@ type BatchReviewerEditorPreviewMsg struct {
 	// FocusedMR's own write is unconditional and never listed as a "sibling".
 	Siblings  []domain.MergeRequest
 	FocusedMR domain.MergeRequest
+	// Baseline is the reviewer list the editor opened on, which Staged was edited
+	// from — FocusedMR's write applies only the difference between the two.
+	Baseline []stagedReviewer
 	// KnownIDs is the editor's resolved username→userID map (see userIDByName),
 	// carried through so the eventual batch write reuses it instead of
 	// resolving IDs from scratch per target — see makeReviewerWriteCmd.
@@ -47,6 +52,10 @@ type BatchReviewerEditorPreviewMsg struct {
 
 const (
 	reviewerEditorMaxVisible = 8
+	// reviewerEditorBodyLines is the height every panel's body is padded to: the
+	// tallest one is the sibling panel — section header, a full page of rows, the
+	// scroll indicator, and the focused row's title (a blank line, then the title).
+	reviewerEditorBodyLines = 1 + reviewerEditorMaxVisible + 1 + 2
 )
 
 // reviewerEditorMode distinguishes the main reviewer list from the search sub-mode.
@@ -100,8 +109,11 @@ type reviewerEditorWidget struct {
 	roster     []domain.User // team roster from startup resolution (T action)
 	keyMatcher domain.TicketKeyMatcher
 
-	// Staging buffer — local edits committed only on Enter.
-	staged []stagedReviewer
+	// Staging buffer — local edits committed only on Enter. baseline is what
+	// staged started as; the write applies the difference, so reviewers who
+	// joined the MR meanwhile are not dropped.
+	staged   []stagedReviewer
+	baseline []stagedReviewer
 
 	// Project members (lazy fetch for search and ID resolution at save time).
 	members        []domain.ProjectMember
@@ -176,6 +188,7 @@ func newReviewerEditorWidget(
 		roster:       roster,
 		keyMatcher:   keyMatcher,
 		staged:       staged,
+		baseline:     append([]stagedReviewer(nil), staged...),
 		userIDByName: make(map[string]int64),
 		searchSel:    make(map[int64]bool),
 		siblings:     others,
@@ -325,9 +338,12 @@ func (w *reviewerEditorWidget) confirm() (tea.Model, tea.Cmd) { //nolint:ireturn
 	for k, v := range w.userIDByName {
 		knownIDs[k] = v
 	}
+	baseline := append([]stagedReviewer(nil), w.baseline...)
 	focusedMR := w.mr
 	return w, func() tea.Msg {
-		return BatchReviewerEditorPreviewMsg{Staged: staged, Siblings: siblings, FocusedMR: focusedMR, KnownIDs: knownIDs}
+		return BatchReviewerEditorPreviewMsg{
+			Staged: staged, Baseline: baseline, Siblings: siblings, FocusedMR: focusedMR, KnownIDs: knownIDs,
+		}
 	}
 }
 
@@ -485,7 +501,7 @@ func (w *reviewerEditorWidget) fetchMembersCmd() tea.Cmd {
 // use case (see makeReviewerWriteCmd), seeding knownIDs from userIDByName so a
 // save that follows a completed member fetch never needs a redundant one.
 func (w *reviewerEditorWidget) saveCmd() tea.Cmd {
-	return makeReviewerWriteCmd(w.baseCtx, w.src, w.mr, w.staged, w.userIDByName)
+	return makeReviewerWriteCmd(w.baseCtx, w.src, w.mr, w.staged, w.baseline, mrsvc.ReviewerWriteEdit, w.userIDByName)
 }
 
 // Hint lines for the reviewer-list and sibling panels. Kept as consts so the
@@ -522,19 +538,38 @@ func (w *reviewerEditorWidget) render() string {
 	}
 	sb.WriteString("\n")
 
+	// Every mode's body is padded to the same height, so switching panels,
+	// removing a reviewer or narrowing a search never resizes the modal under
+	// the user — the hint line below stays where it was.
+	var body strings.Builder
+	var hint string
 	switch {
 	case w.mode == reviewerEditorModeSearch:
-		w.renderSearch(&sb)
+		hint = w.renderSearch(&body)
 	case w.panel == reviewerEditorPanelSiblings:
-		w.renderSiblings(&sb)
+		w.renderSiblings(&body)
+		hint = reviewerSibHint
 	default:
-		w.renderList(&sb)
+		hint = w.renderList(&body)
 	}
+	sb.WriteString(padLines(body.String(), reviewerEditorBodyLines))
+	sb.WriteString("\n" + w.styles.PopupHint.Render(hint))
 
 	return w.styles.PopupBorder.Render(sb.String())
 }
 
-func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
+// padLines appends empty lines to s, whose lines each end in "\n", until it has
+// n of them.
+func padLines(s string, n int) string {
+	if have := strings.Count(s, "\n"); have < n {
+		return s + strings.Repeat("\n", n-have)
+	}
+	return s
+}
+
+// renderList writes the staged reviewer list to sb and returns the hint line
+// for the panel.
+func (w *reviewerEditorWidget) renderList(sb *strings.Builder) string {
 	if len(w.staged) == 0 {
 		sb.WriteString(w.styles.PopupHint.Render("  (no reviewers assigned)") + "\n")
 	} else {
@@ -569,20 +604,18 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) {
 	}
 
 	if w.saving {
-		sb.WriteString("\n" + w.styles.PopupHint.Render("  Saving…"))
-	} else {
-		sb.WriteString("\n" + w.styles.PopupHint.Render(reviewerListHint))
+		return "  Saving…"
 	}
+	return reviewerListHint
 }
 
 // renderSiblings shows the read-only list of other MRs sharing mr's JIRA key
 // (mr itself is never listed — its own write is unconditional, not an "also
 // apply to"). Rows are kept short (icon, IID, repo) so the modal's width
-// doesn't swing with MR title length; when a row's "Approvers" rule conflicts
-// with mr's, the added/removed usernames render inline at the end of that same
-// row — a warning, not a block: the write still applies to it on confirm (via
-// the batch preview screen) unless the user excludes it there. The focused
-// row's title (also left off the row itself) renders below the list.
+// doesn't swing with MR title length; the usernames the staged edit would add
+// to a row's MR render inline at the end of that same row. Opting an MR in
+// happens on the batch preview screen. The focused row's title (also left off
+// the row itself) renders below the list.
 func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 	plural := "s"
 	if len(w.siblings) == 1 {
@@ -604,8 +637,8 @@ func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 			repo = repo[idx+1:]
 		}
 		label := fmt.Sprintf("%s !%d %s", phaseIcon(sib.Phase), sib.IID, repo)
-		if added, removed := domain.ApproversDiff(w.mr, sib); len(added)+len(removed) > 0 {
-			label += " " + renderInlineDiff(w.styles, removed, added)
+		if added := w.siblingAdditions(sib); len(added) > 0 {
+			label += " " + renderInlineDiff(w.styles, nil, added)
 		}
 		if i == w.sibCursor {
 			sb.WriteString("  " + w.styles.PopupItemFocused.Render(label) + "\n")
@@ -620,8 +653,16 @@ func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 	}
 
 	w.renderSiblingDetails(sb)
+}
 
-	sb.WriteString("\n" + w.styles.PopupHint.Render(reviewerSibHint))
+// siblingAdditions returns the usernames — new reviewers and new approvers —
+// that applying the staged edit to sib's MR would add, sorted. Applying to a
+// sibling only ever adds (mrsvc.ReviewerWriteUnion).
+func (w *reviewerEditorWidget) siblingAdditions(sib domain.MergeRequest) []string {
+	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(w.staged, sib, true)
+	added := append(append([]string{}, reviewersAdded...), approversAdded...)
+	sort.Strings(added)
+	return added
 }
 
 // renderSiblingDetails renders the focused sibling row's title below the
@@ -652,7 +693,8 @@ func renderInlineDiff(styles Styles, removed, added []string) string {
 	return strings.Join(parts, " ")
 }
 
-func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) {
+// renderSearch writes the member search to sb and returns the hint line for it.
+func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) string {
 	sb.WriteString(w.styles.PopupHint.Render("  Search: "+w.searchQuery+"_") + "\n\n")
 
 	if w.loadingMembers {
@@ -688,7 +730,7 @@ func (w *reviewerEditorWidget) renderSearch(sb *strings.Builder) {
 		}
 	}
 
-	sb.WriteString("\n" + w.styles.PopupHint.Render("  space:select  ↵:add selected  esc:cancel"))
+	return "  space:select  ↵:add selected  esc:cancel"
 }
 
 func (w *reviewerEditorWidget) View() tea.View {
