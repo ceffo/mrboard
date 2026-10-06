@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,16 +14,61 @@ import (
 	"github.com/ceffo/mrboard/internal/domain"
 )
 
-//go:embed fixture/board.yaml
+//go:embed fixture/*.yaml
 var fixtureFS embed.FS
 
-const fixtureSchema = 1
+const (
+	fixtureSchema = 1
+	fixtureDir    = "fixture"
+	// DefaultFixture is the dataset `mrboard --demo` runs against, and the one
+	// the README recording is made from.
+	DefaultFixture = "gif"
+)
 
-// fixtureFile mirrors fixture/board.yaml. Field names deliberately describe
-// capabilities (issue_types, merge_status) rather than any vendor, so the
-// fixture reads as demo data for a review board and not for one provider.
+// Fixtures returns the name of every embedded dataset, sorted.
+func Fixtures() []string {
+	entries, err := fixtureFS.ReadDir(fixtureDir)
+	if err != nil {
+		return nil // an embed.FS with a matched pattern always has its directory
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if name, ok := strings.CutSuffix(e.Name(), ".yaml"); ok {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// Settings are the demo session's overrides of the in-memory config the demo
+// otherwise starts from. The zero value of every field leaves the default alone,
+// so a fixture without a settings block behaves exactly as the demo always has.
+// They live in the fixture because they are part of the scenario: the same board
+// behaves differently with a feature on and off, and a dataset exercising one
+// must not have its setup contradicted by another's.
+type Settings struct {
+	// CurrentUser is the username the board treats as "me".
+	CurrentUser string
+	// Team is the roster the reviewer editor's set-team action and automatic
+	// reviewer assignment read. Empty keeps the default roster.
+	Team []string
+	// AutoAssignReviewers turns automatic reviewer assignment on.
+	AutoAssignReviewers bool
+}
+
+type fixtureSettings struct {
+	CurrentUser         string   `yaml:"current_user"`
+	Team                []string `yaml:"team"`
+	AutoAssignReviewers bool     `yaml:"auto_assign_reviewers"`
+}
+
+// fixtureFile mirrors a fixture/<name>.yaml file. Field names deliberately
+// describe capabilities (issue_types, merge_status) rather than any vendor, so
+// the fixture reads as demo data for a review board and not for one provider.
 type fixtureFile struct {
 	Schema             int               `yaml:"schema"`
+	Settings           fixtureSettings   `yaml:"settings"`
 	SnapshotWrittenAgo string            `yaml:"snapshot_written_ago"`
 	People             []fixturePerson   `yaml:"people"`
 	Projects           []fixtureProject  `yaml:"projects"`
@@ -139,11 +185,14 @@ func parseOffset(s string) (time.Duration, error) {
 	return part(m[1])*24*time.Hour + part(m[2])*time.Hour + part(m[3])*time.Minute, nil
 }
 
-// loadFixture parses the embedded dataset and materialises it against bootAt,
-// so every rendered age is measured from a single anchor and nothing drifts as
-// the fixture ages in git.
-func loadFixture(bootAt time.Time, baseURL string) (*dataset, error) {
-	raw, err := fixtureFS.ReadFile("fixture/board.yaml")
+// loadFixture parses the named embedded dataset and materialises it against
+// bootAt, so every rendered age is measured from a single anchor and nothing
+// drifts as the fixture ages in git.
+func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error) {
+	if !slices.Contains(Fixtures(), name) {
+		return nil, fmt.Errorf("demoadpt: unknown fixture %q, available: %s", name, strings.Join(Fixtures(), ", "))
+	}
+	raw, err := fixtureFS.ReadFile(fixtureDir + "/" + name + ".yaml")
 	if err != nil {
 		return nil, fmt.Errorf("demoadpt: read fixture: %w", err)
 	}
@@ -173,9 +222,14 @@ func loadFixture(bootAt time.Time, baseURL string) (*dataset, error) {
 		members:      make(map[int][]domain.ProjectMember, len(f.Projects)),
 		issueTypes:   f.IssueTypes,
 		sprintKeys:   f.SprintTicketKeys,
-		threads:      make(map[domain.MRKey][]domain.Thread),
-		diffs:        make(map[domain.MRKey]domain.MRDiff),
-		drafts:       make(map[domain.MRKey]bool),
+		settings: Settings{
+			CurrentUser:         f.Settings.CurrentUser,
+			Team:                f.Settings.Team,
+			AutoAssignReviewers: f.Settings.AutoAssignReviewers,
+		},
+		threads: make(map[domain.MRKey][]domain.Thread),
+		diffs:   make(map[domain.MRKey]domain.MRDiff),
+		drafts:  make(map[domain.MRKey]bool),
 	}
 	for _, p := range f.People {
 		ds.people[p.Username] = p

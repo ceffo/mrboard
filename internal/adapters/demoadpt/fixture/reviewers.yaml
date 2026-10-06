@@ -1,0 +1,338 @@
+# FIXTURE `reviewers`: scenarios for the reviewer editor, the batch preview and
+# the writes behind them. Run it with `scripts/demo-tui.sh reviewers`.
+#
+# This is a test dataset, not a showcase. It is deliberately NOT the recording's
+# dataset (that is `gif`), and automatic reviewer assignment is OFF here: with it
+# on, the board would rewrite reviewers on its own while you are editing them.
+# Scenarios that need it on live in their own fixture.
+#
+# Scenarios, by ticket key:
+#
+#   REV-100  eleven related MRs (more than a screenful, so both lists scroll),
+#            each in a different state relative to !501 (platform-api), the one to
+#            open the editor on. Its reviewers are grace (approver) and linus.
+#              !502  identical to !501                     — applying changes nothing
+#              !503  no reviewers                          — applying adds everyone
+#              !504  adds margaret                         — a union must keep her
+#              !505  grace as a plain reviewer             — only the approver flag is added
+#              !506  katherine as the sole approver        — a union must keep her approver flag
+#              !507  draft, no reviewers
+#              !508  grace has approved, linus commented   — states must survive a write
+#              !509  margaret (approver) wants re-review, edsger
+#              !510  barbara only
+#              !511  linus approver, grace plain           — approvers swapped
+#   REV-300  two MRs with very long titles, one in a very long repository path —
+#            nothing may resize as the cursor moves over them
+#   REV-400  one MR with no related MRs                   — the editor saves directly
+#   (none)   one MR with no ticket key and no reviewers
+#
+# SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes
+# (`<n>d<n>h<n>m`, any part optional), and every MR whose title carries a ticket
+# key ends its description with the `<!-- mrboard -->` marker. Both are enforced
+# by a test over all fixtures.
+schema: 1
+
+settings:
+  current_user: ada
+  team: [ada, grace, linus, margaret, katherine]
+
+snapshot_written_ago: 14m
+
+people:
+  - {username: ada, name: Ada Lovelace, user_id: 1}
+  - {username: grace, name: Grace Hopper, user_id: 2}
+  - {username: linus, name: Linus Torvalds, user_id: 3}
+  - {username: margaret, name: Margaret Hamilton, user_id: 4}
+  - {username: katherine, name: Katherine Johnson, user_id: 5}
+  - {username: ops-bot, name: Ops Bot, user_id: 6}
+  - {username: barbara, name: Barbara Liskov, user_id: 7}
+  - {username: edsger, name: Edsger Dijkstra, user_id: 8}
+
+projects:
+  - id: 101
+    path: demo-corp/platform-api
+    members: [ada, grace, linus, margaret, katherine, ops-bot, barbara, edsger]
+  - id: 102
+    path: demo-corp/web-console
+    members: [ada, grace, linus, margaret, katherine, ops-bot, barbara, edsger]
+  - id: 103
+    path: demo-corp/infra-terraform
+    members: [ada, grace, linus, margaret, katherine, ops-bot, barbara, edsger]
+  - id: 104
+    path: demo-corp/platform/internal-tooling/an-exceptionally-long-repository-name
+    members: [ada, grace, linus, margaret, katherine, ops-bot, barbara, edsger]
+
+issue_types:
+  REV-100: Story
+  REV-300: Task
+  REV-400: Bug
+
+merge_requests:
+  # ---- REV-100: the related group ----
+  - project_id: 101
+    iid: 501
+    id: 9501
+    title: "feat(REV-100): add rate limiting to the public API"
+    author: ada
+    merge_status: mergeable
+    source_branch: rev-100-rate-limit
+    created_ago: 6h
+    updated_ago: 25m
+    approvers: [grace]
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 6h}
+      - {username: linus, state: not_started, waiting_ago: 6h}
+    description: |-
+      Focused MR for the reviewer editor scenarios in this group.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 502
+    id: 9502
+    title: "feat(REV-100): expose rate-limit headers"
+    author: grace
+    merge_status: mergeable
+    source_branch: rev-100-headers
+    created_ago: 5h
+    updated_ago: 1h
+    approvers: [grace]
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 5h}
+      - {username: linus, state: not_started, waiting_ago: 5h}
+    description: |-
+      Same reviewers as !501: applying the edit changes nothing here.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 503
+    id: 9503
+    title: "feat(REV-100): show rate-limit state in the console"
+    author: linus
+    merge_status: mergeable
+    source_branch: rev-100-console
+    created_ago: 4h
+    updated_ago: 2h
+    description: |-
+      No reviewers yet: applying the edit adds everyone.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 103
+    iid: 504
+    id: 9504
+    title: "feat(REV-100): provision the rate-limit cache"
+    author: margaret
+    merge_status: mergeable
+    source_branch: rev-100-cache
+    created_ago: 3h
+    updated_ago: 40m
+    approvers: [grace]
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 3h}
+      - {username: linus, state: not_started, waiting_ago: 3h}
+      - {username: margaret, state: not_started, waiting_ago: 3h}
+    description: |-
+      Has an extra reviewer, margaret: a union must keep her.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 505
+    id: 9505
+    title: "feat(REV-100): document the rate-limit contract"
+    author: katherine
+    merge_status: mergeable
+    source_branch: rev-100-docs
+    created_ago: 8h
+    updated_ago: 3h
+    reviewers:
+      - {username: grace, state: not_started, waiting_ago: 8h}
+      - {username: linus, state: not_started, waiting_ago: 8h}
+    description: |-
+      grace is a plain reviewer here: only the approver flag would be added.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 506
+    id: 9506
+    title: "feat(REV-100): rate-limit banner copy"
+    author: barbara
+    merge_status: mergeable
+    source_branch: rev-100-banner
+    created_ago: 2h
+    updated_ago: 30m
+    approvers: [katherine]
+    reviewers:
+      - {username: katherine, approver: true, state: not_started, waiting_ago: 2h}
+    description: |-
+      katherine is the only approver: a union must keep her approver flag.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 103
+    iid: 507
+    id: 9507
+    title: "wip(REV-100): rate-limit dashboards"
+    author: edsger
+    draft: true
+    merge_status: draft_status
+    source_branch: rev-100-dashboards
+    created_ago: 90m
+    updated_ago: 20m
+    description: |-
+      A draft with no reviewers.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 508
+    id: 9508
+    title: "feat(REV-100): rate-limit audit log"
+    author: margaret
+    merge_status: mergeable
+    source_branch: rev-100-audit
+    created_ago: 2d
+    updated_ago: 4h
+    approvers: [grace]
+    reviewers:
+      - {username: grace, approver: true, state: approved, approved_ago: 1d}
+      - {username: linus, state: commented, waiting_ago: 4h}
+    description: |-
+      grace has approved and linus has commented: those states must survive a write.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 102
+    iid: 509
+    id: 9509
+    title: "feat(REV-100): rate-limit error pages"
+    author: grace
+    merge_status: mergeable
+    source_branch: rev-100-errors
+    created_ago: 3d
+    updated_ago: 6h
+    approvers: [margaret]
+    reviewers:
+      - {username: margaret, approver: true, state: re_review_requested, waiting_ago: 6h}
+      - {username: edsger, state: not_started, waiting_ago: 3d}
+    description: |-
+      margaret has asked for a re-review.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 103
+    iid: 510
+    id: 9510
+    title: "feat(REV-100): rate-limit alert rules"
+    author: linus
+    merge_status: mergeable
+    source_branch: rev-100-alerts
+    created_ago: 7h
+    updated_ago: 5h
+    reviewers:
+      - {username: barbara, state: not_started, waiting_ago: 7h}
+    description: |-
+      One reviewer who is on none of the other MRs.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 511
+    id: 9511
+    title: "feat(REV-100): rate-limit quotas per tenant"
+    author: katherine
+    merge_status: mergeable
+    source_branch: rev-100-quotas
+    created_ago: 9h
+    updated_ago: 3h
+    approvers: [linus]
+    reviewers:
+      - {username: linus, approver: true, state: not_started, waiting_ago: 9h}
+      - {username: grace, state: not_started, waiting_ago: 9h}
+    description: |-
+      The approver and the plain reviewer are the other way round from !501.
+
+      ---
+      🎫 [REV-100](https://tickets.demo.invalid/browse/REV-100) <!-- mrboard -->
+
+  # ---- REV-300: very long titles and paths ----
+  - project_id: 104
+    iid: 530
+    id: 9530
+    title: "refactor(REV-300): migrate every remaining synchronous call site in the legacy ingestion pipeline to the new batched, back-pressure aware client without changing any public signature"
+    author: ada
+    merge_status: mergeable
+    source_branch: rev-300-ingestion-client
+    created_ago: 1d
+    updated_ago: 3h
+    reviewers:
+      - {username: grace, state: not_started, waiting_ago: 1d}
+    description: |-
+      A title far wider than any column, in a repository with a very long path.
+
+      ---
+      🎫 [REV-300](https://tickets.demo.invalid/browse/REV-300) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 531
+    id: 9531
+    title: "refactor(REV-300): the matching change on the API side, with a title that is also much longer than the space a card or a preview row can give it"
+    author: grace
+    merge_status: mergeable
+    source_branch: rev-300-api-side
+    created_ago: 22h
+    updated_ago: 2h
+    reviewers:
+      - {username: ada, state: not_started, waiting_ago: 22h}
+      - {username: linus, state: not_started, waiting_ago: 22h}
+    description: |-
+      The other half of the pair.
+
+      ---
+      🎫 [REV-300](https://tickets.demo.invalid/browse/REV-300) <!-- mrboard -->
+
+  # ---- REV-400: no related MRs ----
+  - project_id: 101
+    iid: 520
+    id: 9520
+    title: "fix(REV-400): stop retrying non-idempotent requests"
+    author: grace
+    merge_status: mergeable
+    source_branch: rev-400-retries
+    created_ago: 5h
+    updated_ago: 1h
+    approvers: [ada]
+    reviewers:
+      - {username: ada, approver: true, state: not_started, waiting_ago: 5h}
+      - {username: linus, state: not_started, waiting_ago: 5h}
+    description: |-
+      The only MR for this ticket: the editor saves directly, with no preview.
+
+      ---
+      🎫 [REV-400](https://tickets.demo.invalid/browse/REV-400) <!-- mrboard -->
+
+  # ---- no ticket key ----
+  - project_id: 103
+    iid: 540
+    id: 9540
+    title: "chore: bump the linter versions"
+    author: ops-bot
+    merge_status: mergeable
+    source_branch: bump-linters
+    created_ago: 50m
+    updated_ago: 50m
+    description: |-
+      No ticket key and no reviewers.
