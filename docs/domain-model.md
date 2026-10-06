@@ -168,6 +168,19 @@ gating is applied at render time rather than by clearing `WaitingSince` for non-
 rules can change without bumping the MR's `UpdatedAt`) — zeroing the field would permanently lose
 it for a reviewer later promoted to approver.
 
+## Roles, visibility and attention
+
+Defined in `internal/domain/attention.go` (see `docs/adr/0013-my-view-visibility-and-attention.md`).
+
+- `RolesOf(user)` — `author`, `assignee` and/or `reviewer` (any state, approver or not).
+- `Concerns(user)` — true when `RolesOf` is non-empty. This is what My View filters on.
+- `NeedsAttention(user)` — the ball is in the user's court: as author or assignee, the phase is
+  `NeedsAuthorAction` or `ReadyToMerge`; as reviewer, their state is `NotStarted` or
+  `ReReviewRequested`. Drafts never need attention, and when the MR designates approvers a
+  non-approver reviewer is not prompted.
+
+Visibility and attention are independent: an MR can concern a user without needing them.
+
 ## Time helpers
 
 `FormatDuration(d time.Duration) string` lives in `internal/domain/mr.go`:

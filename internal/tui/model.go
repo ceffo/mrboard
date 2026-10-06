@@ -1948,6 +1948,7 @@ func (m *Model) applyMRFilter() {
 		KeyMatcher:         m.keyMatcher,
 	})
 	displayMRs := visibleMRs(mrs, m.currentUser)
+	m.board.SetAttention(attentionKeys(displayMRs, m.currentUser))
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
 	m.header.SetMRs(displayMRs)
 	m.header.SetFilterState(len(src), m.headerFilterState())
@@ -1982,6 +1983,22 @@ func (m *Model) headerFilterState() headerFilterState {
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
 	return mrs
+}
+
+// attentionKeys returns the keys of the MRs whose ball is in username's court.
+// It is nil when username is empty or nothing needs them.
+func attentionKeys(mrs []domain.MergeRequest, username string) map[domain.MRKey]bool {
+	var keys map[domain.MRKey]bool
+	for _, mr := range mrs {
+		if !mr.NeedsAttention(username) {
+			continue
+		}
+		if keys == nil {
+			keys = make(map[domain.MRKey]bool)
+		}
+		keys[mr.Key()] = true
+	}
+	return keys
 }
 
 // buildTicketIndex rebuilds ticketIndex from allMRs. MRs without a detectable ticket

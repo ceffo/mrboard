@@ -15,6 +15,7 @@ type Styles struct {
 	CardAuthor                  lip.Style
 	CardFocused                 lip.Style
 	CardFocusedInactive         lip.Style
+	CardAttention               lip.Style // unfocused card whose ball is in the current user's court
 	CardMeta                    lip.Style
 	CardTitle                   lip.Style
 	ColumnBorder                lip.Style
@@ -140,6 +141,10 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		CardFocusedInactive: lip.NewStyle().
 			Border(lip.RoundedBorder()).
 			BorderForeground(c(Border)).
+			Padding(0, 1),
+		CardAttention: lip.NewStyle().
+			Border(lip.RoundedBorder()).
+			BorderForeground(c(Warning)).
 			Padding(0, 1),
 		CardTitle:       lip.NewStyle().Bold(true),
 		CardAuthor:      lip.NewStyle().Foreground(c(Info)).Bold(true),
