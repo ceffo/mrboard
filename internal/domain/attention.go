@@ -11,9 +11,10 @@ const (
 )
 
 // RolesOf returns every way username is connected to the MR, in the fixed order
-// author, assignee, reviewer. A reviewer is anyone in the formal reviewer list,
-// in any state and whether or not they are an approver. An empty username has
-// no roles.
+// author, assignee, reviewer. A reviewer is someone in the formal reviewer list,
+// in any state; when the MR designates approvers, only an approver counts, since
+// a plain reviewer is not held to a review obligation. An empty username has no
+// roles.
 func (mr MergeRequest) RolesOf(username string) []Role {
 	if username == "" {
 		return nil
@@ -25,16 +26,16 @@ func (mr MergeRequest) RolesOf(username string) []Role {
 	if mr.Assignee == username {
 		roles = append(roles, RoleAssignee)
 	}
-	if mr.reviewerEntry(username) != nil {
+	if mr.reviewerRole(username) != nil {
 		roles = append(roles, RoleReviewer)
 	}
 	return roles
 }
 
 // Concerns reports whether the MR belongs in username's own view: the user is
-// its author, assignee, or a reviewer. Visibility is deliberately independent of
-// NeedsAttention, so an MR the user owns never disappears while it waits on
-// others.
+// its author, assignee, or a counting reviewer (see RolesOf). Visibility is
+// deliberately independent of NeedsAttention, so an MR the user owns never
+// disappears while it waits on others.
 func (mr MergeRequest) Concerns(username string) bool {
 	return len(mr.RolesOf(username)) > 0
 }
@@ -43,9 +44,7 @@ func (mr MergeRequest) Concerns(username string) bool {
 //
 //   - As author or assignee: reviewers have commented (PhaseNeedsAuthorAction)
 //     or the MR is approved and awaiting merge (PhaseReadyToMerge).
-//   - As reviewer: their own state is NotStarted or ReReviewRequested. When the
-//     MR designates approvers, only an approver is prompted; a plain reviewer is
-//     not held to a review obligation.
+//   - As reviewer: their own state is NotStarted or ReReviewRequested.
 //
 // Drafts never need attention: the author has not asked for review yet.
 func (mr MergeRequest) NeedsAttention(username string) bool {
@@ -57,18 +56,25 @@ func (mr MergeRequest) NeedsAttention(username string) bool {
 			return true
 		}
 	}
-	r := mr.reviewerEntry(username)
-	if r == nil || (mr.hasApprovers() && !r.IsApprover) {
+	r := mr.reviewerRole(username)
+	if r == nil {
 		return false
 	}
 	return r.State == ReviewerNotStarted || r.State == ReviewerReReviewRequested
 }
 
-func (mr MergeRequest) reviewerEntry(username string) *ReviewerInfo {
+// reviewerRole returns username's reviewer entry, or nil when they have none or
+// the MR designates approvers and they are not one of them.
+func (mr MergeRequest) reviewerRole(username string) *ReviewerInfo {
 	for i := range mr.Reviewers {
-		if mr.Reviewers[i].Username == username {
-			return &mr.Reviewers[i]
+		r := &mr.Reviewers[i]
+		if r.Username != username {
+			continue
 		}
+		if mr.hasApprovers() && !r.IsApprover {
+			return nil
+		}
+		return r
 	}
 	return nil
 }

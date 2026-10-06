@@ -172,12 +172,12 @@ it for a reviewer later promoted to approver.
 
 Defined in `internal/domain/attention.go` (see `docs/adr/0013-my-view-visibility-and-attention.md`).
 
-- `RolesOf(user)` — `author`, `assignee` and/or `reviewer` (any state, approver or not).
+- `RolesOf(user)` — `author`, `assignee` and/or `reviewer` (any state). When the MR designates
+  approvers, only an approver counts as a reviewer; authorship is never gated.
 - `Concerns(user)` — true when `RolesOf` is non-empty. This is what My View filters on.
 - `NeedsAttention(user)` — the ball is in the user's court: as author or assignee, the phase is
   `NeedsAuthorAction` or `ReadyToMerge`; as reviewer, their state is `NotStarted` or
-  `ReReviewRequested`. Drafts never need attention, and when the MR designates approvers a
-  non-approver reviewer is not prompted.
+  `ReReviewRequested`. Drafts never need attention.
 
 Visibility and attention are independent: an MR can concern a user without needing them.
 

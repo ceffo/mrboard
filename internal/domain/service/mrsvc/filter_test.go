@@ -115,7 +115,7 @@ func TestFilterAndSort_MyViewOn_ExcludesUnrelatedMR(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestFilterAndSort_MyViewOn_ApproversAssigned_IncludesNonApproverReviewer(t *testing.T) {
+func TestFilterAndSort_MyViewOn_ApproversAssigned_ExcludesNonApproverReviewer(t *testing.T) {
 	mrs := []domain.MergeRequest{
 		mr(1, "bob", "repo/a", 1, t0,
 			domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerNotStarted, IsApprover: false},
@@ -123,7 +123,18 @@ func TestFilterAndSort_MyViewOn_ApproversAssigned_IncludesNonApproverReviewer(t 
 		),
 	}
 	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
-	assert.Len(t, got, 1, "alice is a reviewer, so the MR concerns her")
+	assert.Empty(t, got, "alice is a reviewer but not an approver")
+}
+
+func TestFilterAndSort_MyViewOn_ApproversAssigned_IncludesApproverReviewer(t *testing.T) {
+	mrs := []domain.MergeRequest{
+		mr(1, "bob", "repo/a", 1, t0,
+			domain.ReviewerInfo{Username: userAlice, State: domain.ReviewerApproved, IsApprover: true},
+			domain.ReviewerInfo{Username: userBob, State: domain.ReviewerNotStarted, IsApprover: true},
+		),
+	}
+	got := mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{MyView: true, CurrentUser: userAlice})
+	assert.Len(t, got, 1, "alice is an approver, in any state")
 }
 
 func TestFilterAndSort_MyViewOn_ApproversAssigned_AssigneeStillIncluded(t *testing.T) {

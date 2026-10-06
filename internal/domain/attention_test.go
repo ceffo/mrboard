@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	attnMe    = "me"
-	attnOther = "other"
+	attnMe       = "me"
+	attnOther    = "other"
+	attnApprover = "approver"
 )
 
 func TestRolesOf(t *testing.T) {
@@ -104,16 +105,33 @@ func TestNeedsAttention_ReviewerOnDraftIsNotPrompted(t *testing.T) {
 	assert.False(t, mr.NeedsAttention(attnMe))
 }
 
-func TestNeedsAttention_NonApproverIsNotPromptedWhenApproversExist(t *testing.T) {
+func TestNonApproverReviewerIsNotConcernedWhenApproversExist(t *testing.T) {
 	mr := MergeRequest{
 		Author: attnOther, Phase: PhaseNeedsReview,
 		Reviewers: []ReviewerInfo{
 			{Username: attnMe, State: ReviewerNotStarted},
-			{Username: "approver", State: ReviewerNotStarted, IsApprover: true},
+			{Username: attnApprover, State: ReviewerNotStarted, IsApprover: true},
 		},
 	}
-	assert.False(t, mr.NeedsAttention(attnMe), "non-approver reviewer is not prompted")
-	assert.True(t, mr.Concerns(attnMe), "but the MR still concerns them")
+	assert.Empty(t, mr.RolesOf(attnMe))
+	assert.False(t, mr.Concerns(attnMe))
+	assert.False(t, mr.NeedsAttention(attnMe))
+}
+
+func TestNonApproverAuthorStillConcernedWhenApproversExist(t *testing.T) {
+	mr := MergeRequest{
+		Author: attnMe, Phase: PhaseNeedsReview,
+		Reviewers: []ReviewerInfo{{Username: attnApprover, IsApprover: true}},
+	}
+	assert.Equal(t, []Role{RoleAuthor}, mr.RolesOf(attnMe))
+}
+
+func TestPlainReviewerIsConcernedWhenNoApproversExist(t *testing.T) {
+	mr := MergeRequest{
+		Author:    attnOther,
+		Reviewers: []ReviewerInfo{{Username: attnMe, State: ReviewerCommented}},
+	}
+	assert.Equal(t, []Role{RoleReviewer}, mr.RolesOf(attnMe))
 }
 
 func TestNeedsAttention_ApproverIsPrompted(t *testing.T) {
@@ -132,7 +150,7 @@ func TestNeedsAttention_EmptyUsername(t *testing.T) {
 func TestNeedsAttention_AuthorOfWaitingMRWithApproversIsNotPrompted(t *testing.T) {
 	mr := MergeRequest{
 		Author: attnMe, Phase: PhaseNeedsReview,
-		Reviewers: []ReviewerInfo{{Username: "approver", State: ReviewerNotStarted, IsApprover: true}},
+		Reviewers: []ReviewerInfo{{Username: attnApprover, State: ReviewerNotStarted, IsApprover: true}},
 	}
 	assert.False(t, mr.NeedsAttention(attnMe))
 	assert.True(t, mr.Concerns(attnMe), "the user's own MR stays visible")

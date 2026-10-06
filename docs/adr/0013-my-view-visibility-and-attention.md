@@ -19,8 +19,10 @@ until it no longer meant "needs me", and the board would have lost the signal it
 Split the two questions into two pure domain rules in `internal/domain/attention.go`.
 
 **Visibility — `MergeRequest.Concerns(user)`.** The MR is shown if the user is its author, its
-assignee, or in its reviewer list in any state, approver or not. Visibility never depends on phase
-or reviewer state, so an MR the user owns cannot disappear while it waits on others.
+assignee, or a reviewer in any state. When the MR designates approvers, only an approver counts as
+a reviewer: a plain reviewer on such an MR is not held to a review obligation, so it stays out of
+their view. Visibility never depends on phase or reviewer state, and authorship is never gated, so
+an MR the user owns cannot disappear while it waits on others.
 
 **Attention — `MergeRequest.NeedsAttention(user)`.** The ball is in the user's court:
 
@@ -29,12 +31,9 @@ or reviewer state, so an MR the user owns cannot disappear while it waits on oth
 | Author or assignee | phase is `NeedsAuthorAction` (a reviewer commented) or `ReadyToMerge` |
 | Reviewer | their own state is `NotStarted` or `ReReviewRequested` |
 
-Two gates apply to both roles:
-
-- A **draft** never needs attention — review has not been asked for yet.
-- When the MR designates approvers, only an approver reviewer is prompted. A plain reviewer still
-  sees the MR but is not highlighted, consistent with basic reviewers not being held to a review
-  SLA (see `docs/domain-model.md`).
+A **draft** never needs attention — review has not been asked for yet. The approver gate above
+applies here too, since a non-approver reviewer on an approver-designated MR has no reviewer role at
+all (see `docs/domain-model.md` on basic reviewers and review SLAs).
 
 `MergeRequest.RolesOf(user)` returns the user's roles on the MR (`author`, `assignee`, `reviewer`)
 and backs `Concerns`.
