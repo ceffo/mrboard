@@ -44,6 +44,7 @@ type MRWriter interface {
 		ctx context.Context, projectID, mrIID int64, payload MRApprovalRulePayload,
 	) (*gl.MergeRequestApprovalRule, error)
 	UpdateMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64, payload MRApprovalRulePayload) error
+	DeleteMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64) error
 	// SetMRReviewers replaces the MR's reviewer set with the given user IDs.
 	// An empty slice clears all reviewers.
 	SetMRReviewers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error

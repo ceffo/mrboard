@@ -38,6 +38,7 @@ query($username: String!) {
         approvalState {
           rules {
             name
+            type
             eligibleApprovers { username }
           }
         }
@@ -91,6 +92,7 @@ query($username: String!) {
         approvalState {
           rules {
             name
+            type
             eligibleApprovers { username }
           }
         }
@@ -110,6 +112,7 @@ type GQLUser struct {
 // GQLApprovalRule is a single MR approval rule as returned by the GraphQL API.
 type GQLApprovalRule struct {
 	Name              string    `json:"name"`
+	Type              string    `json:"type"` // REGULAR, CODE_OWNER, ANY_APPROVER or REPORT_APPROVER
 	EligibleApprovers []GQLUser `json:"eligibleApprovers"`
 }
 
@@ -254,6 +257,7 @@ query($username: String!) {
         approvalState {
           rules {
             name
+            type
             eligibleApprovers { username }
           }
         }
@@ -314,6 +318,7 @@ query($username: String!) {
         approvalState {
           rules {
             name
+            type
             eligibleApprovers { username }
           }
         }

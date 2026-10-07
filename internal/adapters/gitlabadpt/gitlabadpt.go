@@ -454,23 +454,31 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 		ApprovalsRequired: required,
 		UserIDs:           userIDs,
 	}
+	var managedID int64
+	var stale []*gl.MergeRequestApprovalRule
 	for _, r := range rules {
-		if r.Name == approversRuleName {
-			err = a.client.UpdateMRApprovalRule(ctx, projectID, mrIID, r.ID, payload)
-			if err != nil {
-				return err
-			}
-			logger.Info("gitlab: approval rule updated", "project_id", projectID, "mr_iid", mrIID,
-				"rule_id", r.ID, "required", required, "duration", ilog.FmtDur(time.Since(start)))
-			return nil
+		switch {
+		case r.Name == approversRuleName && managedID == 0:
+			managedID = r.ID
+		case r.RuleType == ruleTypeRegular:
+			stale = append(stale, r)
 		}
 	}
-	_, err = a.client.CreateMRApprovalRule(ctx, projectID, mrIID, payload)
+	if managedID != 0 {
+		err = a.client.UpdateMRApprovalRule(ctx, projectID, mrIID, managedID, payload)
+	} else {
+		_, err = a.client.CreateMRApprovalRule(ctx, projectID, mrIID, payload)
+	}
 	if err != nil {
 		return err
 	}
-	logger.Info("gitlab: approval rule created", "project_id", projectID, "mr_iid", mrIID,
-		"required", required, "duration", ilog.FmtDur(time.Since(start)))
+	for _, r := range stale {
+		if err = a.client.DeleteMRApprovalRule(ctx, projectID, mrIID, r.ID); err != nil {
+			return err
+		}
+	}
+	logger.Info("gitlab: approval rules saved", "project_id", projectID, "mr_iid", mrIID,
+		"required", required, "replaced_rules", len(stale), "duration", ilog.FmtDur(time.Since(start)))
 	return nil
 }
 

@@ -42,7 +42,8 @@ type MergeRequestSource interface {
 	// GetProjectMembers returns all project members.
 	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
 
-	// SaveApprovers writes the "Approvers" approval rule with the given user IDs.
+	// SaveApprovers writes the "approvers_mrboard" approval rule with the given user IDs and
+	// deletes the MR's other regular rules.
 	// Creates the rule if it doesn't exist; updates it if it does.
 	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
 

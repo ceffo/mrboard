@@ -16,7 +16,7 @@ func gqlApprovalRule(name string, usernames ...string) pkggitlab.GQLApprovalRule
 	for i, u := range usernames {
 		eligible[i] = pkggitlab.GQLUser{Username: u, Name: u}
 	}
-	return pkggitlab.GQLApprovalRule{Name: name, EligibleApprovers: eligible}
+	return pkggitlab.GQLApprovalRule{Name: name, Type: gqlRuleTypeRegular, EligibleApprovers: eligible}
 }
 
 // TestMergeMRFromGraphQL_UnchangedMRReusesDiscussionDerivedFields verifies the

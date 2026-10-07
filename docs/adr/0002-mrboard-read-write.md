@@ -4,7 +4,7 @@
 
 ## Context
 
-mrboard was a read-only board. All GitLab interactions were fetches. The approver editor requires writing the `"Approvers"` MR-level approval rule back to GitLab, and fetching project members (Developer+) for the extended picker.
+mrboard was a read-only board. All GitLab interactions were fetches. The approver editor requires writing the MR-level approval rule (named `"Approvers"` at the time of this ADR, `approvers_mrboard` since the read-all-rules change) back to GitLab, and fetching project members (Developer+) for the extended picker.
 
 ## Decision
 

@@ -27,6 +27,7 @@ const (
 	testUserAlice     = "alice"
 	testUserAliceName = "Alice"
 	testUserBob       = "bob"
+	testUserCarol     = "carol"
 	testUserBobName   = "Bob"
 	testUserPriya     = "priya"
 )
@@ -288,7 +289,7 @@ func approvalRule(name string, usernames ...string) *gl.MergeRequestApprovalRule
 	for i, u := range usernames {
 		eligible[i] = basicUser(u, u)
 	}
-	return &gl.MergeRequestApprovalRule{Name: name, EligibleApprovers: eligible}
+	return &gl.MergeRequestApprovalRule{Name: name, RuleType: ruleTypeRegular, EligibleApprovers: eligible}
 }
 
 func TestMapMR_IsApprover_InApproversRule(t *testing.T) {
@@ -318,9 +319,9 @@ func TestMapMR_Approvers_IncludesNonReviewerEligibleApprovers(t *testing.T) {
 	// reviewer yet — Approvers must still include her, unlike IsApprover
 	// which only flags entries already present in Reviewers.
 	m := mr(basicUser(testUserAlice, testUserAliceName))
-	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice, "carol")}
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice, testUserCarol)}
 	result := MapMR(m, nil, approvals(), rules)
-	assert.ElementsMatch(t, []string{testUserAlice, "carol"}, result.Approvers)
+	assert.ElementsMatch(t, []string{testUserAlice, testUserCarol}, result.Approvers)
 }
 
 func TestMapMR_DetailedMergeStatus_Stored(t *testing.T) {
@@ -408,4 +409,46 @@ func TestExtractReReviewUsername(t *testing.T) {
 		got := extractReReviewUsername(tc.body)
 		assert.Equal(t, tc.want, got, "body=%q", tc.body)
 	}
+}
+
+func TestMapMR_Approvers_UnionsEveryRuleRegardlessOfName(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName))
+	rules := []*gl.MergeRequestApprovalRule{
+		approvalRule("Backend approvers", testUserAlice),
+		approvalRule("Security", testUserAlice, testUserCarol),
+		approvalRule("Any approver"),
+	}
+	result := MapMR(m, nil, approvals(), rules)
+	assert.ElementsMatch(t, []string{testUserAlice, testUserCarol}, result.Approvers)
+	for _, r := range result.Reviewers {
+		assert.Equal(t, r.Username == testUserAlice, r.IsApprover, "IsApprover for %s", r.Username)
+	}
+}
+
+func TestMapMR_Approvers_IgnoresSystemManagedRules(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName))
+	codeOwners := approvalRule("*", testUserBob, testUserCarol)
+	codeOwners.RuleType = "code_owner"
+	rules := []*gl.MergeRequestApprovalRule{approvalRule("Approvers", testUserAlice), codeOwners}
+	result := MapMR(m, nil, approvals(), rules)
+	assert.Equal(t, []string{testUserAlice}, result.Approvers)
+	for _, r := range result.Reviewers {
+		assert.Equal(t, r.Username == testUserAlice, r.IsApprover, "IsApprover for %s", r.Username)
+	}
+}
+
+func TestApproverSetFromGQLRules_IgnoresSystemManagedRules(t *testing.T) {
+	codeOwners := pkggitlab.GQLApprovalRule{
+		Name:              "*",
+		Type:              "CODE_OWNER",
+		EligibleApprovers: []pkggitlab.GQLUser{{Username: testUserCarol}},
+	}
+	anyApprover := pkggitlab.GQLApprovalRule{Name: "All Members", Type: "ANY_APPROVER"}
+	regular := pkggitlab.GQLApprovalRule{
+		Name:              "approvers",
+		Type:              gqlRuleTypeRegular,
+		EligibleApprovers: []pkggitlab.GQLUser{{Username: testUserAlice}},
+	}
+	set := approverSetFromGQLRules([]pkggitlab.GQLApprovalRule{codeOwners, anyApprover, regular})
+	assert.Equal(t, map[string]bool{testUserAlice: true}, set)
 }

@@ -13,8 +13,15 @@ import (
 )
 
 const (
-	// approversRuleName is the canonical name of the GitLab MR approval rule managed by mrboard.
-	approversRuleName = "Approvers"
+	// approversRuleName is the name of the single GitLab MR approval rule mrboard writes.
+	// Reads union every rule on the MR; writes own this rule and replace all others.
+	approversRuleName = "approvers_mrboard"
+
+	// ruleTypeRegular and gqlRuleTypeRegular are the REST rule_type and GraphQL type of a
+	// user-defined approval rule, as opposed to the system-managed any_approver, code_owner
+	// and report_approver rules. Only regular rules express a deliberate choice of approvers.
+	ruleTypeRegular    = "regular"
+	gqlRuleTypeRegular = "REGULAR"
 
 	// reReviewPrefix is the system note body prefix GitLab emits when an author
 	// re-requests review from a specific reviewer.
@@ -188,32 +195,32 @@ func extractReReviewUsername(body string) string {
 	return username
 }
 
-// approverSetFromRESTRules extracts eligible approver usernames from the "Approvers" rule.
+// approverSetFromRESTRules returns the usernames eligible to approve under any regular approval rule.
 func approverSetFromRESTRules(rules []*gl.MergeRequestApprovalRule) map[string]bool {
+	set := make(map[string]bool)
 	for _, r := range rules {
-		if r.Name == approversRuleName {
-			set := make(map[string]bool, len(r.EligibleApprovers))
-			for _, u := range r.EligibleApprovers {
-				set[u.Username] = true
-			}
-			return set
+		if r.RuleType != ruleTypeRegular {
+			continue
+		}
+		for _, u := range r.EligibleApprovers {
+			set[u.Username] = true
 		}
 	}
-	return nil
+	return set
 }
 
-// approverSetFromGQLRules extracts eligible approver usernames from the GQL "Approvers" rule.
+// approverSetFromGQLRules returns the usernames eligible to approve under any regular approval rule.
 func approverSetFromGQLRules(rules []pkggitlab.GQLApprovalRule) map[string]bool {
+	set := make(map[string]bool)
 	for _, r := range rules {
-		if r.Name == approversRuleName {
-			set := make(map[string]bool, len(r.EligibleApprovers))
-			for _, u := range r.EligibleApprovers {
-				set[u.Username] = true
-			}
-			return set
+		if r.Type != gqlRuleTypeRegular {
+			continue
+		}
+		for _, u := range r.EligibleApprovers {
+			set[u.Username] = true
 		}
 	}
-	return nil
+	return set
 }
 
 // applyApproverFlag sets IsApprover on each ReviewerInfo whose username is in the approver set.

@@ -273,6 +273,23 @@ func (c *Client) UpdateMRApprovalRule(
 	return nil
 }
 
+// DeleteMRApprovalRule deletes an approval rule from an MR.
+func (c *Client) DeleteMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: delete approval rule", "project", projectID, "mr", mrIID, "rule_id", ruleID)
+	_, err := c.gl.MergeRequestApprovals.DeleteApprovalRule(projectID, mrIID, ruleID, gl.WithContext(ctx))
+	elapsed := time.Since(start)
+	if err != nil {
+		c.logger.Error("gitlab: delete approval rule error",
+			"project", projectID, "mr", mrIID, "rule_id", ruleID, "duration", ilog.FmtDur(elapsed), "error", err)
+		return fmt.Errorf("gitlab: delete approval rule project=%d MR=%d rule=%d: %w",
+			projectID, mrIID, ruleID, err)
+	}
+	c.logger.Debug("gitlab: delete approval rule done",
+		"project", projectID, "mr", mrIID, "rule_id", ruleID, "duration", ilog.FmtDur(elapsed))
+	return nil
+}
+
 // GetMRApprovals returns the approval status for an MR.
 func (c *Client) GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*gl.MergeRequestApprovals, error) {
 	start := time.Now()
