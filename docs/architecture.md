@@ -90,6 +90,11 @@ MR via `FetchMR` after a successful write.
 The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
 for Microsoft Teams.
 
+With `notifications.teams.announce_approver_changes`, every fetch also hands each MR whose approver
+set changed to `mrsvc.AnnounceApproverChange`: `mrsvc.ApproverClaims` (implemented by `gitlabadpt`
+as a ledger of internal MR notes, folded by `domain.FoldApproverClaims`) elects one instance to call
+`Notify`. See `docs/adr/0014-approver-change-announcements.md`.
+
 `internal/tui/version.go`'s `versionWidget` owns the update check end to end: a forced check on
 launch, a recurring one every `update_check.cache_ttl`, the footer badge and its `u` hint, the
 enablement of the `u` binding, and the `tea.ExecProcess` run on confirm. All of it is skipped for

@@ -112,8 +112,8 @@ func ResolveReviewerSet(live []domain.ReviewerInfo, change ReviewerChange) []Rev
 // (see ResolveReviewerSet), never to the possibly stale board snapshot the edit
 // was staged against — SetReviewers replaces the whole set, so anything the
 // result omits would be stripped from the MR. Nothing is written for a part
-// that would not change: the reviewer set via SetReviewers, the "Approvers"
-// rule via SaveApprovers. It then refetches the MR and overlays the
+// that would not change: the reviewer set via SetReviewers, the approval
+// rules via SaveApprovers. It then refetches the MR and overlays the
 // just-written approver flags onto it, since GitLab's approval-rule read is
 // eventually consistent and a fetch fired immediately after SaveApprovers can
 // return stale IsApprover flags.

@@ -312,6 +312,9 @@ type Model struct {
 	snapshotWrittenAt  time.Time    // when the displayed data was captured; zero until a snapshot exists
 	selected           domain.MRKey // single source of truth for board selection, see docs/adr/0005
 	notifier           domain.Notifier
+	approverClaims     mrsvc.ApproverClaims // nil when approver announcements are off
+	newMRWindow        time.Duration        // how recent an MR's first approver set must be to count as news
+	announce           announceTracker
 	alerts             toast.Model
 	ticketBaseURL      string
 	keyMatcher         domain.TicketKeyMatcher          // shared ticket-key extraction, see cfg.Jira
@@ -449,6 +452,7 @@ func New(
 		ticketEnricher:     ticketEnricher,
 		ticketLinker:       ticketLinker,
 		ticketDescLinked:   make(map[ticketDescLinkKey]bool),
+		announce:           newAnnounceTracker(),
 		dirty:              newDirtySet(),
 		refreshInterval:    cfg.RefreshInterval,
 		iconResolver:       ir,
@@ -611,7 +615,7 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	m.updateTicketKey()
 	cmds := []tea.Cmd{
 		m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds(),
-		m.makeAutoAssignReviewersCmds(),
+		m.makeAutoAssignReviewersCmds(), m.makeApproverAnnounceCmds(),
 	}
 	if len(m.dirty) > 0 {
 		// Landing snapshot was stale relative to one or more local writes;
@@ -745,8 +749,8 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ReviewersSavedMsg:
 		return m.handleReviewersSaved(msg)
 
-	case NotifyResultMsg:
-		return m.handleNotifyResult(msg)
+	case NotifyResultMsg, approverAnnounceResultMsg:
+		return m.handleNotificationResult(msg)
 
 	case CommandResultMsg:
 		return m.handleCommandResult(msg)
@@ -1424,8 +1428,10 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 		return m, m.toast(toast.ErrorAlert, "Save failed")
 	}
 	updatedMR := msg.MR
+	var approversBefore []string
 	for i, mr := range m.allMRs {
 		if mr.ProjectID == updatedMR.ProjectID && mr.IID == updatedMR.IID {
+			approversBefore = mr.Approvers
 			m.allMRs[i] = updatedMR
 			break
 		}
@@ -1437,7 +1443,10 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 	cmds := []tea.Cmd{m.toast(toast.InfoAlert, "Reviewers saved")}
 	// Only ping Teams when the approver set actually changed — a plain reviewer
 	// reassignment is not notification-worthy.
-	if m.notifier != nil && msg.ApproversChanged {
+	switch {
+	case m.announcingApprovers() && msg.ApproversChanged:
+		cmds = append(cmds, m.announceEditedApprovers(updatedMR, approversBefore))
+	case m.notifier != nil && msg.ApproversChanged:
 		cmds = append(cmds, m.notifyCmd(&updatedMR))
 	}
 	return m, tea.Batch(cmds...)

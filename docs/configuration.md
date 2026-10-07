@@ -142,7 +142,16 @@ notifications:
       alice: Alice Smith
     user_ids:                  # GitLab username → UPN/email, enables @mention pings
       alice: alice@example.com
+    announce_approver_changes: true   # default false
+    new_mr_window: 24h                # default 24h
 ```
+
+With `announce_approver_changes`, every running mrboard announces approver changes it discovers on
+any MR it shows — including ones made directly in GitLab by someone who does not use mrboard —
+and the instances agree through a ledger of internal notes on the MR so each change is announced
+once. An MR that predates the first sighting is recorded silently; `new_mr_window` is how recent an
+MR must be for its first approver set to count as news. See
+[adr/0014-approver-change-announcements.md](adr/0014-approver-change-announcements.md).
 
 ## External commands
 

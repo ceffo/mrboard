@@ -43,6 +43,13 @@ type TeamsConfig struct {
 	WebhookURL   string            `mapstructure:"webhook_url"`
 	UserMappings map[string]string `mapstructure:"user_mappings"` // gitlab username → Teams display name
 	UserIDs      map[string]string `mapstructure:"user_ids"`      // gitlab username → Teams UPN/email for @mention pings
+
+	// AnnounceApproverChanges makes every running mrboard announce approver changes it
+	// discovers on any MR, including ones made directly in GitLab. Off by default.
+	AnnounceApproverChanges bool `mapstructure:"announce_approver_changes"`
+	// NewMRWindow is how recent an MR must be for its first approver set to be announced
+	// rather than recorded silently. Default 24h.
+	NewMRWindow time.Duration `mapstructure:"new_mr_window"`
 }
 
 // Notifications mirrors the [notifications] YAML section.
@@ -222,6 +229,8 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("jira.case_insensitive_ticket_match", true)
 	v.SetDefault("refresh_interval", "60s")
 	v.SetDefault("auto_assign_reviewers.enabled", false)
+	v.SetDefault("notifications.teams.announce_approver_changes", false)
+	v.SetDefault("notifications.teams.new_mr_window", "24h")
 	v.SetDefault("update_check.enabled", true)
 	v.SetDefault("update_check.cache_ttl", "24h")
 

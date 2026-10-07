@@ -20,8 +20,8 @@ type MembersLoadedMsg struct {
 }
 
 // ReviewersSavedMsg carries the refreshed MR after saving reviewers (or an error).
-// ApproversChanged reports whether the write actually modified the "Approvers"
-// rule; the auto-notification only fires when it did (a plain reviewer
+// ApproversChanged reports whether the write actually modified the approval
+// rules; the auto-notification only fires when it did (a plain reviewer
 // reassignment is not worth pinging the channel about).
 type ReviewersSavedMsg struct {
 	MR               domain.MergeRequest

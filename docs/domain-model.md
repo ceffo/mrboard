@@ -113,7 +113,7 @@ type MergeRequest struct {
     TargetBranch        string
     Reviewers           []ReviewerInfo // Approvers appear first; distinguished by IsApprover
 
-    // Approvers is the full membership of the "Approvers" approval rule — usernames eligible to
+    // Approvers is the union of every approval rule on the MR — usernames eligible to
     // approve, regardless of whether they are currently assigned as a reviewer on this MR.
     // Distinct from ReviewerInfo.IsApprover, which only flags entries already present in Reviewers.
     Approvers []string
@@ -150,14 +150,14 @@ type ReviewerInfo struct {
     State        ReviewerState
     WaitingSince time.Time // when ball landed in their court (or author's)
     ApprovedAt   time.Time // zero unless State == ReviewerApproved
-    IsApprover   bool      // true if this reviewer is in the MR's "Approvers" approval rule
+    IsApprover   bool      // true if this reviewer is eligible under any approval rule on the MR
 }
 ```
 
-An **Approver** is a reviewer who is listed in the MR-level GitLab approval rule named `"Approvers"`.
+An **Approver** is a reviewer who is eligible to approve under any MR-level GitLab approval rule.
 Being an Approver is not a separate role — it is a property of a reviewer.
-`IsApprover` is populated from `GET .../merge_requests/:iid/approval_rules` (rule name `"Approvers"`,
-`eligible_approvers[].username`). If no such rule exists on the MR, all `IsApprover` fields are false.
+`IsApprover` is populated from `GET .../merge_requests/:iid/approval_rules` (all rules, unioned;
+`eligible_approvers[].username`). If the MR has no approval rules, all `IsApprover` fields are false.
 
 `WaitingSince` is computed and stored for every reviewer regardless of `IsApprover` — it is an
 objective fact about when their current state began, not a display decision. Basic reviewers are

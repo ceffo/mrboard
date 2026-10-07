@@ -18,7 +18,8 @@ import (
 func execBoard(ctx context.Context, c *core.Core, version string, opts tui.Options, out io.Writer) error {
 	final, err := tea.NewProgram(
 		tui.New(ctx, c.Config, c.MRSource, c.StateStore, c.SnapshotStore,
-			c.Notifier, c.TicketEnricher, c.TicketLinker, c.UpdateChecker, version, opts),
+			c.Notifier, c.TicketEnricher, c.TicketLinker, c.UpdateChecker, version, opts).
+			WithApproverAnnouncements(c.ApproverClaims, c.Config.Notifications.Teams.NewMRWindow),
 		tea.WithContext(ctx),
 	).Run()
 	if err != nil {

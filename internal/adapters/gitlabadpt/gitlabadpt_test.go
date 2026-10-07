@@ -147,6 +147,18 @@ func (f *fakeFetchClient) UpdateMRApprovalRule(
 	panic("not implemented")
 }
 
+func (f *fakeFetchClient) DeleteMRApprovalRule(_ context.Context, _, _, _ int64) error {
+	panic("not implemented")
+}
+
+func (f *fakeFetchClient) ListMRNotes(_ context.Context, _, _ int64) ([]*gl.Note, error) {
+	panic("not implemented")
+}
+
+func (f *fakeFetchClient) CreateMRNote(_ context.Context, _, _ int64, _ string, _ bool) (*gl.Note, error) {
+	panic("not implemented")
+}
+
 func (f *fakeFetchClient) SetMRReviewers(_ context.Context, _, _ int64, _ []int64) error {
 	panic("not implemented")
 }

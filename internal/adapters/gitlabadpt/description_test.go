@@ -132,6 +132,18 @@ func (f *fakeDescriptionClient) UpdateMRApprovalRule(
 	panic("not implemented")
 }
 
+func (f *fakeDescriptionClient) DeleteMRApprovalRule(_ context.Context, _, _, _ int64) error {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) ListMRNotes(_ context.Context, _, _ int64) ([]*gl.Note, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) CreateMRNote(_ context.Context, _, _ int64, _ string, _ bool) (*gl.Note, error) {
+	panic("not implemented")
+}
+
 func (f *fakeDescriptionClient) SetMRReviewers(_ context.Context, _, _ int64, _ []int64) error {
 	panic("not implemented")
 }

@@ -104,7 +104,7 @@ type ReviewerInfo struct {
 	State        ReviewerState
 	WaitingSince time.Time
 	ApprovedAt   time.Time // zero unless State == ReviewerApproved
-	IsApprover   bool      // member of the "Approvers" approval rule
+	IsApprover   bool      // eligible under any approval rule on the MR
 }
 
 // FileDiff holds the diff for a single file in an MR.
@@ -160,7 +160,7 @@ type MergeRequest struct {
 	TargetBranch        string // raw value from GitLab's target_branch field
 	Reviewers           []ReviewerInfo
 
-	// Approvers is the full membership of the "Approvers" approval rule —
+	// Approvers is the union of every approval rule on the MR —
 	// usernames eligible to approve, regardless of whether they are
 	// currently assigned as a reviewer on this MR. Distinct from
 	// ReviewerInfo.IsApprover, which only flags entries already present

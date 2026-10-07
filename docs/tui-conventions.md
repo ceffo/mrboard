@@ -131,7 +131,7 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `detail.go` | Detail panel widget — MR description + discussion threads |
 | `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
 | `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
-| `approver_editor.go` | Reviewer/approver editor overlay (`a`) — read/write "Approvers" rule; also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs, previewing what applying the edit would add to each. Fixed-height body in every mode |
+| `approver_editor.go` | Reviewer/approver editor overlay (`a`) — reads every approval rule, writes the `approvers_mrboard` rule (replacing manual rules); also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs, previewing what applying the edit would add to each. Fixed-height body in every mode |
 | `batch_preview.go` | Per-MR preview screen shown before writing to sibling MRs — siblings start unchecked (opt-in), each row shows its additions-only diff, fixed layout (docs/adr/0008-reviewer-write-use-case.md) |
 | `version.go` | Version widget — footer version segment, release check cadence, update badge + `u` hint, and the self-update run (docs/adr/0010-self-update-check.md) |
 | `confirm.go` | Reusable yes/no dialog — parameterized by title, body, and the message to emit on yes |
