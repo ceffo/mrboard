@@ -916,6 +916,10 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.requireFocusedMR("open", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, openBrowser(mr.WebURL)
 		})
+	case m.detailKeys.CopyURL.Match(msg):
+		return m.requireFocusedMR("copy URL", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			return m, copyURLCmd(mr.WebURL)
+		})
 	case m.detailKeys.Diff.Match(msg):
 		return m.requireFocusedMR("diff", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, m.openDiffView(mr)
@@ -991,6 +995,10 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case m.keys.Open.Match(msg):
 		return m.requireFocusedMR("open", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, openBrowser(mr.WebURL)
+		})
+	case m.keys.CopyURL.Match(msg):
+		return m.requireFocusedMR("copy URL", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			return m, copyURLCmd(mr.WebURL)
 		})
 	case m.keys.Detail.Match(msg):
 		return m.requireFocusedMR("detail", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
@@ -2053,6 +2061,12 @@ func hasReviewerSourceMR(mrs []domain.MergeRequest) bool {
 		}
 	}
 	return false
+}
+
+// copyURLCmd puts url on the system clipboard through the terminal (OSC 52),
+// which also reaches the local clipboard over SSH, and confirms with a toast.
+func copyURLCmd(url string) tea.Cmd {
+	return tea.Batch(tea.SetClipboard(url), toastCmd(toast.InfoAlert, "MR URL copied ✓"))
 }
 
 func openBrowser(url string) tea.Cmd {

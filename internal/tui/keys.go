@@ -19,6 +19,7 @@ import (
 var (
 	actOpenMR = Act("o", "open MR", PriorityCommon, CategoryAct)
 	actDiff   = Act("d", "diff", PriorityCommon, CategoryAct)
+	actCopy   = Act("c", "copy URL", PriorityModal, CategoryAct)
 )
 
 // BaseKeyMap is always active at the bottom of the context stack. Its keys
@@ -61,6 +62,7 @@ type BoardKeyMap struct {
 	Detail     Action
 	Refresh    Action
 	Open       Action
+	CopyURL    Action
 	Reviewers  Action
 	Diff       Action
 	Sort       Action
@@ -83,6 +85,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Detail:     Act("↵", "details", PriorityCore, CategoryNavigate, "enter"),
 	Refresh:    Act("r", "refresh", PriorityCommon, CategoryAct),
 	Open:       actOpenMR,
+	CopyURL:    actCopy,
 	Reviewers:  Act("a", "reviewers", PriorityCommon, CategoryAct),
 	Diff:       actDiff,
 	Sort:       Act("s", "sort", PriorityCommon, CategoryView),
@@ -110,6 +113,7 @@ type DetailKeyMap struct {
 	ScrollDown Action
 	Close      Action
 	Open       Action
+	CopyURL    Action
 	Diff       Action
 }
 
@@ -119,6 +123,7 @@ var DefaultDetailKeyMap = DetailKeyMap{
 	ScrollDown: Act("↓/j", "scroll down", PriorityCore, CategoryNavigate, "down", "j"),
 	Close:      Act("esc/↵", "close", PriorityCore, CategoryGeneral, "esc", "enter"),
 	Open:       actOpenMR,
+	CopyURL:    actCopy,
 	Diff:       actDiff,
 }
 
@@ -138,6 +143,7 @@ type DiffViewKeyMap struct {
 	Top          Action
 	Bottom       Action
 	Open         Action
+	CopyURL      Action
 	Close        Action
 }
 
@@ -152,6 +158,7 @@ var DefaultDiffViewKeyMap = DiffViewKeyMap{
 	Top:          Act("g", "top", PriorityModal, CategoryNavigate),
 	Bottom:       Act("G", "bottom", PriorityModal, CategoryNavigate),
 	Open:         actOpenMR,
+	CopyURL:      actCopy,
 	Close:        Act("d/esc", "close", PriorityCore, CategoryGeneral, "d", "esc"),
 }
 
