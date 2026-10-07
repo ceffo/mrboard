@@ -131,10 +131,7 @@ func (c *columnWidget) MoveUp() {
 	if len(c.cards) == 0 {
 		return
 	}
-	c.focusIdx--
-	if c.focusIdx < 0 {
-		c.focusIdx = len(c.cards) - 1
-	}
+	c.focusIdx = max(c.focusIdx-1, 0)
 	c.syncCardFocus()
 	c.clampScroll()
 }
@@ -143,10 +140,7 @@ func (c *columnWidget) MoveDown() {
 	if len(c.cards) == 0 {
 		return
 	}
-	c.focusIdx++
-	if c.focusIdx >= len(c.cards) {
-		c.focusIdx = 0
-	}
+	c.focusIdx = min(c.focusIdx+1, len(c.cards)-1)
 	c.syncCardFocus()
 	c.clampScroll()
 }
