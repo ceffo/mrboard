@@ -238,6 +238,10 @@ func (d diffViewWidget) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) { //
 		if d.mr != nil {
 			return d, openBrowser(d.mr.WebURL)
 		}
+	case d.keys.CopyURL.Match(msg):
+		if d.mr != nil {
+			return d, copyURLCmd(d.mr.WebURL)
+		}
 	}
 	return d, nil
 }
