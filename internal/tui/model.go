@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lip "charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 
 	"github.com/ceffo/toast"
 
@@ -2072,10 +2073,18 @@ func hasReviewerSourceMR(mrs []domain.MergeRequest) bool {
 	return false
 }
 
-// copyURLCmd puts url on the system clipboard through the terminal (OSC 52),
-// which also reaches the local clipboard over SSH, and confirms with a toast.
+// copyURLCmd puts url on the clipboard. The native clipboard (pbcopy, xclip,
+// wl-copy, Windows API) is written first because many terminals ignore OSC 52;
+// OSC 52 is always sent as well so the copy still reaches the local clipboard
+// over SSH, where the native one would be the remote host's.
 func copyURLCmd(url string) tea.Cmd {
-	return tea.Batch(tea.SetClipboard(url), toastCmd(toast.InfoAlert, "MR URL copied ✓"))
+	native := func() tea.Msg {
+		if err := clipboard.WriteAll(url); err != nil {
+			slog.Warn("native clipboard write failed", "err", err)
+		}
+		return nil
+	}
+	return tea.Batch(native, tea.SetClipboard(url), toastCmd(toast.InfoAlert, "MR URL copied ✓"))
 }
 
 func openBrowser(url string) tea.Cmd {
