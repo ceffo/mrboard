@@ -45,6 +45,23 @@ func TestBoardWidget_SetMRs_FollowsSelectedAcrossColumns(t *testing.T) {
 	assert.Equal(t, domain.PhaseReadyToMerge, b.FocusedMR().Phase, "focus must follow the card to its new column")
 }
 
+// A lane is sorted, so jumping from its last card back to its first (or the
+// reverse) would hide where the user is in that order: focus stops at the ends.
+func TestBoardWidget_MoveUpDown_StopAtLaneEnds(t *testing.T) {
+	b := newTestBoard()
+	mr1 := domain.MergeRequest{ProjectID: 1, IID: 1, Phase: domain.PhaseNeedsReview}
+	mr2 := domain.MergeRequest{ProjectID: 1, IID: 2, Phase: domain.PhaseNeedsReview}
+	b.SetMRs([]domain.MergeRequest{mr1, mr2}, domain.MRKey{})
+	require.Equal(t, mr1.Key(), b.FocusedMR().Key())
+
+	b.MoveUp()
+	assert.Equal(t, mr1.Key(), b.FocusedMR().Key(), "up from the first card stays on it")
+
+	b.MoveDown()
+	b.MoveDown()
+	assert.Equal(t, mr2.Key(), b.FocusedMR().Key(), "down from the last card stays on it")
+}
+
 // TestBoardWidget_SetMRs_AbsentMR_FocusLandsOnCardAtSameIndex covers the
 // fallback when the selected MR disappears (merged/closed/filtered) but its
 // column still has cards: focus stays at the same row index.

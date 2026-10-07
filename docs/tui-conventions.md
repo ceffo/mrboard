@@ -327,7 +327,8 @@ render into for the duration of the call.
 ## UX rules
 
 - Focus starts on the first non-empty column's first card at startup
-- `↑`/`↓` wraps within a column (bottom → top, top → bottom)
+- `↑`/`↓` stops at the first and last card of a column — it never wraps, so the position in the
+  column's sort order stays readable
 - `←`/`→` moves to the nearest card in the adjacent column (same row index, clamped)
 - Refresh (`r`) shows the spinner overlay; board is not interactive while loading
 - If the focused card is removed after a refresh, focus moves to the card above it (or the column header if empty)
