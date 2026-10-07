@@ -39,10 +39,12 @@ const (
 
 // Core holds every dependency a binary needs, fully wired.
 type Core struct {
-	MRSource       mrsvc.MergeRequestSource
-	StateStore     domain.StateStore
-	SnapshotStore  domain.SnapshotStore
-	Notifier       domain.Notifier
+	MRSource      mrsvc.MergeRequestSource
+	StateStore    domain.StateStore
+	SnapshotStore domain.SnapshotStore
+	Notifier      domain.Notifier
+	// ApproverClaims is non-nil only when approver announcements are enabled and a notifier is wired.
+	ApproverClaims mrsvc.ApproverClaims
 	TicketEnricher ticketsvc.TicketEnricher // nil when the issue tracker is not configured
 	TicketLinker   ticketsvc.TicketLinker   // nil when not configured; same adapter instance as TicketEnricher
 	UpdateChecker  updatesvc.UpdateChecker  // nil when update_check.enabled is false
@@ -85,6 +87,7 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		Sources:           sources,
 		ExcludedAuthors:   adptCfg.ExcludedAuthors,
 		ReviewerUsernames: deriveReviewerUsernames(sources, adptCfg.CurrentUser),
+		ClaimSettle:       gitlabadpt.DefaultClaimSettle,
 	})
 
 	// 4. State store
@@ -162,8 +165,14 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 		updateChecker = ghAdpt
 	}
 
+	var approverClaims mrsvc.ApproverClaims
+	if notifier != nil && cfg.Notifications.Teams.AnnounceApproverChanges {
+		approverClaims = adapter
+	}
+
 	return &Core{
 		MRSource:       adapter,
+		ApproverClaims: approverClaims,
 		StateStore:     store,
 		SnapshotStore:  snapStore,
 		Notifier:       notifier,

@@ -28,6 +28,7 @@ packages:
       filename: "mock_{{.InterfaceName}}.go"
       structname: "Mock{{.InterfaceName}}"
     interfaces:
+      ApproverClaims:
       MergeRequestSource:
   github.com/ceffo/mrboard/internal/domain/service/ticketsvc:
     config:

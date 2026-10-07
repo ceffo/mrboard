@@ -46,14 +46,16 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 
 	// An observation can be stale by the time it is claimed; claiming it would
 	// announce a revert of a change another instance already announced.
-	live, err := a.liveApprovers(ctx, req.ProjectID, req.MRIID)
-	if err != nil {
-		return false, err
-	}
-	if domain.ApproverSetHash(live) != want {
-		logger.Debug("gitlab: approver claim skipped, observation stale",
-			"project_id", req.ProjectID, "mr_iid", req.MRIID)
-		return false, nil
+	if !req.Authoritative {
+		live, liveErr := a.liveApprovers(ctx, req.ProjectID, req.MRIID)
+		if liveErr != nil {
+			return false, liveErr
+		}
+		if domain.ApproverSetHash(live) != want {
+			logger.Debug("gitlab: approver claim skipped, observation stale",
+				"project_id", req.ProjectID, "mr_iid", req.MRIID)
+			return false, nil
+		}
 	}
 
 	id, err := a.appendClaimID(ctx, req.ProjectID, req.MRIID, domain.ApproverClaim{Approvers: req.Approvers})

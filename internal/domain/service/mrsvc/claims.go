@@ -14,6 +14,10 @@ type ClaimRequest struct {
 	// Approvers when the MR is old (nothing to announce) or nil when it is new
 	// (its first set is itself the change).
 	Prior []string
+	// Authoritative marks Approvers as a set the caller just wrote itself, so
+	// the MR's live approver set, which can lag a write, is not consulted to
+	// detect a stale observation.
+	Authoritative bool
 }
 
 // ApproverClaims is the driven port for the approver-announcement ledger: a
@@ -23,7 +27,8 @@ type ApproverClaims interface {
 	// Claim records req.Approvers and reports whether the caller owns the
 	// announcement of that set. It reports false, without error, when the set
 	// is already recorded or announced, when another instance won the same
-	// race, or when the MR's live approver set no longer matches req.Approvers.
+	// race, or when the MR's live approver set no longer matches req.Approvers (unless
+	// req.Authoritative).
 	Claim(ctx context.Context, req ClaimRequest) (owned bool, err error)
 
 	// Release withdraws the caller's announcement of approvers after delivery

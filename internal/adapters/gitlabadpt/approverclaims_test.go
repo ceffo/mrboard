@@ -172,3 +172,14 @@ func TestRelease_LetsTheNextObserverAnnounceTheSameSet(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, owned)
 }
+
+func TestClaim_Authoritative_SkipsTheLiveCheck(t *testing.T) {
+	c := newFakeLedgerClient() // the live read still shows the set from before the write
+	a := &GitLabAdapter{client: c}
+
+	req := claimReq([]string{testUserAlice}, nil)
+	req.Authoritative = true
+	owned, err := a.Claim(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, owned)
+}
