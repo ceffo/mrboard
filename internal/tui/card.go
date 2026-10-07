@@ -31,6 +31,7 @@ type cardWidget struct {
 	keyMatcher    domain.TicketKeyMatcher
 	focused       bool
 	focusInactive bool // focused but board does not own the keyboard (detail panel open)
+	attention     bool // the ball is in the current user's court; tints the border when unfocused
 	width         int
 }
 
@@ -137,6 +138,8 @@ func (c cardWidget) render() string {
 		style = c.styles.CardFocusedInactive
 	case c.focused:
 		style = c.styles.CardFocused
+	case c.attention:
+		style = c.styles.CardAttention
 	}
 	// No Width() — manual per-line padding above keeps the card at a consistent
 	// width. Using Width() here enables lipgloss word-wrap which breaks the layout.

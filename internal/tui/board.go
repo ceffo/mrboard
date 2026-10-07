@@ -19,6 +19,7 @@ type boardWidget struct {
 	styles       Styles
 	iconResolver IssueTypeIconResolver
 	keyMatcher   domain.TicketKeyMatcher
+	attention    map[domain.MRKey]bool
 	width        int
 	height       int
 }
@@ -88,6 +89,10 @@ func columnWidths(totalWidth int) [numColumns]int {
 	return w
 }
 
+// SetAttention records which MRs need the current user; the next SetMRs marks
+// those cards. A nil set marks none.
+func (b *boardWidget) SetAttention(keys map[domain.MRKey]bool) { b.attention = keys }
+
 // SetMRs replaces the board's cards and resolves focus from selected rather
 // than resetting to the first card, so every caller gets correct selection
 // restoration by construction (see docs/adr/0005 "Selection identity").
@@ -110,6 +115,9 @@ func (b *boardWidget) SetMRs(mrs []domain.MergeRequest, selected domain.MRKey) d
 	}
 	for i := range b.columns {
 		b.columns[i].SetCards(byPhase[i])
+		for j := range b.columns[i].cards {
+			b.columns[i].cards[j].attention = b.attention[b.columns[i].cards[j].mr.Key()]
+		}
 	}
 
 	for i := range b.columns {
