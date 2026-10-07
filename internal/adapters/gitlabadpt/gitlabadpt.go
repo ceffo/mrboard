@@ -32,6 +32,9 @@ type Config struct {
 	Sources           []mrsvc.Source
 	ExcludedAuthors   []string
 	ReviewerUsernames []string
+	// ClaimSettle is the pause between appending an approver claim and re-reading the
+	// ledger to see whether it won. Zero skips the pause.
+	ClaimSettle time.Duration
 }
 
 // gitLabClient is the set of pkg/gitlab.Client capabilities used by the adapter.

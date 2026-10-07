@@ -165,6 +165,52 @@ func (c *Client) GetMRDiscussions(ctx context.Context, projectID, mrIID int64) (
 	return all, nil
 }
 
+// ListMRNotes returns every note on an MR, oldest first.
+func (c *Client) ListMRNotes(ctx context.Context, projectID, mrIID int64) ([]*gl.Note, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: list notes", "project", projectID, "mr", mrIID)
+	var all []*gl.Note
+	opts := &gl.ListMergeRequestNotesOptions{
+		ListOptions: gl.ListOptions{PerPage: perPage},
+		OrderBy:     gl.Ptr("created_at"),
+		Sort:        gl.Ptr("asc"),
+	}
+	for {
+		notes, resp, err := c.gl.Notes.ListMergeRequestNotes(projectID, mrIID, opts, gl.WithContext(ctx))
+		if err != nil {
+			c.logger.Error("gitlab: list notes error",
+				"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(time.Since(start)), "error", err)
+			return nil, fmt.Errorf("gitlab: list notes project=%d MR=%d: %w", projectID, mrIID, err)
+		}
+		all = append(all, notes...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	c.logger.Debug("gitlab: list notes done",
+		"project", projectID, "mr", mrIID, "count", len(all), "duration", ilog.FmtDur(time.Since(start)))
+	return all, nil
+}
+
+// CreateMRNote adds a note to an MR. An internal note is visible only to project members.
+func (c *Client) CreateMRNote(
+	ctx context.Context, projectID, mrIID int64, body string, internal bool,
+) (*gl.Note, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: create note", "project", projectID, "mr", mrIID, "internal", internal)
+	note, _, err := c.gl.Notes.CreateMergeRequestNote(projectID, mrIID,
+		&gl.CreateMergeRequestNoteOptions{Body: gl.Ptr(body), Internal: gl.Ptr(internal)}, gl.WithContext(ctx))
+	if err != nil {
+		c.logger.Error("gitlab: create note error",
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return nil, fmt.Errorf("gitlab: create note project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Debug("gitlab: create note done",
+		"project", projectID, "mr", mrIID, "note_id", note.ID, "duration", ilog.FmtDur(time.Since(start)))
+	return note, nil
+}
+
 // MRApprovalRulePayload holds the fields for creating or updating an MR approval rule.
 type MRApprovalRulePayload struct {
 	Name              string

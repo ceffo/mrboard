@@ -27,6 +27,8 @@ type MREnricher interface {
 	GetMRDiscussions(ctx context.Context, projectID, mrIID int64) ([]*gl.Discussion, error)
 	GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*gl.MergeRequestApprovals, error)
 	GetMRApprovalRules(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestApprovalRule, error)
+	// ListMRNotes returns every note on the MR, oldest first.
+	ListMRNotes(ctx context.Context, projectID, mrIID int64) ([]*gl.Note, error)
 	GetMRDescription(ctx context.Context, projectID, mrIID int64) (string, error)
 	GetMRDiffs(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestDiff, error)
 	GetMRDiffRefs(ctx context.Context, projectID, mrIID int64) (baseSHA, headSHA string, err error)
@@ -45,6 +47,8 @@ type MRWriter interface {
 	) (*gl.MergeRequestApprovalRule, error)
 	UpdateMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64, payload MRApprovalRulePayload) error
 	DeleteMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64) error
+	// CreateMRNote adds a note to the MR; an internal note is visible only to project members.
+	CreateMRNote(ctx context.Context, projectID, mrIID int64, body string, internal bool) (*gl.Note, error)
 	// SetMRReviewers replaces the MR's reviewer set with the given user IDs.
 	// An empty slice clears all reviewers.
 	SetMRReviewers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error
