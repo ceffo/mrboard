@@ -40,3 +40,7 @@ redirect
 
 # bv (beads viewer) lock file
 .bv.lock
+
+# Recovery backups and schema-migration state (local-only)
+.br_recovery/
+.beads.db.schema-migration-*
