@@ -560,7 +560,7 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		apprCh <- apprResult{a, err}
 	}()
 	go func() {
-		r, err := a.client.GetMRApprovalRules(ctx, mr.ProjectID, mr.IID)
+		r, err := a.client.GetMRApprovalStateRules(ctx, mr.ProjectID, mr.IID)
 		rulesCh <- rulesResult{r, err}
 	}()
 
@@ -575,7 +575,7 @@ func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) 
 		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approvals: %w", mr.ProjectID, mr.IID, ar.err)
 	}
 	if rr.err != nil {
-		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approval_rules: %w", mr.ProjectID, mr.IID, rr.err)
+		return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d approval_state: %w", mr.ProjectID, mr.IID, rr.err)
 	}
 
 	return MapMR(mr, dr.discussions, ar.approvals, rr.rules), nil
