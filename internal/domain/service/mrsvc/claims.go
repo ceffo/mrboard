@@ -1,6 +1,13 @@
 package mrsvc
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrClaimNotPermitted reports that the caller may not write the ledger
+// privately. Retrying cannot succeed until the caller's access changes.
+var ErrClaimNotPermitted = errors.New("not permitted to write the approver ledger")
 
 // ClaimRequest describes one observation of an MR's approver set.
 type ClaimRequest struct {

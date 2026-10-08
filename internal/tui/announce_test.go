@@ -161,6 +161,25 @@ func TestApproverAnnounce_FailureRestoresThePreviousSetSoTheChangeIsRetried(t *t
 	assert.Len(t, f.refresh(changed), 1)
 }
 
+func TestApproverAnnounce_NotPermitted_IsNotRetried(t *testing.T) {
+	f := newAnnounceFixture(t)
+	first := announceMR(time.Hour, editorTestApprover)
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	require.Len(t, f.refresh(first), 1)
+
+	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
+	require.Empty(t, f.refresh(changed))
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, mrsvc.ErrClaimNotPermitted).Once()
+	res := f.refresh(changed)
+	require.Len(t, res, 1)
+
+	next, _ := f.m.handleApproverAnnounceResult(res[0])
+	f.m = next.(Model)
+
+	assert.Empty(t, f.refresh(changed), "a refused write cannot succeed on retry")
+	assert.Empty(t, f.refresh(changed))
+}
+
 func TestApproverAnnounce_Disabled_MakesNoCalls(t *testing.T) {
 	m := New(context.Background(), &config.Config{}, mocks.NewMockMergeRequestSource(t), noopStore{},
 		noopSnapshotStore{}, domainmocks.NewMockNotifier(t), nil, nil, nil, "dev", Options{})

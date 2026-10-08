@@ -171,3 +171,11 @@ func TestUpdateDescription_PropagatesError(t *testing.T) {
 	err := a.UpdateDescription(context.Background(), 1, 10, "new body")
 	assert.ErrorIs(t, err, boom, "expected wrapped write error, got %v", err)
 }
+
+func (f *fakeDescriptionClient) DeleteMRNote(_ context.Context, _, _, _ int64) error {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) CurrentUserAccessLevel(_ context.Context, _ int64) (int, error) {
+	panic("not implemented")
+}

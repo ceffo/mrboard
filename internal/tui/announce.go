@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -134,6 +135,12 @@ func (m Model) handleNotificationResult(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleApproverAnnounceResult(msg approverAnnounceResultMsg) (tea.Model, tea.Cmd) {
 	key := msg.MR.Key()
+	if errors.Is(msg.Err, mrsvc.ErrClaimNotPermitted) {
+		// The set stays handled: retrying cannot succeed until access changes,
+		// and every attempt would cost GitLab calls.
+		m.logger.Warn("tui: approver announcement not permitted", "mr_iid", msg.MR.IID, "err", msg.Err)
+		return m, m.toast(toast.WarnAlert, "Approver change not announced: no permission to write internal notes")
+	}
 	if msg.Err != nil {
 		if msg.HadPrevious {
 			m.announce.handled[key] = msg.Previous

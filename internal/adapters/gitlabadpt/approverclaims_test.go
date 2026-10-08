@@ -2,6 +2,7 @@ package gitlabadpt
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,15 +23,33 @@ type fakeLedgerClient struct {
 	// beforeCreate runs just before each CreateMRNote, letting a test play a
 	// rival instance that appends its own entry first.
 	beforeCreate func(*fakeLedgerClient)
+	accessLevel  int
+	// createsPublic plays GitLab ignoring the internal flag.
+	createsPublic bool
+	deleted       []int64
 }
 
 func newFakeLedgerClient(live ...string) *fakeLedgerClient {
-	return &fakeLedgerClient{nextID: 100, liveRules: []*gl.MergeRequestApprovalRule{approvalRule("approvers", live...)}}
+	return &fakeLedgerClient{
+		nextID:      100,
+		liveRules:   []*gl.MergeRequestApprovalRule{approvalRule("approvers", live...)},
+		accessLevel: int(gl.DeveloperPermissions),
+	}
 }
 
 func (f *fakeLedgerClient) add(body string, system bool) {
 	f.nextID++
-	f.notes = append(f.notes, &gl.Note{ID: f.nextID, Body: body, System: system})
+	f.notes = append(f.notes, &gl.Note{ID: f.nextID, Body: body, System: system, Internal: !f.createsPublic})
+}
+
+func (f *fakeLedgerClient) CurrentUserAccessLevel(_ context.Context, _ int64) (int, error) {
+	return f.accessLevel, nil
+}
+
+func (f *fakeLedgerClient) DeleteMRNote(_ context.Context, _, _, noteID int64) error {
+	f.deleted = append(f.deleted, noteID)
+	f.notes = slices.DeleteFunc(f.notes, func(n *gl.Note) bool { return n.ID == noteID })
+	return nil
 }
 
 func (f *fakeLedgerClient) ListMRNotes(_ context.Context, _, _ int64) ([]*gl.Note, error) {
@@ -209,6 +228,43 @@ func TestRelease_LetsTheNextObserverAnnounceTheSameSet(t *testing.T) {
 	owned, err = a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
 	require.NoError(t, err)
 	assert.True(t, owned)
+}
+
+func TestClaim_BelowPlannerAccess_WritesNothing(t *testing.T) {
+	for name, level := range map[string]int{"guest": int(gl.GuestPermissions), "non-member": 0} {
+		t.Run(name, func(t *testing.T) {
+			c := newFakeLedgerClient(testUserAlice)
+			c.accessLevel = level
+			a := &GitLabAdapter{client: c}
+
+			owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
+			require.ErrorIs(t, err, mrsvc.ErrClaimNotPermitted)
+			assert.False(t, owned)
+			assert.Empty(t, c.notes)
+		})
+	}
+}
+
+func TestClaim_NoteCreatedPublic_IsDeletedAndRefused(t *testing.T) {
+	c := newFakeLedgerClient(testUserAlice)
+	c.createsPublic = true
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
+	require.ErrorIs(t, err, mrsvc.ErrClaimNotPermitted)
+	assert.False(t, owned)
+	assert.Empty(t, c.notes)
+	assert.Len(t, c.deleted, 1)
+}
+
+func TestRelease_BelowPlannerAccess_WritesNothing(t *testing.T) {
+	c := newFakeLedgerClient(testUserAlice)
+	c.accessLevel = int(gl.GuestPermissions)
+	a := &GitLabAdapter{client: c}
+
+	err := a.Release(context.Background(), 1, 2, []string{testUserAlice})
+	require.ErrorIs(t, err, mrsvc.ErrClaimNotPermitted)
+	assert.Empty(t, c.notes)
 }
 
 func TestClaim_Authoritative_SkipsTheLiveCheck(t *testing.T) {

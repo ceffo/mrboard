@@ -49,6 +49,10 @@ type MRWriter interface {
 	DeleteMRApprovalRule(ctx context.Context, projectID, mrIID, ruleID int64) error
 	// CreateMRNote adds a note to the MR; an internal note is visible only to project members.
 	CreateMRNote(ctx context.Context, projectID, mrIID int64, body string, internal bool) (*gl.Note, error)
+	DeleteMRNote(ctx context.Context, projectID, mrIID, noteID int64) error
+	// CurrentUserAccessLevel returns the authenticated user's effective access
+	// level on the project (a gl.AccessLevelValue), 0 when not a member.
+	CurrentUserAccessLevel(ctx context.Context, projectID int64) (int, error)
 	// SetMRReviewers replaces the MR's reviewer set with the given user IDs.
 	// An empty slice clears all reviewers.
 	SetMRReviewers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error

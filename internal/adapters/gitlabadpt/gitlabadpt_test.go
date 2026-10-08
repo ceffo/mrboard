@@ -383,3 +383,11 @@ func TestFetchAll_Phase2BatchError_ReportedPerMR(t *testing.T) {
 	assert.Empty(t, mrs)
 	assert.Len(t, errs, 2, "a whole-batch failure must surface one error per affected MR")
 }
+
+func (f *fakeFetchClient) DeleteMRNote(_ context.Context, _, _, _ int64) error {
+	panic("not implemented")
+}
+
+func (f *fakeFetchClient) CurrentUserAccessLevel(_ context.Context, _ int64) (int, error) {
+	panic("not implemented")
+}
