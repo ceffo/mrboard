@@ -19,8 +19,9 @@ type ApproverClaim struct {
 	ID int64
 	// Approvers is the sorted, deduplicated approver set the entry records.
 	Approvers []string
-	// Silent entries record a set without announcing it. They baseline an MR
-	// whose earlier history mrboard never saw.
+	// Silent entries record a set without announcing it. Ledgers written by
+	// mrboard v0.22.0 and v0.22.1 carry them as baselines; later versions only
+	// read them.
 	Silent bool
 	// Released withdraws the announcement of the entry that recorded Approvers:
 	// an instance that won an announcement but failed to deliver it releases

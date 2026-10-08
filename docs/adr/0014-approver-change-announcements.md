@@ -40,9 +40,14 @@ announcer.
 - **Delivery** (`mrsvc.AnnounceApproverChange`). The winner posts the existing Teams card. If that
   fails it appends a `released` entry, which reopens the announcement for the next instance, and the
   release only takes effect while that set is still the running state.
-- **Baselines.** An MR with no ledger gets a silent entry for its prior set, so history mrboard never
-  saw is not announced. A young MR (`notifications.teams.new_mr_window`, default 24h) has an empty
-  prior, because approvers set at creation are news. The editor passes the set from before its edit.
+- **Prior set.** Each claim carries the set assumed to precede the MR's recorded history. An MR with
+  no ledger whose observed set equals that prior gets no entry, so history mrboard never saw is not
+  announced; otherwise the claim is the ledger's first entry and owns the announcement. An MR found
+  for the first time has its current set as prior, except a young MR
+  (`notifications.teams.new_mr_window`, default 24h), whose prior is empty because approvers set at
+  creation are news. The editor passes the set from before its edit. Silent entries, which record a
+  set without announcing it, appear only in ledgers written by v0.22.0 and v0.22.1; they are still
+  folded, and no current version writes one.
 - **Debounce.** A discovered change must be seen on two consecutive refreshes before it is claimed:
   GitLab's approval-rule read can return the pre-write set shortly after a write (see
   `ApplyStagedApproverFlags`). The editor's own writes skip this and the live check, because the
@@ -68,9 +73,11 @@ lower ID hidden from a reader who could see a higher one.
   one's entry becomes visible after the other has already read the ledger (the settle pause makes this
   rare, not impossible); a deleted or edited claim is ignored and costs at most a repeat
   announcement.
-- The ledger adds internal notes to MRs: one baseline note per MR with approvers the first time any
-  instance sees it, then one per announced change. Whether GitLab emails participants for internal
-  notes was not measured.
+- The ledger adds one internal note per announced change, plus one per instance that lost a race for
+  it and one per release. GitLab emails each of them like any comment: its new-note recipients are
+  the MR's participants, project watchers and subscribers, filtered only by permission to read the
+  note (Reporter and above), with the note's author skipped. Writing a note also makes its author a
+  participant of the MR, so they receive email for its later comments.
 - Writing a ledger needs permission to comment on the MR. An instance that cannot write reports an
   error and retries on the next refresh; it never announces unilaterally.
 - Instances that do not enable the feature neither read nor write ledgers, and do not announce.

@@ -71,15 +71,14 @@ func TestClaim_FirstSightOfNewMR_Announces(t *testing.T) {
 	assert.False(t, c.claims()[0].Silent)
 }
 
-func TestClaim_FirstSightOfOldMR_RecordsBaselineSilently(t *testing.T) {
+func TestClaim_FirstSightOfOldMR_WritesNothing(t *testing.T) {
 	c := newFakeLedgerClient(testUserAlice)
 	a := &GitLabAdapter{client: c}
 
 	owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, []string{testUserAlice}))
 	require.NoError(t, err)
 	assert.False(t, owned)
-	require.Len(t, c.claims(), 1)
-	assert.True(t, c.claims()[0].Silent)
+	assert.Empty(t, c.notes, "every note emails the MR's participants, so nothing to announce means no note")
 }
 
 func TestClaim_NoApproversAndNoHistory_WritesNothing(t *testing.T) {
@@ -92,15 +91,54 @@ func TestClaim_NoApproversAndNoHistory_WritesNothing(t *testing.T) {
 	assert.Empty(t, c.notes)
 }
 
-func TestClaim_BaselineThenChange_AnnouncesTheChange(t *testing.T) {
+func TestClaim_ChangeOnEmptyLedger_WritesOneEntry(t *testing.T) {
 	c := newFakeLedgerClient(testUserBob)
 	a := &GitLabAdapter{client: c}
 
 	owned, err := a.Claim(context.Background(), claimReq([]string{testUserBob}, []string{testUserAlice}))
 	require.NoError(t, err)
 	assert.True(t, owned)
-	require.Len(t, c.claims(), 2)
-	assert.True(t, c.claims()[0].Silent)
+	require.Len(t, c.claims(), 1)
+	assert.False(t, c.claims()[0].Silent)
+}
+
+func TestClaim_AllApproversRemovedOnEmptyLedger_Announces(t *testing.T) {
+	c := newFakeLedgerClient()
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(), claimReq(nil, []string{testUserAlice}))
+	require.NoError(t, err)
+	assert.True(t, owned)
+	assert.Len(t, c.claims(), 1)
+}
+
+// A rival that met the MR only after the change records nothing, so it cannot
+// slip an entry between the change and its claim and steal the announcement.
+func TestClaim_RivalDiscoversMRAfterChange_ChangeStillAnnounced(t *testing.T) {
+	c := newFakeLedgerClient(testUserBob)
+	rival := &GitLabAdapter{client: c}
+	c.beforeCreate = func(*fakeLedgerClient) {
+		owned, err := rival.Claim(context.Background(), claimReq([]string{testUserBob}, []string{testUserBob}))
+		require.NoError(t, err)
+		assert.False(t, owned)
+	}
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(), claimReq([]string{testUserBob}, []string{testUserAlice}))
+	require.NoError(t, err)
+	assert.True(t, owned)
+	assert.Len(t, c.claims(), 1)
+}
+
+func TestClaim_LegacySilentEntry_StillBaselinesTheLedger(t *testing.T) {
+	c := newFakeLedgerClient(testUserAlice)
+	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserAlice}, Silent: true}), false)
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
+	require.NoError(t, err)
+	assert.False(t, owned, "the silent entry already recorded this set")
+	assert.Len(t, c.notes, 1)
 }
 
 func TestClaim_SetAlreadyRecorded_WritesNothing(t *testing.T) {

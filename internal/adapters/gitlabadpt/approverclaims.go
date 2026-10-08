@@ -30,14 +30,11 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 	if err != nil {
 		return false, err
 	}
-	if state.Empty && len(req.Prior) > 0 {
-		if err = a.appendClaim(ctx, req.ProjectID, req.MRIID,
-			domain.ApproverClaim{Approvers: req.Prior, Silent: true}); err != nil {
-			return false, err
-		}
-		state.Empty, state.Approvers, state.Released = false, req.Prior, false
-	}
-	if state.Empty && len(req.Approvers) == 0 {
+	// Every ledger entry is a note that emails the MR's participants, so an
+	// empty ledger stays empty until there is a change to announce. The first
+	// entry on an empty ledger owns its announcement, so none is needed to
+	// baseline the prior set.
+	if state.Empty && domain.ApproverSetHash(req.Prior) == want {
 		return false, nil
 	}
 	if !state.Empty && !state.Released && domain.ApproverSetHash(state.Approvers) == want {
