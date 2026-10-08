@@ -29,6 +29,10 @@ type Client struct {
 	// cacheMu guards concurrent access when sources are fetched in parallel.
 	cacheMu              sync.RWMutex
 	projectArchivedCache map[int64]bool
+	// accessLevelCache holds the authenticated user's effective access level
+	// per project; currentUserID is resolved on first use. Both under cacheMu.
+	accessLevelCache map[int64]int
+	currentUserID    int64
 }
 
 // NewClient creates an authenticated GitLab client.
@@ -49,6 +53,7 @@ func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
 		apiURL:               cfg.URL,
 		httpClient:           httpClient,
 		projectArchivedCache: make(map[int64]bool),
+		accessLevelCache:     make(map[int64]int),
 	}, nil
 }
 
@@ -209,6 +214,20 @@ func (c *Client) CreateMRNote(
 	c.logger.Debug("gitlab: create note done",
 		"project", projectID, "mr", mrIID, "note_id", note.ID, "duration", ilog.FmtDur(time.Since(start)))
 	return note, nil
+}
+
+// DeleteMRNote deletes a note from an MR.
+func (c *Client) DeleteMRNote(ctx context.Context, projectID, mrIID, noteID int64) error {
+	start := time.Now()
+	c.logger.Debug("gitlab: delete note", "project", projectID, "mr", mrIID, "note_id", noteID)
+	if _, err := c.gl.Notes.DeleteMergeRequestNote(projectID, mrIID, noteID, gl.WithContext(ctx)); err != nil {
+		c.logger.Error("gitlab: delete note error", "project", projectID, "mr", mrIID, "note_id", noteID,
+			"duration", ilog.FmtDur(time.Since(start)), "error", err)
+		return fmt.Errorf("gitlab: delete note project=%d MR=%d note=%d: %w", projectID, mrIID, noteID, err)
+	}
+	c.logger.Debug("gitlab: delete note done",
+		"project", projectID, "mr", mrIID, "note_id", noteID, "duration", ilog.FmtDur(time.Since(start)))
+	return nil
 }
 
 // MRApprovalRulePayload holds the fields for creating or updating an MR approval rule.
@@ -564,4 +583,40 @@ func (c *Client) IsProjectArchived(ctx context.Context, projectID int64) (bool, 
 	c.projectArchivedCache[projectID] = project.Archived
 	c.cacheMu.Unlock()
 	return project.Archived, nil
+}
+
+// CurrentUserAccessLevel returns the authenticated user's effective access
+// level on the project, inherited group membership included, and 0 when the
+// user is not a member. Results are cached. Safe for concurrent use.
+func (c *Client) CurrentUserAccessLevel(ctx context.Context, projectID int64) (int, error) {
+	c.cacheMu.RLock()
+	level, ok := c.accessLevelCache[projectID]
+	userID := c.currentUserID
+	c.cacheMu.RUnlock()
+	if ok {
+		return level, nil
+	}
+
+	if userID == 0 {
+		user, _, err := c.gl.Users.CurrentUser(gl.WithContext(ctx))
+		if err != nil {
+			return 0, fmt.Errorf("gitlab: get current user: %w", err)
+		}
+		userID = user.ID
+	}
+	member, resp, err := c.gl.ProjectMembers.GetInheritedProjectMember(projectID, userID, gl.WithContext(ctx))
+	switch {
+	case err == nil:
+		level = int(member.AccessLevel)
+	case resp != nil && resp.StatusCode == http.StatusNotFound:
+		level = 0
+	default:
+		return 0, fmt.Errorf("gitlab: get access level project=%d: %w", projectID, err)
+	}
+
+	c.cacheMu.Lock()
+	c.currentUserID = userID
+	c.accessLevelCache[projectID] = level
+	c.cacheMu.Unlock()
+	return level, nil
 }

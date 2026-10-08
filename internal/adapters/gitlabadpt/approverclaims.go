@@ -2,6 +2,7 @@ package gitlabadpt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -110,12 +111,29 @@ func (a *GitLabAdapter) appendClaim(ctx context.Context, projectID, mrIID int64,
 	return err
 }
 
+// appendClaimID writes c as an internal note. GitLab does not reject an
+// internal note from a user below Planner: it silently creates a public one.
+// The access check keeps such a user from writing at all, and a note that
+// still comes back public is deleted and refused.
 func (a *GitLabAdapter) appendClaimID(
 	ctx context.Context, projectID, mrIID int64, c domain.ApproverClaim,
 ) (int64, error) {
+	level, err := a.client.CurrentUserAccessLevel(ctx, projectID)
+	if err != nil {
+		return 0, fmt.Errorf("append approver claim: %w", err)
+	}
+	if level < int(gl.PlannerPermissions) {
+		return 0, fmt.Errorf("append approver claim: access level %d on project %d: %w",
+			level, projectID, mrsvc.ErrClaimNotPermitted)
+	}
 	note, err := a.client.CreateMRNote(ctx, projectID, mrIID, domain.FormatApproverClaim(c), true)
 	if err != nil {
 		return 0, fmt.Errorf("append approver claim: %w", err)
+	}
+	if !note.Internal {
+		refused := fmt.Errorf("append approver claim: note %d was created public: %w",
+			note.ID, mrsvc.ErrClaimNotPermitted)
+		return 0, errors.Join(refused, a.client.DeleteMRNote(ctx, projectID, mrIID, note.ID))
 	}
 	return note.ID, nil
 }
