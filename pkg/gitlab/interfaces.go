@@ -26,7 +26,13 @@ type MREnricher interface {
 	GetMR(ctx context.Context, projectID, mrIID int64) (*gl.BasicMergeRequest, error)
 	GetMRDiscussions(ctx context.Context, projectID, mrIID int64) ([]*gl.Discussion, error)
 	GetMRApprovals(ctx context.Context, projectID, mrIID int64) (*gl.MergeRequestApprovals, error)
+	// GetMRApprovalRules returns the MR's own rules: empty for an MR that has
+	// never overridden its project's rules. Use it to edit rules, not to read
+	// who must approve.
 	GetMRApprovalRules(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestApprovalRule, error)
+	// GetMRApprovalStateRules returns the rules GitLab enforces on the MR,
+	// including project rules it inherits.
+	GetMRApprovalStateRules(ctx context.Context, projectID, mrIID int64) ([]*gl.MergeRequestApprovalRule, error)
 	// ListMRNotes returns every note on the MR, oldest first.
 	ListMRNotes(ctx context.Context, projectID, mrIID int64) ([]*gl.Note, error)
 	GetMRDescription(ctx context.Context, projectID, mrIID int64) (string, error)

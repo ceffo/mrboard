@@ -69,7 +69,9 @@ func (f *fakeLedgerClient) CreateMRNote(_ context.Context, _, _ int64, body stri
 	return f.notes[len(f.notes)-1], nil
 }
 
-func (f *fakeLedgerClient) GetMRApprovalRules(_ context.Context, _, _ int64) ([]*gl.MergeRequestApprovalRule, error) {
+func (f *fakeLedgerClient) GetMRApprovalStateRules(
+	_ context.Context, _, _ int64,
+) ([]*gl.MergeRequestApprovalRule, error) {
 	return f.liveRules, nil
 }
 

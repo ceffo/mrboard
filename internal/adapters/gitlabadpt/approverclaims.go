@@ -139,7 +139,7 @@ func (a *GitLabAdapter) appendClaimID(
 }
 
 func (a *GitLabAdapter) liveApprovers(ctx context.Context, projectID, mrIID int64) ([]string, error) {
-	rules, err := a.client.GetMRApprovalRules(ctx, projectID, mrIID)
+	rules, err := a.client.GetMRApprovalStateRules(ctx, projectID, mrIID)
 	if err != nil {
 		return nil, err
 	}
