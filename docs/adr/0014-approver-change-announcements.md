@@ -53,6 +53,11 @@ announcer.
   `ApplyStagedApproverFlags`). The editor's own writes skip this and the live check, because the
   written set is authoritative; the session records them as handled so the refresh that confirms them
   does not announce again.
+- **Private writes** (`gitlabadpt.appendClaimID`). GitLab does not reject an internal note from a
+  user below Planner: it creates a public one. Every ledger write, claim or release, first checks the
+  user's effective access level on the project (inherited group membership included, cached per
+  project) and refuses below Planner. A note that still comes back public is deleted. Both refusals
+  are `mrsvc.ErrClaimNotPermitted`.
 - **Opt-in.** `notifications.teams.announce_approver_changes` (default off). Without it nothing
   reads or writes ledgers and the editor keeps its direct notification.
 
@@ -78,6 +83,8 @@ lower ID hidden from a reader who could see a higher one.
   the MR's participants, project watchers and subscribers, filtered only by permission to read the
   note (Reporter and above), with the note's author skipped. Writing a note also makes its author a
   participant of the MR, so they receive email for its later comments.
-- Writing a ledger needs permission to comment on the MR. An instance that cannot write reports an
-  error and retries on the next refresh; it never announces unilaterally.
+- Writing a ledger needs the Planner role or above on the project. An instance refused for lack of
+  it warns once and treats the change as handled, since retrying cannot succeed until its access
+  changes; it never announces unilaterally. Any other write failure reports an error and retries on
+  the next refresh.
 - Instances that do not enable the feature neither read nor write ledgers, and do not announce.
