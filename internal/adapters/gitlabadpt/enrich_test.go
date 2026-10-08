@@ -40,3 +40,17 @@ func TestEnrichMR_ApproversComeFromEnforcedRules(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{testUserAlice}, mr.Approvers)
 }
+
+func TestEnrichMR_DraftKeepsItsApprovers(t *testing.T) {
+	c := &fakeEnrichClient{enforced: []*gl.MergeRequestApprovalRule{approvalRule("approvers", testUserAlice)}}
+	a := &GitLabAdapter{client: c}
+
+	mr, err := a.enrichMR(context.Background(), &gl.BasicMergeRequest{
+		ProjectID: 1, IID: 2, Draft: true,
+		Reviewers: []*gl.BasicUser{basicUser(testUserAlice, testUserAlice)},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{testUserAlice}, mr.Approvers)
+	require.Len(t, mr.Reviewers, 1)
+	assert.True(t, mr.Reviewers[0].IsApprover)
+}
