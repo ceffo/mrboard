@@ -149,8 +149,9 @@ notifications:
 With `announce_approver_changes`, every running mrboard announces approver changes it discovers on
 any MR it shows — including ones made directly in GitLab by someone who does not use mrboard —
 and the instances agree through a ledger of internal notes on the MR so each change is announced
-once. An MR that predates the first sighting is recorded silently; `new_mr_window` is how recent an
-MR must be for its first approver set to count as news. See
+once. An MR whose approvers have not changed since mrboard first saw it gets no note;
+`new_mr_window` is how recent an MR must be for its first approver set to count as news. Each
+ledger note emails the MR's participants like any comment would. See
 [adr/0014-approver-change-announcements.md](adr/0014-approver-change-announcements.md).
 
 ## External commands
