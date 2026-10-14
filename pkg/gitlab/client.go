@@ -255,6 +255,24 @@ func (c *Client) GetMRApprovalRules(
 	return rules, nil
 }
 
+// GetMRApprovalStateRules returns the approval rules GitLab enforces on an MR.
+func (c *Client) GetMRApprovalStateRules(
+	ctx context.Context, projectID, mrIID int64,
+) ([]*gl.MergeRequestApprovalRule, error) {
+	start := time.Now()
+	c.logger.Debug("gitlab: get approval state", "project", projectID, "mr", mrIID)
+	state, _, err := c.gl.MergeRequestApprovals.GetApprovalState(projectID, mrIID, gl.WithContext(ctx))
+	elapsed := time.Since(start)
+	if err != nil {
+		c.logger.Error("gitlab: get approval state error",
+			"project", projectID, "mr", mrIID, "duration", ilog.FmtDur(elapsed), "error", err)
+		return nil, fmt.Errorf("gitlab: get approval state project=%d MR=%d: %w", projectID, mrIID, err)
+	}
+	c.logger.Debug("gitlab: get approval state done",
+		"project", projectID, "mr", mrIID, "count", len(state.Rules), "duration", ilog.FmtDur(elapsed))
+	return state.Rules, nil
+}
+
 // GetProjectMembers returns all project members (inherited) with access level >= minAccessLevel.
 func (c *Client) GetProjectMembers(
 	ctx context.Context, projectID int64, minAccessLevel int,

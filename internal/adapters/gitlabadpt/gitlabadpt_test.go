@@ -391,3 +391,9 @@ func (f *fakeFetchClient) DeleteMRNote(_ context.Context, _, _, _ int64) error {
 func (f *fakeFetchClient) CurrentUserAccessLevel(_ context.Context, _ int64) (int, error) {
 	panic("not implemented")
 }
+
+func (f *fakeFetchClient) GetMRApprovalStateRules(
+	_ context.Context, _, _ int64,
+) ([]*gl.MergeRequestApprovalRule, error) {
+	panic("not implemented")
+}
