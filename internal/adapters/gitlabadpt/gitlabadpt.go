@@ -526,14 +526,6 @@ func (a *GitLabAdapter) ResolveUsers(ctx context.Context, usernames []string) ([
 }
 
 func (a *GitLabAdapter) enrichMR(ctx context.Context, mr *gl.BasicMergeRequest) (domain.MergeRequest, error) {
-	if mr.Draft {
-		discussions, err := a.client.GetMRDiscussions(ctx, mr.ProjectID, mr.IID)
-		if err != nil {
-			return domain.MergeRequest{}, fmt.Errorf("enrichMR project=%d MR=%d discussions: %w", mr.ProjectID, mr.IID, err)
-		}
-		return MapMR(mr, discussions, &gl.MergeRequestApprovals{}, nil), nil
-	}
-
 	type discResult struct {
 		discussions []*gl.Discussion
 		err         error
