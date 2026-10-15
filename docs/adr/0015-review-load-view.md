@@ -76,6 +76,25 @@ total use the raw number; a bucket is a label, never summed.
 `?`. Totals sum the known sizes and are marked partial (e.g. `1240+`), so missing data is never
 read as zero and no responsibility is hidden.
 
+### Crediting review size to approvers (resolved 2026-10-15)
+
+**Every assigned approver is credited the MR's full review size.** In mrboard's domain the
+approvals an MR requires are its assigned approvers (`docs/domain-model.md`: required =
+reviewers with `IsApprover`), so each of them must read the whole diff; splitting the size would
+model a shared reading that does not happen.
+
+Consequently, totals differ by axis. A person's review load sums the full size of each MR they
+approve. A per-Jira total and the team total count each MR once. Person loads therefore do not
+add up to the team total when MRs share approvers — by design.
+
+**Re-review rounds add nothing.** Review size is a property of the MR, not of the number of
+passes over it; a re-review reads a delta. Rounds remain visible through the approver's reviewer
+state.
+
+**Approval does not remove load.** An MR an approver has already approved stays in their load
+at full size, marked approved: the view reports load carried this sprint. Only the "remaining
+only" toggle hides it.
+
 ## Consequences
 
 - A new `review_size` config section (exclude globs, default-excludes switch, bucket thresholds).
