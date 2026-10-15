@@ -14,8 +14,9 @@ state (see `docs/domain-model.md`). The team is the roster from `config.TeamUser
 
 The view is sprint-centric:
 
-- the board's header filters (sprint, author, …; `docs/adr/0012-header-filter-state.md`) scope it;
-- MRs merged during the active sprint count alongside open ones, so finished reviews still show as
+- it always covers one sprint, the active one, and the board's header filters narrow it
+  (`docs/adr/0012-header-filter-state.md`);
+- MRs merged during the sprint count alongside open ones, so finished reviews still show as
   load carried this sprint;
 - a "remaining only" toggle narrows it to what is still left to approve;
 - draft MRs are included and marked as drafts.
@@ -33,6 +34,8 @@ once the CLI output is settled.
 ## Non-goals
 
 - Implementation. This ADR ends at a buildable spec; execution is cut into separate tickets.
+- Navigating to previous sprints. The view covers the active sprint only; exploring history is a
+  later effort.
 
 ## Decision
 
@@ -95,7 +98,45 @@ state.
 at full size, marked approved: the view reports load carried this sprint. Only the "remaining
 only" toggle hides it.
 
+### Load population (resolved 2026-10-15)
+
+Evidence: `docs/research/sprint-merged-mrs.md` on branch `research/sprint-merged-mrs`.
+
+**The view is always scoped to one sprint: the active one.** Sprint scoping is what the view
+*is*, not a filter on it, so the board's `S` sprint toggle does not apply here.
+
+**An MR is in the sprint's load** when its ticket key — read from the title by the same
+`TicketKeyMatcher` the board uses — is one of the sprint's issue keys, and:
+
+- it is open; or
+- it was merged on or after the sprint's start date. The date bound keeps MRs of a ticket carried
+  over from an earlier sprint from counting again.
+
+**Unticketed MRs are included in a "no ticket" group**: open MRs whose title has no ticket key,
+and unticketed MRs merged on or after the sprint start. They cost review time even without a
+ticket. MRs closed without merging are excluded.
+
+Merged MRs come from the same sources as the board's open MRs, listed with GraphQL
+`mergedAfter` (available since GitLab 13.3; the REST equivalent needs 19.3).
+
+**Header filters.** Every board filter except sprint applies to the view as it does to the board:
+the "me" scope, issue and assignee exclusions narrow the MR set; phase columns narrow open MRs only
+(a merged MR has no phase); an excluded reviewer loses their person row. ADR-0012's denominator
+invariant holds: the header count states the population the filters ran against.
+
+**Approvers.** An MR's load goes to its assigned reviewers flagged `IsApprover`, open or merged —
+GitLab keeps reviewers on a merged MR, so the same rule serves both. Each team-roster member gets
+a person row; approvers outside the roster are aggregated into one "others" row so no load
+silently disappears.
+
+**Remaining only.** The toggle hides a person's row for an MR once that person has approved it or
+the MR is merged. Drafts stay, marked as drafts.
+
 ## Consequences
 
+- The ticket port carries the active sprint's start and end dates alongside its issue keys, under
+  a vendor-neutral name (rule 7 in `CLAUDE.md`), cached under the existing `SprintCacheTTL`.
+- The GitLab adapter gains a merged-since listing over the board's sources; `mrboard fetch` keeps
+  parity.
 - A new `review_size` config section (exclude globs, default-excludes switch, bucket thresholds).
 - The GitLab adapter gains a per-project `.gitattributes` read and cache, and per-MR `diffStats`.
