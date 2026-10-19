@@ -132,6 +132,32 @@ silently disappears.
 **Remaining only.** The toggle hides a person's row for an MR once that person has approved it or
 the MR is merged. Drafts stay, marked as drafts.
 
+### CLI output layout (resolved 2026-10-19)
+
+Prototype: `prototypes/review-load-cli/` on branch `prototype/review-load-cli` — three layouts
+(tree, flat table, ticket × person matrix) over the same fake sprint.
+
+**The output is a tree: group headings carrying their total, MR lines beneath.** It answers the
+standup question "who carries what" at a glance. A flat approver × MR table was rejected because
+it repeats every shared MR; a ticket × person matrix was rejected because it hides the MRs.
+
+A header line states the sprint (name and dates), the MR count and the scope (all / remaining
+only).
+
+**Grouped by person** (the default), each block is headed by the approver's review load. One line
+per MR they approve: `repo!iid`, ticket, review size, size bucket, co-approvers (`+dave
++others`), state (draft, merged, ✓ approved) and title. The co-approvers column makes the
+full-credit double counting visible; a footer states that person loads exceed the team total.
+
+**Grouped by ticket**, each block is headed by the ticket's total, counting each MR once. One line
+per MR — not per approver — listing its approvers, with ✓ on those who approved, so the lines
+match the heading.
+
+**Sorting** by person, ticket or size orders the groups (by key, or by group total for size) and
+the lines within each group. The catch-all groups — "others" for persons, "(no ticket)" for
+tickets — always come last, whatever the sort, so aggregated load never outranks a named person
+or ticket.
+
 ## Consequences
 
 - The ticket port carries the active sprint's start and end dates alongside its issue keys, under
