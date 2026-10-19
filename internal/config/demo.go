@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // Demo-mode equivalents of the defaults Load would otherwise supply via viper.
@@ -63,6 +65,14 @@ func DemoConfig() *AppConfig {
 		Log: logSection{
 			Path:  filepath.Join(os.TempDir(), "mrboard-demo.log"),
 			Level: "info",
+		},
+		ReviewSize: ReviewSize{
+			DefaultExcludes: true,
+			Buckets: ReviewSizeBuckets{
+				S: domain.DefaultSizeThresholds.S,
+				M: domain.DefaultSizeThresholds.M,
+				L: domain.DefaultSizeThresholds.L,
+			},
 		},
 	}
 }

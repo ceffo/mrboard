@@ -14,6 +14,8 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 	"github.com/spf13/viper"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // Source describes a single source of MRs.
@@ -93,6 +95,29 @@ type UpdateCheck struct {
 	CacheTTL time.Duration `mapstructure:"cache_ttl"` // default 24h
 }
 
+// ReviewSize configures how an MR's review size is measured (docs/adr/0015,
+// "Review size metric"). Exclude extends the built-in exclusion globs;
+// DefaultExcludes false drops the built-ins instead. Buckets overrides the
+// S/M/L upper bounds.
+type ReviewSize struct {
+	Exclude         []string          `mapstructure:"exclude"`
+	DefaultExcludes bool              `mapstructure:"default_excludes"` // default true
+	Buckets         ReviewSizeBuckets `mapstructure:"buckets"`
+}
+
+// ReviewSizeBuckets holds the inclusive upper bounds of the S, M and L size
+// buckets; anything above L is XL.
+type ReviewSizeBuckets struct {
+	S int `mapstructure:"s"` // default 100
+	M int `mapstructure:"m"` // default 400
+	L int `mapstructure:"l"` // default 1000
+}
+
+// Thresholds converts b to the domain's bucket thresholds.
+func (b ReviewSizeBuckets) Thresholds() domain.SizeThresholds {
+	return domain.SizeThresholds{S: b.S, M: b.M, L: b.L}
+}
+
 // Command is a user-configured external command launched against a selected MR card
 // (see docs/adr/0004-external-command-launcher.md). Args is an argv template: each
 // element may contain Go template placeholders (e.g. "{{.ProjectPath}}") resolved
@@ -125,6 +150,7 @@ type AppConfig struct {
 	RefreshInterval     time.Duration       `mapstructure:"refresh_interval"`
 	AutoAssignReviewers AutoAssignReviewers `mapstructure:"auto_assign_reviewers"`
 	UpdateCheck         UpdateCheck         `mapstructure:"update_check"`
+	ReviewSize          ReviewSize          `mapstructure:"review_size"`
 }
 
 // TeamUsernames returns every username listed by a "user"-type source — the
@@ -233,6 +259,10 @@ func Load(path string) (*AppConfig, error) {
 	v.SetDefault("notifications.teams.new_mr_window", "24h")
 	v.SetDefault("update_check.enabled", true)
 	v.SetDefault("update_check.cache_ttl", "24h")
+	v.SetDefault("review_size.default_excludes", true)
+	v.SetDefault("review_size.buckets.s", domain.DefaultSizeThresholds.S)
+	v.SetDefault("review_size.buckets.m", domain.DefaultSizeThresholds.M)
+	v.SetDefault("review_size.buckets.l", domain.DefaultSizeThresholds.L)
 
 	// GITLAB_TOKEN env override — error only occurs on empty key name, safe to ignore.
 	if err := v.BindEnv("gitlab.token", "GITLAB_TOKEN"); err != nil {
@@ -285,6 +315,9 @@ func validate(cfg *AppConfig) ([]string, error) {
 	if err := validateSources(cfg.Sources); err != nil {
 		return nil, err
 	}
+	if err := validateReviewSize(cfg.ReviewSize); err != nil {
+		return nil, err
+	}
 	warnings, err := validateCommands(cfg.Commands)
 	if err != nil {
 		return nil, err
@@ -294,6 +327,18 @@ func validate(cfg *AppConfig) ([]string, error) {
 			"source is configured, so there is no team roster to assign — auto-assign will never match any MR")
 	}
 	return warnings, nil
+}
+
+func validateReviewSize(rs ReviewSize) error {
+	for _, g := range rs.Exclude {
+		if err := domain.ValidateSizeGlob(g); err != nil {
+			return fmt.Errorf("config: review_size.exclude: %w", err)
+		}
+	}
+	if err := rs.Buckets.Thresholds().Validate(); err != nil {
+		return fmt.Errorf("config: review_size.buckets: %w", err)
+	}
+	return nil
 }
 
 func validateGitLab(gl *GitLab) error {

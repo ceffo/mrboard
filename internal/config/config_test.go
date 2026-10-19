@@ -393,3 +393,45 @@ current_user: alice
 	assert.Equal(t, "alice", mrSvc.CurrentUser, "MRServiceConfig.CurrentUser")
 	assert.Len(t, mrSvc.ExcludedAuthors, 1, "MRServiceConfig.ExcludedAuthors len")
 }
+
+const reviewSizeBaseYAML = `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+`
+
+func TestLoadReviewSizeDefaults(t *testing.T) {
+	cfg, err := Load(writeTemp(t, reviewSizeBaseYAML))
+	require.NoError(t, err)
+	assert.True(t, cfg.ReviewSize.DefaultExcludes, "want built-in exclusions on by default")
+	assert.Empty(t, cfg.ReviewSize.Exclude)
+	assert.Equal(t, ReviewSizeBuckets{S: 100, M: 400, L: 1000}, cfg.ReviewSize.Buckets)
+}
+
+func TestLoadReviewSizeOverrides(t *testing.T) {
+	cfg, err := Load(writeTemp(t, reviewSizeBaseYAML+`
+review_size:
+  exclude: ["testdata/**", "*.snap"]
+  default_excludes: false
+  buckets: {s: 50, m: 200, l: 800}
+`))
+	require.NoError(t, err)
+	assert.False(t, cfg.ReviewSize.DefaultExcludes)
+	assert.Equal(t, []string{"testdata/**", "*.snap"}, cfg.ReviewSize.Exclude)
+	assert.Equal(t, ReviewSizeBuckets{S: 50, M: 200, L: 800}, cfg.ReviewSize.Buckets)
+}
+
+func TestLoadReviewSizeInvalid(t *testing.T) {
+	cases := map[string]string{
+		"bad glob":           "review_size:\n  exclude: [\"src/[.go\"]\n",
+		"decreasing buckets": "review_size:\n  buckets: {s: 500, m: 400, l: 1000}\n",
+	}
+	for name, extra := range cases {
+		_, err := Load(writeTemp(t, reviewSizeBaseYAML+extra))
+		assert.Error(t, err, name)
+	}
+}
