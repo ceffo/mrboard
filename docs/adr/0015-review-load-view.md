@@ -1,6 +1,6 @@
 # ADR-0015: Review Load View
 
-**Status**: Proposed — wayfinder in progress; decisions accumulate below as tickets resolve
+**Status**: Proposed — wayfinder complete; ready to cut into implementation tickets
 
 ## Context
 
@@ -238,6 +238,33 @@ excluded files in verbose mode. `--merged-since YYYY-MM-DD` drives the merged li
 ticket port, keeping the reproduction tool independent of the sprint source. `--cold` bypasses the
 snapshot, merged snapshot and `.gitattributes` caches alike.
 
+### TUI display mode (resolved 2026-10-19)
+
+**`L` toggles the load view**, a full-screen mode that replaces the board; `L` or Esc returns to
+it. My View (`tab`) stays an independent scope and narrows the load view as any header filter
+does, per "Load population". Launch always opens the board: whether the view was open is not
+persisted.
+
+**The widget** is a self-contained `internal/tui` widget over the same domain rows and the same
+tree renderer as the CLI. Selection moves over MR lines only; group headings are not selectable.
+Detail (`↵`), open, copy and diff reuse the board's actions on the selected MR.
+
+**Keys** live in a new `LoadCtx` in `internal/tui/keys.go` (`docs/keybindings.md`):
+
+| Key | Action |
+|---|---|
+| `g` | Toggle grouping: person ↔ jira |
+| `s` | Cycle sort: person → jira → size |
+| `R` | Toggle remaining only |
+
+**Persistence.** Group, sort and remaining-only are saved in `state.yaml` as `load_group`,
+`load_sort` and `load_remaining`, like the board's `sort_field`. The CLI ignores them: its flags
+stay the only input, so the same command gives the same output.
+
+**Merged listing timing.** The TUI passes `FetchOptions.MergedSince` only while the view is open.
+Opening it renders the cached merged snapshot at once and starts a fetch with `MergedSince`;
+refreshes keep passing it until the view closes. Board-only use costs no extra request.
+
 ## Consequences
 
 - The ticket port carries the active sprint's start and end dates alongside its issue keys, under
@@ -250,3 +277,5 @@ snapshot, merged snapshot and `.gitattributes` caches alike.
 - `domain.MergeRequest` carries its head SHA and per-file diff stats, persisted by the snapshot.
 - `mrsvc.FetchOptions` gains `MergedSince`; a second snapshot store holds merged MRs per sprint.
 - `mrboard fetch` gains `--merged-since`, and `--cold` covers every new cache.
+- `domain.AppState` gains `load_group`, `load_sort` and `load_remaining`; `keys.go` gains `LoadCtx`
+  and the board's `L` action.
