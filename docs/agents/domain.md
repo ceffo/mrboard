@@ -35,8 +35,8 @@ Single-context repo:
 ## Recording decisions
 
 Decisions and conclusions live in **documents**, not tickets. This is about *location*, not
-phrasing — a one-line gist in a ticket is still decision content in the wrong place. A beads (`br`)
-ticket, including a `/wayfinder` map's own epic issue, only ever states what it's about and links
+phrasing — a one-line gist in a ticket is still decision content in the wrong place. A GitHub
+issue, including a `/wayfinder` map's own epic issue, only ever states what it's about and links
 to the document that holds the real content; it never restates destination, context, out-of-scope
 reasoning, or a resolution's substance, however briefly.
 
@@ -45,8 +45,8 @@ A resolved architectural or design decision is recorded in `docs/adr/` as a numb
 `docs/adr/0003-jira-remote-links.md` for the model). One ADR covers a whole feature area and
 accumulates `## Decision` subsections as sub-decisions resolve — it is not one ADR per ticket.
 
-Beads tickets close with a short `--reason` and nothing more. Engram memory is likewise not the
-place for a development decision — it's useful for session continuity, not for what a future
+A decision ticket closes with a one-line comment pointing at that document and nothing more.
+Engram memory is likewise not the place for a development decision — it's useful for session continuity, not for what a future
 contributor should find when asking "why is it built this way."
 
 ## Use the domain vocabulary

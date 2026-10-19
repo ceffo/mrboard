@@ -66,7 +66,7 @@ Consequences for how you work:
 
 ## Quality gates
 
-Every bead must pass before closing (use the justfile — never bare `go` commands):
+Every work item must pass before it is reported done (use the justfile — never bare `go` commands):
 ```
 just check      # fmt + lint + build + test + release-script self-test
 just generate   # regenerate all mocks (run after changing any interface in internal/service)
@@ -158,7 +158,8 @@ interactive TUI through agent-tui. Letting it drift out of parity removes that c
 ### Commit message rules
 
 - Use conventional commits format: `<type>(<scope>): <description>`
-- Do not reference beads task ids anywhere, those are internal
+- End the subject with the GitHub issue id, e.g. `feat(load): add the load command (#12)`
+  (see "Commits" in [docs/agent-workflow.md](docs/agent-workflow.md))
 - The description should be a concise summary of the change, ideally no more than 50 characters
 
 ### Using a mock in tests
@@ -286,7 +287,7 @@ Tokens are scarce and costly. You should do your best not to squander them.
 
 - use `/file-search` skill instead of find and grep 
 - don't read whole files if you don't need to. assess the size of a file with `wc` before hand.
-- use `toon` for raw JSON outputs (e.g. `bv --robot-* | toon`); `br` commands use `--format toon` flag instead — never combine both
+- use `toon` for raw JSON outputs (e.g. `gh issue view 12 --json title,body | toon`)
 - use `/caveman` skill to save on tokens 
 
 ## Minimizing interactions 
@@ -294,69 +295,19 @@ Tokens are scarce and costly. You should do your best not to squander them.
 IMPORTANT: Do your best not to bother the user with constant need for authorizing commands.
 DO NOT go for ad-hoc python commands whenever you feel so. If you need more tooling, propose to build them once in scripts and/or skills to be able to reuse them.
 
-<!-- br-agent-instructions-v1 -->
+## Agent Workflow
 
----
+Project-specific configuration for the agents in `.claude/agents/` (validation, worktrees, generated
+code, tracker usage, review triggers and checklist, model selection, commit format) lives in
+[docs/agent-workflow.md](docs/agent-workflow.md). Read it before working as one of those agents.
+Its "Hard rules for implementers" bind every agent, including: never open a visible window on the
+user's desktop; UI checks run headless.
 
-## Beads Workflow Integration
+## Tracker
 
-This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`/`bd`) for issue tracking. Issues are stored in `.beads/` and tracked in git.
+Issues are managed with `.claude/scripts/tracker.sh` (backend in `.claude/fleet.env`). Only the
+supervisor and the scoper write to it; states and rules are in the "Tracker" section of
+[docs/agent-workflow.md](docs/agent-workflow.md).
 
-### Essential Commands
-
-```bash
-# View ready issues (open, unblocked, not deferred)
-br ready              # or: bd ready
-
-# List and search
-br list --status=open # All open issues
-br show <id>          # Full issue details with dependencies
-br search "keyword"   # Full-text search
-
-# Create and update
-br create --title="..." --description="..." --type=task --priority=2
-br update <id> --status=in_progress
-br close <id> --reason="Completed"
-br close <id1> <id2>  # Close multiple issues at once
-
-# Sync with git
-br sync --flush-only  # Export DB to JSONL
-br sync --status      # Check sync status
-```
-
-### Workflow Pattern
-
-1. **Start**: Run `br ready` to find actionable work
-2. **Claim**: Use `br update <id> --status=in_progress`
-3. **Work**: Implement the task
-4. **Complete**: Use `br close <id>`
-5. **Sync**: Always run `br sync --flush-only` at session end
-
-### Key Concepts
-
-- **Dependencies**: Issues can block other issues. `br ready` shows only open, unblocked work.
-- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
-- **Types**: task, bug, feature, epic, chore, docs, question
-- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
-
-### Session Protocol
-
-**Before ending any session, run this checklist:**
-
-```bash
-git status              # Check what changed
-git add <files>         # Stage code changes
-br sync --flush-only    # Export beads changes to JSONL
-git commit -m "..."     # Commit everything
-git push                # Push to remote
-```
-
-### Best Practices
-
-- Check `br ready` at session start to find available work
-- Update status as you work (in_progress → closed)
-- Create new issues with `br create` when you discover tasks
-- Use descriptive titles and set appropriate priority/type
-- Always sync before ending session
-
-<!-- end-br-agent-instructions -->
+Issues live in GitHub Issues. `.beads/` is the retired beads tracker, kept for history only: never
+run `br` or `bv`, and never file new work there.
