@@ -194,6 +194,50 @@ on top. The two commands stay at parity by construction.
   TUI mode reuses the same styles.
 - `--json` serialises the computed rows in `internal/cmd`.
 
+### Fetch placement and caching (resolved 2026-10-19)
+
+**Review size is an always-on stage of the board fetch.** Every `FetchAll` runs it, not only
+`mrboard load`, so the snapshot always carries sizes: the TUI view opens with them ready and
+`mrboard fetch` stays at parity without a flag. The stage is incremental:
+
+- **Invalidation is the MR's diff head SHA.** The thin phase-1 query gains `diffHeadSha` (REST
+  stubs carry `sha`). Stats are refetched only when the head SHA moves — a push. Comments, labels
+  and approvals bump `updatedAt` but leave the diff, so they cost no size fetch.
+- **Query shape.** One aliased GraphQL `diffStats { path additions deletions }` query per batch
+  of 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. At ~5 complexity per alias
+  this stays under the 250 ceiling; the constant is confirmed with `queryComplexity` at
+  implementation, as `gqlDiscussionsBatchSize` was.
+- **Timing.** The size stage runs concurrently with phase-2 discussions and `FetchAll` returns
+  once both finish: one result, one snapshot save.
+- **The snapshot caches per-file stats**, not the computed size. Review size is derived at read
+  time, so editing `review_size.exclude` or a project's `.gitattributes` re-applies without a
+  refetch.
+- **Failure.** An MR whose SHA moved and whose stats fetch failed has an unknown size (`?`, totals
+  partial) until a fetch succeeds — stats of an older SHA describe a diff that no longer exists.
+  An MR whose SHA did not move keeps its cached stats. The error joins `FetchAll`'s partial-result
+  errors.
+
+**`.gitattributes`** is cached on disk per (project, target branch) with a fixed 24h TTL, beside
+the ticket cache in the XDG cache dir; a missing file is cached as "no rules". Expired projects are
+read together in one aliased GraphQL `repository.blobs` query. The TTL is not configurable:
+generated-file markings change rarely, and `--cold` is the escape hatch.
+
+**The merged-since listing is gated.** `mrsvc.FetchOptions.MergedSince` (zero means skip) adds
+merged-after listings over the board's sources to the list stage, through the same dedup and
+exclusions. Merged MRs need only the thin query — reviewers, `approvedBy` and approval rules give
+everything the load needs — so they skip phase-2 discussions; they do get the size stage. The
+board passes zero and is unchanged; `mrboard load`, and later the TUI view, pass the sprint start.
+
+**Merged MRs persist in a separate merged snapshot**, tagged with the sprint start it was listed
+for and dropped when that start changes. A board-only fetch never overwrites it, so a merged MR's
+stats are fetched once per sprint, and the board snapshot stays open MRs only. Each load still
+re-lists merged MRs with the thin query, so approvals recorded after merge are current.
+
+**`mrboard fetch` parity.** Fetch output shows each MR's review size (or `?`), and its counted and
+excluded files in verbose mode. `--merged-since YYYY-MM-DD` drives the merged listing without the
+ticket port, keeping the reproduction tool independent of the sprint source. `--cold` bypasses the
+snapshot, merged snapshot and `.gitattributes` caches alike.
+
 ## Consequences
 
 - The ticket port carries the active sprint's start and end dates alongside its issue keys, under
@@ -201,4 +245,8 @@ on top. The two commands stay at parity by construction.
 - The GitLab adapter gains a merged-since listing over the board's sources; `mrboard fetch` keeps
   parity.
 - A new `review_size` config section (exclude globs, default-excludes switch, bucket thresholds).
-- The GitLab adapter gains a per-project `.gitattributes` read and cache, and per-MR `diffStats`.
+- The GitLab adapter gains a per-project `.gitattributes` read and 24h disk cache, and a
+  SHA-keyed `diffStats` stage in `FetchAll`; the thin phase-1 query gains `diffHeadSha`.
+- `domain.MergeRequest` carries its head SHA and per-file diff stats, persisted by the snapshot.
+- `mrsvc.FetchOptions` gains `MergedSince`; a second snapshot store holds merged MRs per sprint.
+- `mrboard fetch` gains `--merged-since`, and `--cold` covers every new cache.
