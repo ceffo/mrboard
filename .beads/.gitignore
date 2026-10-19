@@ -44,3 +44,6 @@ redirect
 # Recovery backups and schema-migration state (local-only)
 .br_recovery/
 .beads.db.schema-migration-*
+
+# Per-process WAL index scratch dirs (left behind by br)
+.br-wal-index-*/
