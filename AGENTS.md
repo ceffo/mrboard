@@ -360,3 +360,17 @@ git push                # Push to remote
 - Always sync before ending session
 
 <!-- end-br-agent-instructions -->
+
+## Agent Workflow
+
+Project-specific configuration for the agents in `.claude/agents/` (validation, worktrees, generated
+code, tracker usage, review triggers and checklist, model selection, commit format) lives in
+[docs/agent-workflow.md](docs/agent-workflow.md). Read it before working as one of those agents.
+Its "Hard rules for implementers" bind every agent, including: never open a visible window on the
+user's desktop; UI checks run headless.
+
+## Tracker
+
+Issues are managed with `.claude/scripts/tracker.sh` (backend in `.claude/fleet.env`). Only the
+supervisor and the scoper write to it; states and rules are in the "Tracker" section of
+[docs/agent-workflow.md](docs/agent-workflow.md).
