@@ -158,6 +158,42 @@ the lines within each group. The catch-all groups — "others" for persons, "(no
 tickets — always come last, whatever the sort, so aggregated load never outranks a named person
 or ticket.
 
+### CLI command shape (resolved 2026-10-19)
+
+**`mrboard load` is its own subcommand**, named after the domain term. `mrboard fetch` is a
+reproduction tool whose defaults are raw and unfiltered; a load report's defaults are the
+opposite, so it is not a `fetch` mode.
+
+| Flag | Values | Default | Meaning |
+|---|---|---|---|
+| `--group` | `person`, `jira` | `person` | Grouping of the tree |
+| `--sort` | `person`, `jira`, `size` | `size` | Order of groups and lines; heaviest load first by default |
+| `--remaining` | bool | off | Only what is left to approve |
+| `--json` | bool | off | Emit the computed rows as JSON instead of the tree |
+| `--color` | `auto`, `always`, `never` | `auto` | `auto` colours only on a TTY with `NO_COLOR` unset |
+| `--no-filters` | bool | off | Ignore the TUI's saved header filters |
+| `--view` | `mine`, `all` | saved | Override the saved view scope, as in `fetch` |
+| `--reviewer-mrs` | bool | saved | Override the saved reviewer-MRs setting, as in `fetch` |
+| `--cold` | bool | off | Bypass the snapshot cache, as in `fetch` |
+
+The TUI's saved header filters apply by default — every one except sprint, per "Load population".
+`--group`, `--sort` and `--remaining` are flags only and never persisted: the same command gives
+the same output.
+
+**One fetch path.** `mrboard load` calls the same core fetch as `mrboard fetch` — snapshot cache,
+saved reviewer-MRs setting — and adds the sprint population (sprint dates, merged-since listing)
+on top. The two commands stay at parity by construction.
+
+**Layering.**
+
+- The review load computation — population, crediting, totals and partial markers, grouping and
+  sorting — is business logic and lives in `internal/domain` (or a service under
+  `internal/domain/service`), so the CLI and the later TUI mode share it.
+- The coloured tree is rendered by a plain function in `internal/tui` (no Bubble Tea model),
+  using `styles.go` and the configured theme: charmbracelet stays inside `internal/tui`, and the
+  TUI mode reuses the same styles.
+- `--json` serialises the computed rows in `internal/cmd`.
+
 ## Consequences
 
 - The ticket port carries the active sprint's start and end dates alongside its issue keys, under
