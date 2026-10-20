@@ -203,16 +203,18 @@ func ValidateSizeGlob(glob string) error {
 }
 
 // matchSizeGlob matches filePath against glob with .gitattributes-style rules: a glob with
-// no slash matches the file's base name at any depth; otherwise it matches the whole path
-// from the repository root, segment by segment, where "**" spans zero or more segments.
+// no slash matches the file's base name at any depth; otherwise (including a leading slash,
+// which anchors "/foo.pb.go" to the root) it matches the whole path from the repository
+// root, segment by segment, where "**" spans zero or more segments.
 // A trailing slash ("vendor/") matches everything under that directory.
 func matchSizeGlob(glob, filePath string) bool {
 	filePath = strings.TrimPrefix(filePath, "/")
+	anchored := strings.HasPrefix(glob, "/")
 	glob = strings.TrimPrefix(glob, "/")
 	if strings.HasSuffix(glob, "/") {
 		glob += "**"
 	}
-	if !strings.Contains(glob, "/") {
+	if !anchored && !strings.Contains(glob, "/") {
 		return globMatch(glob, path.Base(filePath))
 	}
 	return matchSegments(strings.Split(glob, "/"), strings.Split(filePath, "/"))
