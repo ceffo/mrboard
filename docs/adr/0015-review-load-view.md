@@ -243,7 +243,7 @@ on top. The two commands stay at parity by construction.
   stubs carry `sha`). Stats are refetched only when the head SHA moves — a push. Comments, labels
   and approvals bump `updatedAt` but leave the diff, so they cost no size fetch.
 - **Query shape.** One aliased GraphQL `diffStats { path additions deletions }` query per batch
-  of at most 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. The constant
+  of at most 30 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. The constant
   (`gqlDiffStatsBatchSize`) is 30, not yet measured against a real complexity score: GitLab scores
   each selected field 1 and a Gitaly-backed field 1 more (the discussions batch measured exactly its
   field count, 16 per alias), so a `diffStats` alias is estimated at 7 and 30 of them at ~213,
