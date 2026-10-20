@@ -171,9 +171,8 @@ domain struct. In this repo, these serialize: `internal/adapters/gitlabadpt/`, `
 
 ## CI and PRs
 
-- `Check` (`.github/workflows/check.yml`) runs `just check-ci` on pushes to `main` and on PRs **into
-  `main`** only: a PR stacked on another branch gets no CI until it is retargeted to `main`. Run
-  `just check-ci` locally to reproduce it.
+- `Check` (`.github/workflows/check.yml`) runs `just check-ci` on pushes to `main` and on every PR
+  (stacked ones included). Run `just check-ci` locally to reproduce it.
 - `Release on merge` runs on every push to `main`: the squashed subject (the PR title) picks the bump
   (`scripts/next-version.sh`), and `Release` publishes the tag. A title with `[skip release]`, or a
   non-releasing type, publishes nothing.
