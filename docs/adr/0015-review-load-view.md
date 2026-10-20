@@ -132,6 +132,30 @@ silently disappears.
 **Remaining only.** The toggle hides a person's row for an MR once that person has approved it or
 the MR is merged. Drafts stay, marked as drafts.
 
+**Computation details** (`mrsvc.ComputeLoad`, shared by the CLI and the TUI):
+
+- An MR is merged when `MergeRequest.MergedAt` is set; a listed MR without it is open. Closed
+  unmerged MRs are never listed. An MR listed both open and merged counts once, as merged.
+- Every roster member gets a person group, even with no load, unless the reviewer filter excludes
+  them. The "others" group holds one line per (MR, outside approver), each credited the full size,
+  and appears only when it has lines.
+- An excluded reviewer loses their group (or their lines in "others") but stays listed as an
+  approver on MR lines: the MR and its co-approvers are facts the filter does not change.
+- In a ticket group, "remaining only" keeps an MR line while it is open and some approver has not
+  approved; an open MR with no approver stays.
+- The team total and the MR count cover the same MRs: the population after the header filters
+  and "remaining only". In person grouping that includes MRs on no person line (no approver, or
+  only excluded ones), so the count states MRs in scope, not lines shown.
+- "Merged on or after the sprint's start date" is a day: an MR counts from midnight of the start
+  date in the start time's own location, whatever the start's time of day.
+- Review size is measured through one per-MR exclusion lookup (`domain.SizeExclusionsFor`),
+  shared by `mrboard fetch` and the load, so the generated-file rules of an MR's project and
+  target branch apply to both alike.
+- MRs with no assigned approver carry no person load but count in their ticket group and the team
+  total.
+- Line order under a size sort puts unknown sizes last; a ticket sort orders keys of one project by
+  number (`OD-9` before `OD-10`).
+
 ### CLI output layout (resolved 2026-10-19)
 
 Prototype: `prototypes/review-load-cli/` on branch `prototype/review-load-cli` — three layouts
@@ -205,10 +229,11 @@ on top. The two commands stay at parity by construction.
   and approvals bump `updatedAt` but leave the diff, so they cost no size fetch.
 - **Query shape.** One aliased GraphQL `diffStats { path additions deletions }` query per batch
   of at most 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. The constant
-  (`gqlDiffStatsBatchSize`) is 35: GitLab scores each selected field 1 and a Gitaly-backed field 1
-  more (the discussions batch measured exactly its field count, 16 per alias), so a `diffStats`
-  alias scores 7 and 35 of them stay under the 250 ceiling. Each query also requests
-  `queryComplexity { score limit }`, logged at debug level, to check the score against real data.
+  (`gqlDiffStatsBatchSize`) is 30, not yet measured against a real complexity score: GitLab scores
+  each selected field 1 and a Gitaly-backed field 1 more (the discussions batch measured exactly its
+  field count, 16 per alias), so a `diffStats` alias is estimated at 7 and 30 of them at ~213,
+  leaving margin under the 250 ceiling for an error in the estimate. Each query also requests
+  `queryComplexity { score limit }`, logged at debug level; a real run's score may raise the cap.
 - **Timing.** The size stage runs concurrently with phase-2 discussions and `FetchAll` returns
   once both finish: one result, one snapshot save.
 - **The snapshot caches per-file stats**, not the computed size. Review size is derived at read
@@ -236,8 +261,9 @@ generated-file markings change rarely, and `--cold` is the escape hatch.
   `NewSizeExclusions(defaults, configured, mr.GeneratedRules)`. As in git, the last matching line
   decides each attribute: `attr` and `attr=<value>` set it (`attr=false` unsets), `-attr` unsets,
   `!attr` returns it to unspecified. `gitlab-generated` decides when set or unset;
-  `linguist-generated` decides when it is unspecified. An unset marking never re-includes a file
-  a built-in or configured glob excludes. Patterns ending in `/` match no file in
+  `linguist-generated` decides when it is unspecified. An unset marking (`-gitlab-generated`,
+  `-linguist-generated`) never re-includes a file a built-in or configured glob excludes: those
+  globs are the team's policy, while `.gitattributes` describes the repository. Patterns ending in `/` match no file in
   `.gitattributes` and are ignored, as are quoted patterns and `[attr]` macros.
 - **`--cold`** reaches the adapter as `mrsvc.FetchOptions.Cold`: entries are re-read and the
   fresh content replaces the cached one.

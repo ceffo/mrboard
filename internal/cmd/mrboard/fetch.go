@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/core"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -155,29 +156,27 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	}
 	rs := c.Config.ReviewSize
 	sizing := sizeOptions{
-		exclusions: sizeExclusionsFor(rs.DefaultExcludes, rs.Exclude),
+		exclusions: reviewSizeExclusions(rs),
 		thresholds: rs.Buckets.Thresholds(),
 		verbose:    opts.verbose,
 	}
 	return printJSON(mrs, c.Config.CurrentUser, sizing)
 }
 
+// reviewSizeExclusions is the per-MR exclusion lookup every command measures review
+// size with, so `mrboard fetch` and the review load report the same size.
+func reviewSizeExclusions(rs config.ReviewSize) domain.SizeExclusionsFor {
+	return func(mr domain.MergeRequest) domain.SizeExclusions {
+		return domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, mr.GeneratedRules)
+	}
+}
+
 // sizeOptions controls how fetch output reports each MR's review size
 // (docs/adr/0015, "Review size metric").
 type sizeOptions struct {
-	// exclusions returns the size exclusions that apply to one MR: the configured
-	// globs plus the generated-file rules of its project's .gitattributes.
-	exclusions func(domain.MergeRequest) domain.SizeExclusions
+	exclusions domain.SizeExclusionsFor
 	thresholds domain.SizeThresholds
 	verbose    bool
-}
-
-// sizeExclusionsFor returns the size exclusions of one MR: the built-in and configured
-// globs plus the generated-file rules of its project's .gitattributes.
-func sizeExclusionsFor(useDefaults bool, configured []string) func(domain.MergeRequest) domain.SizeExclusions {
-	return func(mr domain.MergeRequest) domain.SizeExclusions {
-		return domain.NewSizeExclusions(useDefaults, configured, mr.GeneratedRules)
-	}
 }
 
 func printJSON(mrs []domain.MergeRequest, currentUser string, sizing sizeOptions) error {
@@ -238,7 +237,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		})
 	}
 	now := time.Now()
-	m := mr.MeasureReviewSize(sizing.exclusions(mr))
+	m := mr.MeasureReviewSize(sizing.exclusions.Of(mr))
 	var reviewSize *int
 	var sizeFiles *sizeFilesJSON
 	if m.Size.Known {

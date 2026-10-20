@@ -191,6 +191,15 @@ type MergeRequest struct {
 	// MR's target branch, in file order. Nil means none (no file, no markings, or not
 	// read). They feed NewSizeExclusions, so they apply at read time like the stats.
 	GeneratedRules []GeneratedRule
+
+	// MergedAt is when the MR was merged; zero for an open MR. Closed-unmerged MRs are
+	// never listed, so a listed MR with a zero MergedAt is open.
+	MergedAt time.Time
+}
+
+// Merged reports whether mr has been merged.
+func (mr MergeRequest) Merged() bool {
+	return !mr.MergedAt.IsZero()
 }
 
 // MeasureReviewSize computes mr's review size from its diff stats under e.
