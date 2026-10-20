@@ -142,7 +142,15 @@ the MR is merged. Drafts stay, marked as drafts.
 - An excluded reviewer loses their group (or their lines in "others") but stays listed as an
   approver on MR lines: the MR and its co-approvers are facts the filter does not change.
 - In a ticket group, "remaining only" keeps an MR line while it is open and some approver has not
-  approved; an open MR with no approver stays. The team total and MR count cover the same lines.
+  approved; an open MR with no approver stays.
+- The team total and the MR count cover the same MRs: the population after the header filters
+  and "remaining only". In person grouping that includes MRs on no person line (no approver, or
+  only excluded ones), so the count states MRs in scope, not lines shown.
+- "Merged on or after the sprint's start date" is a day: an MR counts from midnight of the start
+  date in the start time's own location, whatever the start's time of day.
+- Review size is measured through one per-MR exclusion lookup (`domain.SizeExclusionsFor`),
+  shared by `mrboard fetch` and the load, so the generated-file rules of an MR's project and
+  target branch apply to both alike.
 - MRs with no assigned approver carry no person load but count in their ticket group and the team
   total.
 - Line order under a size sort puts unknown sizes last; a ticket sort orders keys of one project by

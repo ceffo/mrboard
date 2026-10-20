@@ -30,7 +30,8 @@ const (
 
 // LoadOptions are the inputs of ComputeLoad.
 type LoadOptions struct {
-	// SprintStart bounds merged MRs: one merged before it is not in the load.
+	// SprintStart is the sprint's start date: an MR merged before midnight of that day,
+	// in SprintStart's own location, is not in the load. The time of day is ignored.
 	SprintStart time.Time
 	// SprintKeys are the ticket keys of the sprint. An MR whose ticket key is not
 	// among them is not in the load; an MR with no ticket key goes to the
@@ -46,8 +47,9 @@ type LoadOptions struct {
 	// MRs only, and an excluded reviewer loses their person group instead of
 	// hiding the MRs they review.
 	Filter FilterOptions
-	// Exclusions and Thresholds measure and label each MR's review size.
-	Exclusions domain.SizeExclusions
+	// Exclusions and Thresholds measure and label each MR's review size. Pass the
+	// lookup fetch output uses, so both report the same size.
+	Exclusions domain.SizeExclusionsFor
 	Thresholds domain.SizeThresholds
 
 	Group LoadGrouping
@@ -130,8 +132,10 @@ type Load struct {
 	Groups        []LoadGroup
 	// TeamTotal counts each MR shown once, so person totals can exceed it.
 	TeamTotal LoadTotal
-	// MRCount is the number of MRs shown; PopulationCount the sprint's MRs
-	// before the header filters ran.
+	// MRCount is the number of MRs left after the header filters and the
+	// remaining-only toggle, the MRs TeamTotal sums. In person grouping it
+	// includes MRs on no person line (no approver, or only excluded ones).
+	// PopulationCount is the sprint's MRs before the header filters ran.
 	MRCount         int
 	PopulationCount int
 }
@@ -199,9 +203,11 @@ func dedupMerged(mrs []domain.MergeRequest) []domain.MergeRequest {
 // loadPopulation keeps the MRs of the sprint: ticketed in the sprint or
 // unticketed, and open or merged on or after the sprint start.
 func loadPopulation(mrs []domain.MergeRequest, opts LoadOptions) []domain.MergeRequest {
+	y, m, d := opts.SprintStart.Date()
+	start := time.Date(y, m, d, 0, 0, 0, 0, opts.SprintStart.Location())
 	out := make([]domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
-		if mr.Merged() && mr.MergedAt.Before(opts.SprintStart) {
+		if mr.Merged() && mr.MergedAt.Before(start) {
 			continue
 		}
 		if k := opts.KeyMatcher.ExtractFromTitle(mr.Title); k != "" && !opts.SprintKeys[k] {
@@ -232,7 +238,7 @@ func filterForLoad(mrs []domain.MergeRequest, opts LoadOptions) []domain.MergeRe
 }
 
 func newLoadLine(mr domain.MergeRequest, opts LoadOptions, team map[string]bool) LoadLine {
-	size := mr.MeasureReviewSize(opts.Exclusions).Size
+	size := mr.MeasureReviewSize(opts.Exclusions.Of(mr)).Size
 	l := LoadLine{
 		MR:     mr,
 		Ticket: opts.KeyMatcher.ExtractFromTitle(mr.Title),
@@ -326,7 +332,7 @@ func groupByPerson(lines []LoadLine, all []domain.MergeRequest, opts LoadOptions
 			credited.Approver = a.Username
 			credited.Approved = a.Approved
 			g := &others
-			if i, ok := idx[a.Username]; ok && a.InTeam {
+			if i, ok := idx[a.Username]; ok {
 				g = &groups[i]
 			}
 			g.Lines = append(g.Lines, credited)

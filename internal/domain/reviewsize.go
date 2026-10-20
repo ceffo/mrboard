@@ -62,6 +62,25 @@ func NewSizeExclusions(useDefaults bool, configured, generated []string) SizeExc
 	return SizeExclusions{globs: globs}
 }
 
+// SizeExclusionsFor returns the exclusions that apply to an MR's diff. They can differ per
+// MR: the generated-file rules come from the MR's project and target branch. Every reader of
+// a review size (fetch output, the review load) measures through the same lookup, so they
+// agree on each MR's size.
+type SizeExclusionsFor func(MergeRequest) SizeExclusions
+
+// UniformSizeExclusions applies e to every MR.
+func UniformSizeExclusions(e SizeExclusions) SizeExclusionsFor {
+	return func(MergeRequest) SizeExclusions { return e }
+}
+
+// Of returns the exclusions for mr; a nil lookup excludes nothing.
+func (f SizeExclusionsFor) Of(mr MergeRequest) SizeExclusions {
+	if f == nil {
+		return SizeExclusions{}
+	}
+	return f(mr)
+}
+
 // Excludes reports whether the file at filePath is left out of the review size.
 func (e SizeExclusions) Excludes(filePath string) bool {
 	for _, g := range e.globs {
