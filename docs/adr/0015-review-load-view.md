@@ -229,10 +229,11 @@ on top. The two commands stay at parity by construction.
   and approvals bump `updatedAt` but leave the diff, so they cost no size fetch.
 - **Query shape.** One aliased GraphQL `diffStats { path additions deletions }` query per batch
   of at most 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. The constant
-  (`gqlDiffStatsBatchSize`) is 35: GitLab scores each selected field 1 and a Gitaly-backed field 1
-  more (the discussions batch measured exactly its field count, 16 per alias), so a `diffStats`
-  alias scores 7 and 35 of them stay under the 250 ceiling. Each query also requests
-  `queryComplexity { score limit }`, logged at debug level, to check the score against real data.
+  (`gqlDiffStatsBatchSize`) is 30, not yet measured against a real complexity score: GitLab scores
+  each selected field 1 and a Gitaly-backed field 1 more (the discussions batch measured exactly its
+  field count, 16 per alias), so a `diffStats` alias is estimated at 7 and 30 of them at ~213,
+  leaving margin under the 250 ceiling for an error in the estimate. Each query also requests
+  `queryComplexity { score limit }`, logged at debug level; a real run's score may raise the cap.
 - **Timing.** The size stage runs concurrently with phase-2 discussions and `FetchAll` returns
   once both finish: one result, one snapshot save.
 - **The snapshot caches per-file stats**, not the computed size. Review size is derived at read

@@ -19,9 +19,11 @@ import (
 // scores every selected field 1, and a field that calls Gitaly 1 more; the
 // discussions batch measured exactly 16 per alias, its field count. One
 // diffStats alias selects project, mergeRequest, diffStats (Gitaly) and three
-// scalars: 7. 35 aliases score 245 plus 3 for queryComplexity { score limit },
-// which the query requests so the debug log reports GitLab's real score.
-const gqlDiffStatsBatchSize = 35
+// scalars: an estimated 7, so 30 aliases plus queryComplexity { score limit }
+// score about 213. The estimate is not yet measured against GitLab: the query
+// requests queryComplexity and the debug log reports the real score, which is
+// what may raise this cap. An over-limit batch fails whole, every refresh.
+const gqlDiffStatsBatchSize = 30
 
 // diffStatsTarget is an MR whose diff stats must be fetched.
 type diffStatsTarget struct {
