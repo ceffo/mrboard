@@ -73,9 +73,11 @@ func loadOpts() mrsvc.LoadOptions {
 		SprintStart: loadSprintStart,
 		SprintKeys:  map[string]bool{ticketOD1: true, ticketOD2: true},
 		Team:        []string{userAlice, userBob, userCarol},
-		Exclusions:  domain.UniformSizeExclusions(domain.NewSizeExclusions(true, nil, nil)),
-		Thresholds:  domain.DefaultSizeThresholds,
-		Sort:        mrsvc.LoadSortSize,
+		Exclusions: func(domain.MergeRequest) domain.SizeExclusions {
+			return domain.NewSizeExclusions(true, nil, nil)
+		},
+		Thresholds: domain.DefaultSizeThresholds,
+		Sort:       mrsvc.LoadSortSize,
 	}
 }
 
