@@ -45,6 +45,7 @@ type dataset struct {
 // cloneMR returns a copy safe to hand across the port boundary.
 func cloneMR(mr domain.MergeRequest) domain.MergeRequest {
 	mr.Reviewers = slices.Clone(mr.Reviewers)
+	mr.DiffStats = slices.Clone(mr.DiffStats)
 	return mr
 }
 

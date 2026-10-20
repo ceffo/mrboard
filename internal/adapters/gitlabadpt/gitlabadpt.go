@@ -72,7 +72,20 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	// REST stubs and GraphQL-thin stubs, each still needing discussions.
 	toEnrichREST, toEnrichGQL := dedupStage(rawMRs, gqlRawMRs, a.cfg.ExcludedAuthors, logger)
 
-	// Stage 3: enrich — fetch discussions (REST or GraphQL, matching each MR's
+	// Stage 3, concurrently with stage 4: diff stats — fetch per-file line counts
+	// for every survivor whose head SHA moved since the previous snapshot.
+	cachedStats, statsTargets, unaddressable := planDiffStats(liveDiffHeads(toEnrichREST, toEnrichGQL), opts.Previous)
+	logger.Info("gitlab: diff stats plan",
+		"cached", len(cachedStats), "to_fetch", len(statsTargets), "unaddressable", unaddressable)
+	var fetchedStats map[mrKey][]domain.FileDiffStat
+	var statsErrs []error
+	statsDone := make(chan struct{})
+	go func() {
+		defer close(statsDone)
+		fetchedStats, statsErrs = a.diffStatsStage(ctx, statsTargets)
+	}()
+
+	// Stage 4: enrich — fetch discussions (REST or GraphQL, matching each MR's
 	// source) for every deduped survivor in parallel, exactly once per MR.
 	enrichStart := time.Now()
 	finalMRs, enrichErrs := a.enrichStage(ctx, toEnrichREST, toEnrichGQL, opts)
@@ -80,6 +93,13 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger.Info("gitlab: enrichment done",
 		"enriched", len(finalMRs), "enrich_errors", len(enrichErrs),
 		"duration", ilog.FmtDur(time.Since(enrichStart)))
+
+	<-statsDone
+	errs = append(errs, statsErrs...)
+	for k, s := range fetchedStats {
+		cachedStats[k] = s
+	}
+	applyDiffStats(finalMRs, cachedStats)
 
 	// Mark MRs that came exclusively from the reviewer fetch.
 	if opts.IncludeReviewerMRs {

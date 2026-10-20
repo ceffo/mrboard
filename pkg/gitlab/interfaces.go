@@ -43,6 +43,9 @@ type MREnricher interface {
 	// discussions — the one field the thin listing query omits — in a single
 	// aliased GraphQL request (phase 2, docs/adr/0005).
 	FetchMRsDiscussionsGraphQL(ctx context.Context, reqs []MRDiscussionsRequest) ([]MRDiscussionsResult, error)
+	// FetchMRsDiffStatsGraphQL fetches the per-file diff stats of N MRs in a
+	// single aliased GraphQL request (docs/adr/0015, "Fetch placement and caching").
+	FetchMRsDiffStatsGraphQL(ctx context.Context, reqs []MRDiffStatsRequest) ([]MRDiffStatsResult, error)
 }
 
 // MRWriter covers mutations: writing approval rules, reviewer lists, and fetching editable project members.

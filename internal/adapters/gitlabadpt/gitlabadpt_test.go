@@ -28,6 +28,43 @@ type fakeFetchClient struct {
 	batchCalls     int
 	discussionReqs []pkggitlab.MRDiscussionsRequest // every req seen across all batch calls
 	discussionsErr error
+
+	diffStatsCalls int
+	diffStatsReqs  []pkggitlab.MRDiffStatsRequest // every req seen across all diff-stats calls
+	diffStatsBatch []int                          // size of each diff-stats call
+	diffStatsErr   error
+	// diffStats answers by "fullPath!iid"; an MR absent from it has a known empty diff.
+	diffStats map[string][]pkggitlab.GQLDiffStat
+	// rendezvous, when set, makes the first discussions and diff-stats calls each
+	// wait for the other to start, proving the two stages overlap.
+	rendezvous *rendezvous
+}
+
+// rendezvous is a two-party barrier with a timeout: met reports whether both
+// parties arrived within it.
+type rendezvous struct {
+	wg   sync.WaitGroup
+	once [2]sync.Once
+	met  [2]bool
+}
+
+func newRendezvous() *rendezvous {
+	r := &rendezvous{}
+	r.wg.Add(2)
+	return r
+}
+
+func (r *rendezvous) arrive(party int) {
+	r.once[party].Do(func() {
+		r.wg.Done()
+		done := make(chan struct{})
+		go func() { r.wg.Wait(); close(done) }()
+		select {
+		case <-done:
+			r.met[party] = true
+		case <-time.After(2 * time.Second):
+		}
+	})
 }
 
 func newFakeFetchClient() *fakeFetchClient {
@@ -52,6 +89,9 @@ func (f *fakeFetchClient) FetchReviewerMRsThinGraphQL(
 func (f *fakeFetchClient) FetchMRsDiscussionsGraphQL(
 	_ context.Context, reqs []pkggitlab.MRDiscussionsRequest,
 ) ([]pkggitlab.MRDiscussionsResult, error) {
+	if f.rendezvous != nil {
+		f.rendezvous.arrive(0)
+	}
 	f.mu.Lock()
 	f.batchCalls++
 	f.discussionReqs = append(f.discussionReqs, reqs...)
@@ -61,6 +101,31 @@ func (f *fakeFetchClient) FetchMRsDiscussionsGraphQL(
 		return nil, err
 	}
 	return make([]pkggitlab.MRDiscussionsResult, len(reqs)), nil
+}
+
+func (f *fakeFetchClient) FetchMRsDiffStatsGraphQL(
+	_ context.Context, reqs []pkggitlab.MRDiffStatsRequest,
+) ([]pkggitlab.MRDiffStatsResult, error) {
+	if f.rendezvous != nil {
+		f.rendezvous.arrive(1)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.diffStatsCalls++
+	f.diffStatsReqs = append(f.diffStatsReqs, reqs...)
+	f.diffStatsBatch = append(f.diffStatsBatch, len(reqs))
+	if f.diffStatsErr != nil {
+		return nil, f.diffStatsErr
+	}
+	results := make([]pkggitlab.MRDiffStatsResult, len(reqs))
+	for i, r := range reqs {
+		stats, ok := f.diffStats[r.ProjectFullPath+"!"+r.IID]
+		if !ok {
+			stats = []pkggitlab.GQLDiffStat{}
+		}
+		results[i] = pkggitlab.MRDiffStatsResult{Found: true, Stats: stats}
+	}
+	return results, nil
 }
 
 // --- unused MRLister/MREnricher/MRWriter methods: panic if ever called ---
