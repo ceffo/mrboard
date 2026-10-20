@@ -13,6 +13,8 @@
 # (sound "request") so the user sees it; the prefix goes when the agent works again. scoper-* and
 # designer-* talk to the user by design: they get the mark and the notification, but don't wake the
 # supervisor. Agents already waiting when the watcher starts are marked, not reported.
+# The agent in this watcher's own pane ($HERDR_PANE_ID, the supervisor) is never watched.
+# A report already handled is marked with fleet-ack.sh <KEY>, so re-arming doesn't report it again.
 # Only the agents of this herdr workspace ($HERDR_WORKSPACE_ID) are watched.
 # An agent ending a turn that only talks to the user (live steps, a scoper's questions) doesn't wake it.
 # Prints the agent's last lines. Records its pid in supervisor/fleet-watch.pid, which the Stop hook
@@ -32,7 +34,7 @@ trap '[ "$(cat "$pidf" 2>/dev/null)" = $$ ] && rm -f "$pidf"' EXIT
 declare -A seen state
 pending=""
 WS=${HERDR_WORKSPACE_ID:-}
-snap() { herdr agent list 2>/dev/null | jq -r --arg ws "$WS" '.result.agents[]|select((.name // "sup-")|startswith("sup-")|not)|select($ws=="" or .workspace_id==$ws)|"\(.name) \(.agent_status) \(.state_change_seq) \(.tab_id)"'; }
+snap() { herdr agent list 2>/dev/null | jq -r --arg ws "$WS" --arg me "${HERDR_PANE_ID:-}" '.result.agents[]|select((.name // "sup-")|startswith("sup-")|not)|select($ws=="" or .workspace_id==$ws)|select($me=="" or .pane_id!=$me)|"\(.name) \(.agent_status) \(.state_change_seq) \(.tab_id)"'; }
 # The agent's last message, without herdr/Claude chrome (status bar, prompt, recap, spinner lines).
 last_msg() { herdr agent read "$1" --source recent-unwrapped --lines 40 2>/dev/null \
   | sed '/※ recap/,$d' | grep -vE '^\s*$|tokens ·|───|^\s*❯|auto mode|^\s*~/|^\s*✻' | tail -10; }
@@ -56,7 +58,7 @@ fresh_report() { # the agent's report newer than the supervisor's last prompt fo
   local item=${1#*-}; item=${item^^}; item=$(sed -E 's/([0-9]+)[A-Z]+$/\1/' <<<"$item"); local f p
   # The newest of all markers is the last prompt: a report must be newer than it.
   # Exact item only (a "-" or the end after it), so item 3 never matches item 34's files.
-  p=$(ls -td "$W"/.prompt-"$item" "$W"/.prompt-"$item"-* "$W"/.prompt-*-"$item" \
+  p=$(ls -td "$W"/.ack-"$item" "$W"/.prompt-"$item" "$W"/.prompt-"$item"-* "$W"/.prompt-*-"$item" \
     "$B"/*"$item"-[0-9]*.md "$B"/*"$item".md 2>/dev/null | head -1)
   [ -n "$p" ] || return 1
   for f in "$R"/"$item"-*.md "$R"/*-"$item".md "$R"/"$item".md; do
