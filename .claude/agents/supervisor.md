@@ -261,6 +261,8 @@ When the developer reports the full verification passed on HEAD:
 - Pushing and opening PRs publishes work: do it when the user has asked for the flow (dispatching an
   item through you counts as that request for its branch). Push: `git -C <worktree> push -u origin
   <branch>` (plain push; `--force-with-lease` only to publish a restacked branch).
+- Before shipping, `.claude/scripts/gate-check.sh <worktree> <KEY>` must pass: it compares the sha stamped by the
+  developer's `just gate <KEY>` to the branch HEAD. A mismatch → a rework prompt to rerun the gate, not a ship.
 - PR: `.claude/scripts/ship.sh <worktree> <title> <body-file> <id>…` pushes the branch, opens the PR
   (`gh pr create --head <branch> --title … --body-file <file>`) and moves the issue(s) to In Review with
   the PR link; body (in the scratchpad) with a `Closes <id>` line (what the tracker's merge integration reads), the summary, item id, what was and wasn't verified from the developer's report, any merge-order note,

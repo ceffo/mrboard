@@ -74,6 +74,9 @@ While iterating, use the narrow checks from the workflow doc's "Validation".
 run the full gate from "Validation". It must pass in full. If it fails, fix it before reporting.
 Don't report `done` on a red gate; use `partial` or `blocked` and say what is red. After a clean
 merge of the default branch run it again.
+Run the gate as `just gate <KEY>`. FULL VERIFICATION names the sha the gate ran on, and that sha
+equals HEAD: commit first, then run the gate, then report; any later commit means a rerun.
+Write `rm` targets as `"${VAR:?}"/...`.
 
 Then exercise the acceptance criteria and any numbered checklist the supervisor passed you, each for
 real, using "Running the app for acceptance checks" from the workflow doc (a test, a request against

@@ -87,3 +87,8 @@ release *args:
 # prints the bump and version merging a PR with this title would release
 release-preview title:
   @bash scripts/next-version.sh --plan "{{title}}"
+
+# runs `check`, then stamps HEAD's sha into <fleet reports dir>/<key>-gate, e.g. `just gate GH-56`
+# the supervisor compares the stamp to the branch HEAD before shipping (.claude/scripts/gate-check.sh)
+gate key: check
+  git rev-parse HEAD > "${FLEET_REPORTS_DIR:-../reports}/{{key}}-gate"

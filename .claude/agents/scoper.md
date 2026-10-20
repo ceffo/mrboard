@@ -82,6 +82,7 @@ An item has:
   **risky** per the workflow doc's review triggers (label it as the doc says);
 - a type and a priority in the tracker's scale. Priority is the user's call: propose one with a
   reason; in autonomous mode use the workflow doc's default and flag it;
+- when two items meet at one function, each item's body names that function and which item owns it;
 - dependencies only for a real "can't start until that is merged"; two items that merely touch the
   same files are not blocked, say so in the description;
 - no assignee (the supervisor claims on dispatch); no secrets.

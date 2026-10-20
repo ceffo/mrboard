@@ -45,6 +45,8 @@ Design decisions are read from these docs and the tracker, never from a memory t
   defaults of `fleet-lib.sh`.
 - Main checkout: `/Users/moncefnaji/code/github.com/mrboard`; default branch `main`; remote `origin`
   (GitHub `ceffo/mrboard`).
+- The supervisor is launched as `claude --agent supervisor` from the main checkout, so it starts with
+  its playbook loaded instead of rebuilding it from files.
 - After creating a worktree: `just build` (agent-tui scripts run `./bin/mrboard`). Go tools come from
   `go.mod` `tool` directives; nothing to install.
 - Shared resources: the user's real config (`~/.config/mrboard/mrboard.yaml`), its `state.yaml`, and
