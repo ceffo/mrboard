@@ -62,7 +62,6 @@ func TestGetActiveSprint_Dates(t *testing.T) {
 		wantNil   bool
 		wantStart time.Time
 		wantEnd   time.Time
-		wantErr   bool
 	}{
 		{
 			name: "dates parsed",
@@ -73,7 +72,18 @@ func TestGetActiveSprint_Dates(t *testing.T) {
 		},
 		{name: "missing dates are zero", body: `{"values":[{"id":3,"name":"S"}]}`},
 		{name: "no active sprint", body: `{"values":[]}`, wantNil: true},
-		{name: "malformed date", body: `{"values":[{"id":3,"name":"S","startDate":"yesterday"}]}`, wantErr: true},
+		{
+			name: "offset without colon",
+			body: `{"values":[{"id":3,"name":"S","startDate":"2024-05-01T09:00:00.000+0000",` +
+				`"endDate":"2024-05-15T09:00:00.000+1000"}]}`,
+			wantStart: time.Date(2024, 5, 1, 9, 0, 0, 0, time.UTC),
+			wantEnd:   time.Date(2024, 5, 14, 23, 0, 0, 0, time.UTC),
+		},
+		{
+			name:    "unreadable start is zero, end still read",
+			body:    `{"values":[{"id":3,"name":"S","startDate":"yesterday","endDate":"2026-10-19T08:00:00.000Z"}]}`,
+			wantEnd: time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,10 +91,6 @@ func TestGetActiveSprint_Dates(t *testing.T) {
 				w.Write([]byte(tc.body))
 			})
 			got, err := c.GetActiveSprint(t.Context(), 1)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
 			require.NoError(t, err)
 			if tc.wantNil {
 				assert.Nil(t, got)

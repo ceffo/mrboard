@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -106,24 +107,33 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 		return nil, nil
 	}
 	s := body.Values[0]
-	start, err := parseSprintDate(s.StartDate)
-	if err != nil {
-		return nil, fmt.Errorf("jira: sprint %d start date: %w", s.ID, err)
-	}
-	end, err := parseSprintDate(s.EndDate)
-	if err != nil {
-		return nil, fmt.Errorf("jira: sprint %d end date: %w", s.ID, err)
-	}
-	return &Sprint{ID: s.ID, Name: s.Name, Start: start, End: end}, nil
+	return &Sprint{
+		ID:    s.ID,
+		Name:  s.Name,
+		Start: sprintDate(s.ID, "startDate", s.StartDate),
+		End:   sprintDate(s.ID, "endDate", s.EndDate),
+	}, nil
 }
 
-// parseSprintDate reads a sprint timestamp as the agile API renders it (RFC 3339,
-// with fractional seconds). An empty value is the zero time.
-func parseSprintDate(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
+// sprintDateLayouts are the timestamp forms the agile API renders: RFC 3339
+// with a colon in the offset, and the "+0000" form without one. Fractional
+// seconds are accepted by both.
+var sprintDateLayouts = []string{time.RFC3339, "2006-01-02T15:04:05Z0700"}
+
+// sprintDate reads a sprint timestamp. A missing or unreadable value yields the
+// zero time and a warning: the dates are advisory, and must never cost the
+// caller the sprint's issue keys.
+func sprintDate(sprintID int, field, raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
 	}
-	return time.Parse(time.RFC3339, s)
+	for _, layout := range sprintDateLayouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t
+		}
+	}
+	slog.Warn("jira: unreadable sprint date", "sprint_id", sprintID, "field", field, "value", raw)
+	return time.Time{}
 }
 
 const sprintIssuePageSize = 50

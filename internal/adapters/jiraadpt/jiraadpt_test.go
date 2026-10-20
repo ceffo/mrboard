@@ -341,3 +341,25 @@ func TestUpsertRemoteLink_PostError(t *testing.T) {
 	assert.Equal(t, 1, fc.calls)
 	assert.Equal(t, 1, fc.createRemoteCalls)
 }
+
+func TestGetActiveSprint_IgnoresLegacyCacheEntry(t *testing.T) {
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
+		sprintKeys: []string{issueKeyOD10},
+	}
+	a := newTestAdapter(t, fc, time.Hour)
+
+	// The pre-dates cache stored a bare key list under the unversioned key.
+	require.NoError(t, a.cache.Set(context.Background(), "sprint_board_7", []string{"OLD-1"}))
+
+	got, err := a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{issueKeyOD10}, got.IssueKeys, "the legacy entry must not be served")
+	assert.Equal(t, 2, fc.calls, "first call must fetch live")
+
+	got, err = a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, sprintName1, got.Name)
+	assert.Equal(t, 2, fc.calls, "the v2 entry must have been written")
+}
