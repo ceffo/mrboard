@@ -130,10 +130,14 @@ func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
 		{Path: testPathMain, Additions: 20},
 	}
 	mrs := []domain.MergeRequest{
-		{IID: 1, ProjectID: 1, Title: "feat(OD-1): a", DiffStats: stats,
-			GeneratedRules: domain.ParseGeneratedRules("*.gen.go linguist-generated\n")},
-		{IID: 2, ProjectID: 2, Title: "feat(OD-1): b", DiffStats: stats,
-			GeneratedRules: domain.ParseGeneratedRules("docs/** gitlab-generated\n")},
+		{
+			IID: 1, ProjectID: 1, Title: "feat(OD-1): a", DiffStats: stats,
+			GeneratedRules: domain.ParseGeneratedRules("*.gen.go linguist-generated\n"),
+		},
+		{
+			IID: 2, ProjectID: 2, Title: "feat(OD-1): b", DiffStats: stats,
+			GeneratedRules: domain.ParseGeneratedRules("docs/** gitlab-generated\n"),
+		},
 	}
 	sizing := testSizing(false)
 
