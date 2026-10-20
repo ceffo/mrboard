@@ -89,7 +89,7 @@ func (p *headerPieces) dropNext() bool {
 
 type headerWidget struct {
 	styles            Styles
-	mrs               []domain.MergeRequest
+	shown             int // MRs on screen; the filter bar's numerator
 	total             int // MRs available to filter; the filter bar's denominator
 	width             int
 	title             string
@@ -107,10 +107,17 @@ func newHeaderWidget(styles Styles) headerWidget {
 
 func (h *headerWidget) SetStyles(s Styles)               { h.styles = s }
 func (h *headerWidget) SetWidth(w int)                   { h.width = w }
-func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.mrs = mrs }
+func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.shown = len(mrs) }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetStats(s string)                { h.statsOverride = s }
 func (h *headerWidget) SetSort(label string)             { h.sortIndicator = label }
+
+// SetCount sets the filter bar's count for a view whose MRs are not a board
+// list: shown out of total.
+func (h *headerWidget) SetCount(shown, total int) {
+	h.shown = shown
+	h.total = total
+}
 
 // SetFilterState records the filter summary and the pre-filter MR count the
 // bar reports against. total is the population the filters were applied to, so
@@ -255,7 +262,7 @@ func (h headerWidget) filterSegments() []filterSegment {
 // the numerator until SetFilterState has run, so a half-wired header never
 // claims MRs are hidden.
 func (h headerWidget) shownTotal() (shown, total int) {
-	shown = len(h.mrs)
+	shown = h.shown
 	total = h.total
 	if total < shown {
 		total = shown

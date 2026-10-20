@@ -19,7 +19,8 @@ func execBoard(ctx context.Context, c *core.Core, version string, opts tui.Optio
 	final, err := tea.NewProgram(
 		tui.New(ctx, c.Config, c.MRSource, c.StateStore, c.SnapshotStore,
 			c.Notifier, c.TicketEnricher, c.TicketLinker, c.UpdateChecker, version, opts).
-			WithApproverAnnouncements(c.ApproverClaims, c.Config.Notifications.Teams.NewMRWindow),
+			WithApproverAnnouncements(c.ApproverClaims, c.Config.Notifications.Teams.NewMRWindow).
+			WithMergedSnapshots(c.MergedSnapshotStore),
 		tea.WithContext(ctx),
 	).Run()
 	if err != nil {

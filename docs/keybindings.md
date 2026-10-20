@@ -80,6 +80,9 @@ func (m Model) contextStack() []*Context {
     if m.showDetail {
         return append(stack, Detail)
     }
+    if m.loadOpen {
+        return append(stack, LoadCtx)          // review load view replaces the board
+    }
     return append(stack, Board)
 }
 ```

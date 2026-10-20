@@ -79,6 +79,11 @@ truth, and the footer always shows the most useful ones for where you are.
 The four worth knowing up front: `↵` opens the detail pane, `d` the diff view, `v` the reviewer
 editor, and `,` the settings panel.
 
+`L` swaps the board for the **review load** of the active sprint: the tree `mrboard load` prints,
+with a selection on its MR lines (`↵`, `o`, `c` and `d` act on it as on a card). `g` groups by
+person or ticket, `s` cycles the sort, `R` keeps only what is left to approve; all three are
+remembered across sessions. `L` or `esc` returns to the board.
+
 ## CLI commands
 
 Alongside the interactive board, `mrboard` has three one-shot commands for scripting and automation:
