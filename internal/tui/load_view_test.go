@@ -418,3 +418,70 @@ func TestLoadView_ScrollKeepsTheHeaderAndReachesTheFootnotes(t *testing.T) {
 	}
 	assert.Contains(t, ansi.Strip(h.m.loadView.render()), "Ada Lovelace", "the first line brings its heading back")
 }
+
+// twoApproverLoad is an open MR !1 under ada and grace, ada's heavier !3, and
+// grace's approved !4, which leaves grace's total when only remaining work shows.
+func twoApproverLoad(sizeOf1 int) ([]domain.MergeRequest, mrsvc.LoadOptions) {
+	mr := func(iid, lines int, reviewers ...domain.ReviewerInfo) domain.MergeRequest {
+		return domain.MergeRequest{
+			IID: iid, ProjectID: 1, ProjectPath: "g/r", Title: "chore: work", Author: "author",
+			Phase: domain.PhaseNeedsReview, Reviewers: reviewers,
+			DiffStats: []domain.FileDiffStat{{Path: "work.go", Additions: lines}},
+		}
+	}
+	appr := func(user string, approved bool) domain.ReviewerInfo {
+		state := domain.ReviewerNotStarted
+		if approved {
+			state = domain.ReviewerApproved
+		}
+		return domain.ReviewerInfo{Username: user, Name: user, IsApprover: true, State: state}
+	}
+	mrs := []domain.MergeRequest{
+		mr(1, sizeOf1, appr("ada", false), appr("grace", false)),
+		mr(3, 500, appr("ada", false)),
+		mr(4, 10, appr("grace", true)),
+	}
+	opts := mrsvc.LoadOptions{
+		SprintStart: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC),
+		Team:        []string{"ada", "grace"},
+		Exclusions:  func(domain.MergeRequest) domain.SizeExclusions { return domain.NewSizeExclusions(true, nil, nil) },
+		Thresholds:  domain.DefaultSizeThresholds,
+	}
+	return mrs, opts
+}
+
+func TestLoadView_SelectionKeepsItsGroupWhenTheHeadingChanges(t *testing.T) {
+	w := newLoadViewWidget(NewLoadStyles("", "dark"), DefaultLoadKeyMap, loadSettingsFromState(domain.DefaultAppState()))
+	w.SetSize(120, 30)
+	mrs, opts := twoApproverLoad(100)
+	w.SetData(mrs, opts, LoadSprint{Name: "S"})
+	selectedIn := func() (int, string) {
+		require.GreaterOrEqual(t, w.sel, 0)
+		l := w.lines[w.selectable[w.sel]]
+		return l.entry.MR.IID, l.group.key
+	}
+	for range 3 {
+		if iid, group := selectedIn(); iid == 1 && group == "grace" {
+			break
+		}
+		next, _ := w.Update(keyPress("down"))
+		w = next.(loadViewWidget)
+	}
+	iid, group := selectedIn()
+	require.Equal(t, 1, iid)
+	require.Equal(t, "grace", group, "the second copy of !1 is selected")
+
+	for _, k := range []string{"R", "s", "R", "s"} {
+		next, _ := w.Update(keyPress(k))
+		w = next.(loadViewWidget)
+		iid, group = selectedIn()
+		assert.Equal(t, 1, iid, "after %s", k)
+		assert.Equal(t, "grace", group, "after %s", k)
+	}
+
+	mrs, opts = twoApproverLoad(120) // a refresh changes the group totals
+	w.SetData(mrs, opts, LoadSprint{Name: "S"})
+	iid, group = selectedIn()
+	assert.Equal(t, 1, iid, "after a refresh")
+	assert.Equal(t, "grace", group, "after a refresh")
+}

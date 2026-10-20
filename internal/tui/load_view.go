@@ -92,7 +92,7 @@ type loadSettingsChangedMsg struct{}
 // loadSelection identifies the selected MR line across recomputations: the
 // same MR under the same group heading, else the same MR anywhere.
 type loadSelection struct {
-	group string
+	group loadGroupID
 	mr    domain.MRKey
 }
 
@@ -197,7 +197,7 @@ func (w *loadViewWidget) findSelection() int {
 		if e.MR.Key() != w.selected.mr {
 			continue
 		}
-		if w.groupKeyOf(li) == w.selected.group {
+		if w.lines[li].group == w.selected.group {
 			return i
 		}
 		if sameMR < 0 {
@@ -212,22 +212,12 @@ func (w *loadViewWidget) findSelection() int {
 	return 0
 }
 
-// groupKeyOf returns the key of the group heading line li sits under.
-func (w loadViewWidget) groupKeyOf(li int) string {
-	for i := li; i >= 0; i-- {
-		if w.lines[i].entry == nil && i > 0 {
-			return w.lines[i].text
-		}
-	}
-	return ""
-}
-
 func (w *loadViewWidget) remember(sel int) {
 	if sel < 0 || sel >= len(w.selectable) {
 		return
 	}
 	li := w.selectable[sel]
-	w.selected = loadSelection{group: w.groupKeyOf(li), mr: w.lines[li].entry.MR.Key()}
+	w.selected = loadSelection{group: w.lines[li].group, mr: w.lines[li].entry.MR.Key()}
 }
 
 // SelectedMR returns the MR of the selected line, nil when none is selected.

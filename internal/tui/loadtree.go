@@ -39,11 +39,19 @@ func RenderLoad(load mrsvc.Load, sprint LoadSprint, st Styles) string {
 
 // loadTreeLine is one rendered line of the load tree. MR lines also carry the
 // plain text of their cells, so a view can restyle the selected one whole, and
-// the line they draw.
+// the line they draw and the group they sit in.
 type loadTreeLine struct {
 	text  string
 	plain string // unstyled MR line, without its indent; empty on other lines
 	entry *mrsvc.LoadLine
+	group loadGroupID // set on MR lines
+}
+
+// loadGroupID identifies a load group independently of how its heading
+// renders, which changes with its total, the theme and the toggles.
+type loadGroupID struct {
+	key      string
+	catchAll bool
 }
 
 // loadTree is the load tree line by line, shared by RenderLoad and the TUI's
@@ -191,6 +199,7 @@ func loadLines(g *mrsvc.LoadGroup, load mrsvc.Load, st Styles) []loadTreeLine {
 			text:  strings.TrimRight(loadIndent+strings.Join(cells, "  "), " "),
 			plain: strings.TrimRight(strings.Join(plain, "  "), " "),
 			entry: &g.Lines[i],
+			group: loadGroupID{key: g.Key, catchAll: g.CatchAll},
 		})
 	}
 	return out
