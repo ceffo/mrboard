@@ -187,6 +187,14 @@ type MergeRequest struct {
 	// unknown (never fetched, or the fetch for this HeadSHA failed); an empty non-nil
 	// slice is a known empty diff. Review size is derived from them at read time.
 	DiffStats []FileDiffStat
+	// GeneratedRules are the generated-file markings of the root .gitattributes on the
+	// MR's target branch, in file order. Nil means none (no file, no markings, or not
+	// read). They feed NewSizeExclusions, so they apply at read time like the stats.
+	GeneratedRules []GeneratedRule
+	// GeneratedRulesUnknown is true when the .gitattributes read failed and no earlier
+	// rules exist for the MR: its review size is then unknown, never one that counts
+	// files the repository may mark generated.
+	GeneratedRulesUnknown bool
 
 	// MergedAt is when the MR was merged; zero for an open MR. Closed-unmerged MRs are
 	// never listed, so a listed MR with a zero MergedAt is open.
@@ -199,7 +207,11 @@ func (mr MergeRequest) Merged() bool {
 }
 
 // MeasureReviewSize computes mr's review size from its diff stats under e.
+// The size is unknown while the MR's generated-file rules are unknown.
 func (mr MergeRequest) MeasureReviewSize(e SizeExclusions) SizeMeasurement {
+	if mr.GeneratedRulesUnknown {
+		return SizeMeasurement{Size: UnknownReviewSize}
+	}
 	return e.MeasureReviewSize(mr.DiffStats)
 }
 

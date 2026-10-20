@@ -28,6 +28,9 @@ func TestMatchSizeGlob(t *testing.T) {
 		{"docs/**", "docs/a/b.md", true},
 		{"docs/**", "src/docs/b.md", false},
 		{"gen/", "gen/a.go", true},
+		{"/foo.pb.go", "foo.pb.go", true},
+		{"/foo.pb.go", "api/foo.pb.go", false},
+		{"foo.pb.go", "api/foo.pb.go", true},
 		{"/api/*.go", "api/x.go", true},
 		{"/api/*.go", "api/sub/x.go", false},
 		{"internal/**/mocks/*.go", "internal/mocks/m.go", true},
@@ -39,7 +42,8 @@ func TestMatchSizeGlob(t *testing.T) {
 }
 
 func TestMeasureReviewSize(t *testing.T) {
-	ex := NewSizeExclusions(true, []string{"testdata/**"}, []string{"*.gen.ts"})
+	ex := NewSizeExclusions(true, []string{"testdata/**"},
+		[]GeneratedRule{{Glob: "*.gen.ts", Attr: AttrLinguistGenerated, State: AttrSet}})
 	stats := []FileDiffStat{
 		{Path: "main.go", Additions: 10, Deletions: 5},
 		{Path: "main_test.go", Additions: 20, Deletions: 0},

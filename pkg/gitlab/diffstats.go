@@ -62,7 +62,7 @@ type gqlAliasedDiffStatsProject struct {
 	} `json:"mergeRequest"`
 }
 
-type gqlAliasedDiffStatsResponse struct {
+type gqlAliasedRawResponse struct {
 	Data   map[string]json.RawMessage `json:"data"`
 	Errors []gqlError                 `json:"errors"`
 }
@@ -93,7 +93,7 @@ func (c *Client) FetchMRsDiffStatsGraphQL(
 		return nil, err
 	}
 
-	var result gqlAliasedDiffStatsResponse
+	var result gqlAliasedRawResponse
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("gitlab: graphql decode aliased MR diff stats response: %w", err)
 	}

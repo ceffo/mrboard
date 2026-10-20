@@ -2,9 +2,12 @@ package demoadpt
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // TestFixtureMRsCarryDiffStats checks every demo MR reports a known review size
@@ -23,4 +26,20 @@ func TestFixtureMRsCarryDiffStats(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestReviewSizeFixture_GeneratedRules checks a project's .gitattributes reaches
+// its MRs and excludes the files it marks generated, and only those.
+func TestReviewSizeFixture_GeneratedRules(t *testing.T) {
+	ds, err := loadFixture("review-size", time.Now(), "https://gitlab.demo.invalid")
+	require.NoError(t, err)
+
+	sizes := map[int]int{}
+	for _, mr := range ds.all() {
+		m := mr.MeasureReviewSize(domain.NewSizeExclusions(true, nil, mr.GeneratedRules))
+		require.True(t, m.Size.Known)
+		sizes[mr.IID] = m.Size.Lines
+	}
+
+	assert.Equal(t, map[int]int{601: 20, 602: 50}, sizes)
 }

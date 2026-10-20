@@ -23,6 +23,7 @@ import (
 	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	"github.com/ceffo/mrboard/internal/domain/service/updatesvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
+	"github.com/ceffo/mrboard/pkg/diskstore"
 	pkggithub "github.com/ceffo/mrboard/pkg/github"
 	pkggitlab "github.com/ceffo/mrboard/pkg/gitlab"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
@@ -83,11 +84,20 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 			IDs:  s.IDs,
 		}
 	}
+	attrsCache, err := gitlabadpt.NewGitAttributesCache(diskstore.Config{
+		FS:  afero.NewOsFs(),
+		Dir: filepath.Join(config.XDGCacheDir(), "gitattributes"),
+	})
+	if err != nil {
+		closer.Close()
+		return nil, err
+	}
 	adapter := gitlabadpt.New(client, gitlabadpt.Config{
 		Sources:           sources,
 		ExcludedAuthors:   adptCfg.ExcludedAuthors,
 		ReviewerUsernames: deriveReviewerUsernames(sources, adptCfg.CurrentUser),
 		ClaimSettle:       gitlabadpt.DefaultClaimSettle,
+		GitAttributes:     attrsCache,
 	})
 
 	// 4. State store

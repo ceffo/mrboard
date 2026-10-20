@@ -46,7 +46,7 @@ func buildFetchCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&reviewerMRs, "reviewer-mrs", false,
 		"include reviewer-sourced MRs (default: the TUI's saved setting)")
 	cmd.Flags().BoolVar(&cold, "cold", false,
-		"ignore the on-disk snapshot and recompute every MR from scratch, "+
+		"ignore the on-disk snapshot and .gitattributes caches and recompute every MR from scratch, "+
 			"bypassing incremental fetch (docs/adr/0005)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"list each MR's counted and excluded files behind its review size")
@@ -60,8 +60,9 @@ type fetchCmdOptions struct {
 	// reviewerMRsOverride, when set, replaces the TUI's saved IncludeReviewerMRs
 	// setting for this run.
 	reviewerMRsOverride *bool
-	// cold, when true, fetches with no Previous snapshot — every MR is
-	// recomputed from scratch instead of reusing the on-disk cache.
+	// cold, when true, fetches with no Previous snapshot and bypasses the
+	// adapter's .gitattributes cache — every MR is recomputed from scratch
+	// instead of reusing the on-disk caches.
 	cold bool
 	// filtered, when true, runs the fetched MRs through the same filter and sort
 	// the board applies, using the TUI's saved state.
@@ -137,6 +138,7 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{
 		IncludeReviewerMRs: includeReviewerMRs,
 		Previous:           previous,
+		Cold:               opts.cold,
 	})
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
@@ -164,7 +166,9 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 // reviewSizeExclusions is the per-MR exclusion lookup every command measures review
 // size with, so `mrboard fetch` and the review load report the same size.
 func reviewSizeExclusions(rs config.ReviewSize) domain.SizeExclusionsFor {
-	return domain.UniformSizeExclusions(domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, nil))
+	return func(mr domain.MergeRequest) domain.SizeExclusions {
+		return domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, mr.GeneratedRules)
+	}
 }
 
 // sizeOptions controls how fetch output reports each MR's review size

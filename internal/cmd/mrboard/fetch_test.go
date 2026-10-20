@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
@@ -57,7 +58,7 @@ const (
 
 func testSizing(verbose bool) sizeOptions {
 	return sizeOptions{
-		exclusions: domain.UniformSizeExclusions(domain.NewSizeExclusions(true, nil, nil)),
+		exclusions: reviewSizeExclusions(config.ReviewSize{DefaultExcludes: true}),
 		thresholds: domain.DefaultSizeThresholds,
 		verbose:    verbose,
 	}
@@ -102,22 +103,43 @@ func TestToMRJSON_UnknownReviewSize(t *testing.T) {
 	assert.Contains(t, string(data), `"review_size":null`)
 }
 
+func TestToMRJSON_GeneratedRulesExcludeFiles(t *testing.T) {
+	mr := domain.MergeRequest{
+		DiffStats: []domain.FileDiffStat{
+			{Path: testPathMain, Additions: 10},
+			{Path: "gen/client.go", Additions: 900},
+		},
+		GeneratedRules: domain.ParseGeneratedRules("gen/** linguist-generated\n"),
+	}
+
+	got := toMRJSON(mr, "", testSizing(true))
+
+	require.NotNil(t, got.ReviewSize)
+	assert.Equal(t, 10, *got.ReviewSize, "files the MR's .gitattributes marks generated are not counted")
+	require.NotNil(t, got.SizeFiles)
+	assert.Equal(t, []domain.FileDiffStat{{Path: "gen/client.go", Additions: 900}}, got.SizeFiles.Excluded)
+}
+
 // TestReviewSize_FetchMatchesLoadPerMR checks fetch output and the review load
-// measure each MR with the same per-MR exclusions, when two projects mark
-// different files generated.
+// measure each MR with the same per-MR exclusions, when two projects' .gitattributes
+// mark different files generated.
 func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
-	stats := []domain.FileDiffStat{{Path: "api.gen.go", Additions: 300}, {Path: testPathMain, Additions: 20}}
+	stats := []domain.FileDiffStat{
+		{Path: "api.gen.go", Additions: 300},
+		{Path: "docs/guide.md", Additions: 40},
+		{Path: testPathMain, Additions: 20},
+	}
 	mrs := []domain.MergeRequest{
-		{IID: 1, ProjectID: 1, Title: "feat(OD-1): a", DiffStats: stats},
-		{IID: 2, ProjectID: 2, Title: "feat(OD-1): b", DiffStats: stats},
+		{
+			IID: 1, ProjectID: 1, Title: "feat(OD-1): a", DiffStats: stats,
+			GeneratedRules: domain.ParseGeneratedRules("*.gen.go linguist-generated\n"),
+		},
+		{
+			IID: 2, ProjectID: 2, Title: "feat(OD-1): b", DiffStats: stats,
+			GeneratedRules: domain.ParseGeneratedRules("docs/** gitlab-generated\n"),
+		},
 	}
 	sizing := testSizing(false)
-	sizing.exclusions = func(mr domain.MergeRequest) domain.SizeExclusions {
-		if mr.ProjectID == 1 {
-			return domain.NewSizeExclusions(true, nil, []string{"*.gen.go"})
-		}
-		return domain.NewSizeExclusions(true, nil, nil)
-	}
 
 	load := mrsvc.ComputeLoad(mrs, mrsvc.LoadOptions{
 		SprintKeys: map[string]bool{"OD-1": true},
@@ -138,6 +160,6 @@ func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
 		require.NotNil(t, got.ReviewSize)
 		assert.Equal(t, loadSize[mr.IID], *got.ReviewSize, "MR !%d", mr.IID)
 	}
-	assert.Equal(t, 20, loadSize[1])
+	assert.Equal(t, 60, loadSize[1])
 	assert.Equal(t, 320, loadSize[2])
 }

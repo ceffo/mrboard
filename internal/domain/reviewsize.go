@@ -46,20 +46,22 @@ var DefaultSizeExcludeGlobs = []string{
 
 // SizeExclusions decides which files of an MR diff are left out of its review size.
 type SizeExclusions struct {
-	globs []string
+	globs     []string
+	generated []GeneratedRule
 }
 
 // NewSizeExclusions combines the exclusion sources of docs/adr/0015: the built-in globs
-// (when useDefaults), the configured globs, and the globs a project's .gitattributes marks
-// generated. Every glob must have passed ValidateSizeGlob.
-func NewSizeExclusions(useDefaults bool, configured, generated []string) SizeExclusions {
+// (when useDefaults), the configured globs, and the generated-file markings of the MR's
+// project .gitattributes (ParseGeneratedRules). Every glob must have passed
+// ValidateSizeGlob. A file is excluded when any glob matches it or the markings mark it
+// generated; an unset marking never re-includes a file a glob excludes.
+func NewSizeExclusions(useDefaults bool, configured []string, generated []GeneratedRule) SizeExclusions {
 	var globs []string
 	if useDefaults {
 		globs = append(globs, DefaultSizeExcludeGlobs...)
 	}
 	globs = append(globs, configured...)
-	globs = append(globs, generated...)
-	return SizeExclusions{globs: globs}
+	return SizeExclusions{globs: globs, generated: generated}
 }
 
 // SizeExclusionsFor returns the exclusions that apply to an MR's diff. They can differ per
@@ -67,11 +69,6 @@ func NewSizeExclusions(useDefaults bool, configured, generated []string) SizeExc
 // a review size (fetch output, the review load) measures through the same lookup, so they
 // agree on each MR's size.
 type SizeExclusionsFor func(MergeRequest) SizeExclusions
-
-// UniformSizeExclusions applies e to every MR.
-func UniformSizeExclusions(e SizeExclusions) SizeExclusionsFor {
-	return func(MergeRequest) SizeExclusions { return e }
-}
 
 // Of returns the exclusions for mr; a nil lookup excludes nothing.
 func (f SizeExclusionsFor) Of(mr MergeRequest) SizeExclusions {
@@ -88,7 +85,7 @@ func (e SizeExclusions) Excludes(filePath string) bool {
 			return true
 		}
 	}
-	return false
+	return markedGenerated(e.generated, filePath)
 }
 
 // ReviewSize is an MR's review size: added plus deleted lines over its counted files.
@@ -201,16 +198,18 @@ func ValidateSizeGlob(glob string) error {
 }
 
 // matchSizeGlob matches filePath against glob with .gitattributes-style rules: a glob with
-// no slash matches the file's base name at any depth; otherwise it matches the whole path
-// from the repository root, segment by segment, where "**" spans zero or more segments.
+// no slash matches the file's base name at any depth; otherwise (including a leading slash,
+// which anchors "/foo.pb.go" to the root) it matches the whole path from the repository
+// root, segment by segment, where "**" spans zero or more segments.
 // A trailing slash ("vendor/") matches everything under that directory.
 func matchSizeGlob(glob, filePath string) bool {
 	filePath = strings.TrimPrefix(filePath, "/")
+	anchored := strings.HasPrefix(glob, "/")
 	glob = strings.TrimPrefix(glob, "/")
 	if strings.HasSuffix(glob, "/") {
 		glob += "**"
 	}
-	if !strings.Contains(glob, "/") {
+	if !anchored && !strings.Contains(glob, "/") {
 		return globMatch(glob, path.Base(filePath))
 	}
 	return matchSegments(strings.Split(glob, "/"), strings.Split(filePath, "/"))

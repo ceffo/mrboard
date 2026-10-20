@@ -46,6 +46,10 @@ type MREnricher interface {
 	// FetchMRsDiffStatsGraphQL fetches the per-file diff stats of N MRs in a
 	// single aliased GraphQL request (docs/adr/0015, "Fetch placement and caching").
 	FetchMRsDiffStatsGraphQL(ctx context.Context, reqs []MRDiffStatsRequest) ([]MRDiffStatsResult, error)
+	// FetchGitAttributesGraphQL reads the root .gitattributes of N (project, ref)
+	// pairs in a single aliased GraphQL request (docs/adr/0015, "Fetch placement
+	// and caching").
+	FetchGitAttributesGraphQL(ctx context.Context, reqs []GitAttributesRequest) ([]GitAttributesResult, error)
 }
 
 // MRWriter covers mutations: writing approval rules, reviewer lists, and fetching editable project members.

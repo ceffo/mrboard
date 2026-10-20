@@ -73,9 +73,11 @@ func loadOpts() mrsvc.LoadOptions {
 		SprintStart: loadSprintStart,
 		SprintKeys:  map[string]bool{ticketOD1: true, ticketOD2: true},
 		Team:        []string{userAlice, userBob, userCarol},
-		Exclusions:  domain.UniformSizeExclusions(domain.NewSizeExclusions(true, nil, nil)),
-		Thresholds:  domain.DefaultSizeThresholds,
-		Sort:        mrsvc.LoadSortSize,
+		Exclusions: func(domain.MergeRequest) domain.SizeExclusions {
+			return domain.NewSizeExclusions(true, nil, nil)
+		},
+		Thresholds: domain.DefaultSizeThresholds,
+		Sort:       mrsvc.LoadSortSize,
 	}
 }
 
@@ -385,7 +387,8 @@ func TestComputeLoad_ExclusionsPerMR(t *testing.T) {
 	opts.Group = mrsvc.LoadByTicket
 	opts.Exclusions = func(mr domain.MergeRequest) domain.SizeExclusions {
 		if mr.ProjectID == 1 {
-			return domain.NewSizeExclusions(true, nil, []string{"*.gen.go"})
+			return domain.NewSizeExclusions(true, nil,
+				[]domain.GeneratedRule{{Glob: "*.gen.go", Attr: domain.AttrLinguistGenerated, State: domain.AttrSet}})
 		}
 		return domain.NewSizeExclusions(true, nil, nil)
 	}

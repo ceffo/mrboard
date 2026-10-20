@@ -25,6 +25,11 @@ type FetchOptions struct {
 	// dirty-set guard (docs/adr/0005, "The write race that ungating creates")
 	// to force a fresh phase-2 fetch for MRs with an unconfirmed local write.
 	ForceStale []domain.MRKey
+
+	// Cold, when true, bypasses the adapter's own on-disk caches (e.g. each
+	// project's .gitattributes) for this fetch; fresh results still replace the
+	// cached ones. It does not touch Previous: pass nil to bypass the snapshot too.
+	Cold bool
 }
 
 // MergeRequestSource is the driven port for fetching MR data.
