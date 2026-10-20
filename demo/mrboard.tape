@@ -75,13 +75,29 @@ Sleep 2500ms
 Type "S"
 Sleep 1500ms
 
+# Review load view: who carries the sprint's review work. Merged and open MRs
+# share one list, sized S to L, grouped by approver first, then regrouped by
+# ticket and re-sorted. Esc returns to the board.
+Type "L"
+Sleep 3s
+Down
+Sleep 600ms
+Down
+Sleep 1s
+Type "g"
+Sleep 3s
+Type "s"
+Sleep 2500ms
+Escape
+Sleep 1s
+
 # Settings, then the contextual help modal.
 Type ","
-Sleep 3s
+Sleep 2500ms
 Escape
 Sleep 800ms
 Type "?"
-Sleep 3s
+Sleep 2500ms
 Escape
 Sleep 1s
 

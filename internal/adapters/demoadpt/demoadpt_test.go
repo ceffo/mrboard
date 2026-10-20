@@ -43,7 +43,7 @@ func TestFixtureLoads(t *testing.T) {
 	a := newTestAdapter(t)
 
 	all := a.ds.all()
-	assert.Len(t, all, 11, "the fixture should hold every demo MR, reviewer-source ones included")
+	assert.Len(t, all, 16, "the fixture should hold every demo MR, reviewer-source and merged ones included")
 	assert.NotEmpty(t, a.ds.issueTypes)
 	assert.NotEmpty(t, a.ds.sprintKeys)
 	assert.Len(t, a.ds.projectPaths, 3)
@@ -72,6 +72,9 @@ func TestPhasePlacement(t *testing.T) {
 
 	got := map[domain.MRKey]domain.MRPhase{}
 	for _, mr := range a.ds.all() {
+		if mr.Merged() {
+			continue // merged MRs feed the review load view, never a column
+		}
 		got[mr.Key()] = mr.Phase
 	}
 	assert.Equal(t, want, got)
