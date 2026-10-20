@@ -46,20 +46,22 @@ var DefaultSizeExcludeGlobs = []string{
 
 // SizeExclusions decides which files of an MR diff are left out of its review size.
 type SizeExclusions struct {
-	globs []string
+	globs     []string
+	generated []GeneratedRule
 }
 
 // NewSizeExclusions combines the exclusion sources of docs/adr/0015: the built-in globs
-// (when useDefaults), the configured globs, and the globs a project's .gitattributes marks
-// generated. Every glob must have passed ValidateSizeGlob.
-func NewSizeExclusions(useDefaults bool, configured, generated []string) SizeExclusions {
+// (when useDefaults), the configured globs, and the generated-file markings of the MR's
+// project .gitattributes (ParseGeneratedRules). Every glob must have passed
+// ValidateSizeGlob. A file is excluded when any glob matches it or the markings mark it
+// generated; an unset marking never re-includes a file a glob excludes.
+func NewSizeExclusions(useDefaults bool, configured []string, generated []GeneratedRule) SizeExclusions {
 	var globs []string
 	if useDefaults {
 		globs = append(globs, DefaultSizeExcludeGlobs...)
 	}
 	globs = append(globs, configured...)
-	globs = append(globs, generated...)
-	return SizeExclusions{globs: globs}
+	return SizeExclusions{globs: globs, generated: generated}
 }
 
 // Excludes reports whether the file at filePath is left out of the review size.
@@ -69,7 +71,7 @@ func (e SizeExclusions) Excludes(filePath string) bool {
 			return true
 		}
 	}
-	return false
+	return markedGenerated(e.generated, filePath)
 }
 
 // ReviewSize is an MR's review size: added plus deleted lines over its counted files.

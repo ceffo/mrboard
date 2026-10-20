@@ -187,6 +187,10 @@ type MergeRequest struct {
 	// unknown (never fetched, or the fetch for this HeadSHA failed); an empty non-nil
 	// slice is a known empty diff. Review size is derived from them at read time.
 	DiffStats []FileDiffStat
+	// GeneratedRules are the generated-file markings of the root .gitattributes on the
+	// MR's target branch, in file order. Nil means none (no file, no markings, or not
+	// read). They feed NewSizeExclusions, so they apply at read time like the stats.
+	GeneratedRules []GeneratedRule
 }
 
 // MeasureReviewSize computes mr's review size from its diff stats under e.

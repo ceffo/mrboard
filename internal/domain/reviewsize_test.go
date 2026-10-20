@@ -39,7 +39,8 @@ func TestMatchSizeGlob(t *testing.T) {
 }
 
 func TestMeasureReviewSize(t *testing.T) {
-	ex := NewSizeExclusions(true, []string{"testdata/**"}, []string{"*.gen.ts"})
+	ex := NewSizeExclusions(true, []string{"testdata/**"},
+		[]GeneratedRule{{Glob: "*.gen.ts", Attr: AttrLinguistGenerated, State: AttrSet}})
 	stats := []FileDiffStat{
 		{Path: "main.go", Additions: 10, Deletions: 5},
 		{Path: "main_test.go", Additions: 20, Deletions: 0},
