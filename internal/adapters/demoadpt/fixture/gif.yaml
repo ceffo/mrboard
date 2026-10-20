@@ -428,3 +428,128 @@ merge_requests:
 
       ---
       🎫 [DEMO-1426](https://tickets.demo.invalid/browse/DEMO-1426) <!-- mrboard -->
+
+  # ---- Merged in the sprint ----
+  # Never on the board: only the review load view (`L`) lists merged MRs, and
+  # only those whose ticket is in the sprint and merged since it started. They
+  # give the load view its history: merged work beside what is still open, a
+  # spread of sizes (S to L), and a ticket with several MRs.
+  - project_id: 101
+    iid: 409
+    id: 9409
+    title: "feat(DEMO-1421): reconnect websockets with backoff"
+    author: linus
+    merge_status: mergeable
+    source_branch: demo-1421-backoff
+    created_ago: 4d2h
+    updated_ago: 2d3h
+    merged_ago: 2d3h
+    reviewers:
+      - {username: ada, approver: true, state: approved, approved_ago: 2d5h}
+      - {username: grace, approver: true, state: approved, approved_ago: 2d4h}
+    approvers: [ada, grace]
+    description: |-
+      Exponential backoff with jitter on a dropped subscription.
+
+      ---
+      🎫 [DEMO-1421](https://tickets.demo.invalid/browse/DEMO-1421) <!-- mrboard -->
+    diff:
+      base_sha: 409000000000000000000000000000000000
+      head_sha: 4090000000000000000000000000000000000000
+      files:
+        - {old_path: ws/client.go, new_path: ws/client.go, added: 280, removed: 60, diff: ""}
+
+  - project_id: 102
+    iid: 93
+    id: 9093
+    title: "fix(DEMO-1422): guard against a null board in the selector"
+    author: margaret
+    merge_status: mergeable
+    source_branch: demo-1422-null-board
+    created_ago: 3d
+    updated_ago: 1d2h
+    merged_ago: 1d2h
+    reviewers:
+      - {username: ada, approver: true, state: approved, approved_ago: 1d5h}
+    approvers: [ada]
+    description: |-
+      One-line guard plus the regression test.
+
+      ---
+      🎫 [DEMO-1422](https://tickets.demo.invalid/browse/DEMO-1422) <!-- mrboard -->
+    diff:
+      base_sha: 093000000000000000000000000000000000
+      head_sha: 0930000000000000000000000000000000000000
+      files:
+        - {old_path: src/selector.ts, new_path: src/selector.ts, added: 22, removed: 4, diff: ""}
+
+  - project_id: 101
+    iid: 407
+    id: 9407
+    title: "refactor(DEMO-1424): extract the reviewer store"
+    author: katherine
+    merge_status: mergeable
+    source_branch: demo-1424-reviewer-store
+    created_ago: 5d
+    updated_ago: 3d
+    merged_ago: 3d
+    reviewers:
+      - {username: grace, approver: true, state: approved, approved_ago: 3d6h}
+      - {username: linus, approver: true, state: approved, approved_ago: 3d4h}
+    approvers: [grace, linus]
+    description: |-
+      Moves reviewer persistence behind a port ahead of the batch editor.
+
+      ---
+      🎫 [DEMO-1424](https://tickets.demo.invalid/browse/DEMO-1424) <!-- mrboard -->
+    diff:
+      base_sha: 407000000000000000000000000000000000
+      head_sha: 4070000000000000000000000000000000000000
+      files:
+        - {old_path: store/reviewers.go, new_path: store/reviewers.go, added: 520, removed: 210, diff: ""}
+
+  - project_id: 103
+    iid: 41
+    id: 9041
+    title: "chore(OPS-12): rotate the ci runner images"
+    author: ada
+    merge_status: mergeable
+    source_branch: ops-12-runner-images
+    created_ago: 4d
+    updated_ago: 2d
+    merged_ago: 2d
+    reviewers:
+      - {username: margaret, approver: true, state: approved, approved_ago: 2d4h}
+      - {username: linus, approver: true, state: approved, approved_ago: 2d2h}
+    approvers: [margaret, linus]
+    description: |-
+      Bumps the runner AMIs and drops the retired ones.
+
+      ---
+      🎫 [OPS-12](https://tickets.demo.invalid/browse/OPS-12) <!-- mrboard -->
+    diff:
+      base_sha: 041000000000000000000000000000000000
+      head_sha: 0410000000000000000000000000000000000000
+      files:
+        - {old_path: ci/runners.tf, new_path: ci/runners.tf, added: 45, removed: 20, diff: ""}
+
+  - project_id: 101
+    iid: 405
+    id: 9405
+    title: "docs: refresh the architecture overview"
+    author: grace
+    merge_status: mergeable
+    source_branch: docs-architecture
+    created_ago: 5d
+    updated_ago: 4d
+    merged_ago: 4d
+    reviewers:
+      - {username: katherine, approver: true, state: approved, approved_ago: 4d3h}
+    approvers: [katherine]
+    description: |-
+      Brings the diagrams in line with the current package layout.
+    diff:
+      base_sha: 405000000000000000000000000000000000
+      head_sha: 4050000000000000000000000000000000000000
+      files:
+        - {old_path: docs/overview.md, new_path: docs/overview.md, added: 90, removed: 30, diff: ""}
