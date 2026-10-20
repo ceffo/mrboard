@@ -28,10 +28,12 @@ type dataset struct {
 	people       map[string]fixturePerson
 	peopleByID   map[int64]fixturePerson
 	projectPaths map[int]string
-	members      map[int][]domain.ProjectMember
-	issueTypes   map[string]string
-	sprintKeys   []string
-	settings     Settings
+	// generatedRules are each project's .gitattributes generated-file rules.
+	generatedRules map[int][]domain.GeneratedRule
+	members        map[int][]domain.ProjectMember
+	issueTypes     map[string]string
+	sprintKeys     []string
+	settings       Settings
 
 	snapshotWrittenAt time.Time
 
@@ -46,6 +48,7 @@ type dataset struct {
 func cloneMR(mr domain.MergeRequest) domain.MergeRequest {
 	mr.Reviewers = slices.Clone(mr.Reviewers)
 	mr.DiffStats = slices.Clone(mr.DiffStats)
+	mr.GeneratedRules = slices.Clone(mr.GeneratedRules)
 	return mr
 }
 

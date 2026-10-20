@@ -87,6 +87,8 @@ type fixtureProject struct {
 	ID      int64    `yaml:"id"`
 	Path    string   `yaml:"path"`
 	Members []string `yaml:"members"`
+	// GitAttributes is the project's root .gitattributes, read on every target branch.
+	GitAttributes string `yaml:"gitattributes"`
 }
 
 type fixtureReviewer struct {
@@ -216,12 +218,13 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 	}
 
 	ds := &dataset{
-		people:       make(map[string]fixturePerson, len(f.People)),
-		peopleByID:   make(map[int64]fixturePerson, len(f.People)),
-		projectPaths: make(map[int]string, len(f.Projects)),
-		members:      make(map[int][]domain.ProjectMember, len(f.Projects)),
-		issueTypes:   f.IssueTypes,
-		sprintKeys:   f.SprintTicketKeys,
+		people:         make(map[string]fixturePerson, len(f.People)),
+		peopleByID:     make(map[int64]fixturePerson, len(f.People)),
+		projectPaths:   make(map[int]string, len(f.Projects)),
+		generatedRules: make(map[int][]domain.GeneratedRule, len(f.Projects)),
+		members:        make(map[int][]domain.ProjectMember, len(f.Projects)),
+		issueTypes:     f.IssueTypes,
+		sprintKeys:     f.SprintTicketKeys,
 		settings: Settings{
 			CurrentUser:         f.Settings.CurrentUser,
 			Team:                f.Settings.Team,
@@ -237,6 +240,7 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 	}
 	for _, pr := range f.Projects {
 		ds.projectPaths[int(pr.ID)] = pr.Path
+		ds.generatedRules[int(pr.ID)] = domain.ParseGeneratedRules(pr.GitAttributes)
 		for _, u := range pr.Members {
 			p, ok := ds.people[u]
 			if !ok {
@@ -267,6 +271,7 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 			diff = syntheticDiff(mr)
 		}
 		mr.HeadSHA, mr.DiffStats = diff.HeadSHA, diffStatsOf(diff)
+		mr.GeneratedRules = ds.generatedRules[mr.ProjectID]
 		ds.mrs = append(ds.mrs, mr)
 		ds.drafts[key] = fm.Draft
 		ds.diffs[key] = diff

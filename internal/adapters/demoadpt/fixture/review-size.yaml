@@ -1,0 +1,90 @@
+# FIXTURE `review-size`: scenarios for review size exclusions (docs/adr/0015,
+# "Review size metric"). Run it with `mrboard --demo --demo-fixture review-size fetch -v`.
+#
+# platform-api's .gitattributes marks gen/ generated, then re-includes one file
+# with -linguist-generated; web-console has no .gitattributes.
+#
+#   !601  platform-api: main.go (12) counted, gen/client.go (400) excluded as
+#         generated, gen/handwritten.go (8) counted (-linguist-generated),
+#         go.sum (30) excluded by the built-in globs        — review size 20
+#   !602  web-console: gen/client.go (50) counted: no .gitattributes there
+#                                                            — review size 50
+#
+# SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes, and
+# every MR whose title carries a ticket key ends its description with the
+# `<!-- mrboard -->` marker.
+schema: 1
+
+settings:
+  current_user: ada
+  team: [ada, grace]
+
+snapshot_written_ago: 14m
+
+people:
+  - {username: ada, name: Ada Lovelace, user_id: 1}
+  - {username: grace, name: Grace Hopper, user_id: 2}
+
+projects:
+  - id: 101
+    path: demo-corp/platform-api
+    members: [ada, grace]
+    gitattributes: |
+      # generated API clients
+      gen/** linguist-generated
+      gen/handwritten.go -linguist-generated
+  - id: 102
+    path: demo-corp/web-console
+    members: [ada, grace]
+
+issue_types:
+  SIZE-1: Story
+  SIZE-2: Story
+
+merge_requests:
+  - project_id: 101
+    iid: 601
+    id: 9601
+    title: "feat(SIZE-1): regenerate the API client"
+    author: ada
+    merge_status: mergeable
+    source_branch: regenerate-client
+    created_ago: 3h
+    updated_ago: 20m
+    reviewers:
+      - {username: grace, state: not_started, waiting_ago: 3h}
+    description: |-
+      Regenerated client plus one hand-written helper.
+
+      ---
+      🎫 [SIZE-1](https://tickets.demo.invalid/browse/SIZE-1) <!-- mrboard -->
+    diff:
+      base_sha: 6010000000000000000000000000000000000000
+      head_sha: 6011111111111111111111111111111111111111
+      files:
+        - {old_path: main.go, new_path: main.go, added: 10, removed: 2, diff: ""}
+        - {new_path: gen/client.go, new_file: true, added: 400, removed: 0, diff: ""}
+        - {old_path: gen/handwritten.go, new_path: gen/handwritten.go, added: 5, removed: 3, diff: ""}
+        - {old_path: go.sum, new_path: go.sum, added: 30, removed: 0, diff: ""}
+
+  - project_id: 102
+    iid: 602
+    id: 9602
+    title: "feat(SIZE-2): regenerate the console client"
+    author: grace
+    merge_status: mergeable
+    source_branch: regenerate-console-client
+    created_ago: 2h
+    updated_ago: 10m
+    reviewers:
+      - {username: ada, state: not_started, waiting_ago: 2h}
+    description: |-
+      Regenerated console client; this project marks nothing generated.
+
+      ---
+      🎫 [SIZE-2](https://tickets.demo.invalid/browse/SIZE-2) <!-- mrboard -->
+    diff:
+      base_sha: 6020000000000000000000000000000000000000
+      head_sha: 6022222222222222222222222222222222222222
+      files:
+        - {new_path: gen/client.go, new_file: true, added: 50, removed: 0, diff: ""}
