@@ -30,7 +30,7 @@ the default branch.
 
 Preferred when `HERDR_ENV=1`: every developer and reviewer is an **interactive Claude Code session in
 its own herdr tab**, so the user can watch and answer permission prompts (see the `herdr` skill for
-the CLI). Agent names `dev-<id>`, `rev-<id>` (unique among live agents). `<id>` is the tracker id as a file-safe key: Linear's `ABC-12` as is, GitHub's `#12` written `GH-12` (never a bare number: fleet-watch matches brief and report files by key). The same key names the branch, the worktree, the briefs and the reports.
+the CLI). Agent names `dev-<id>`, `rev-<id>` (unique among live agents), **lowercase**: `dev-gh-12`, `rev-gh-12` (fleet-watch uppercases the key to match briefs and reports). At session start, rename your own herdr agent to `sup-N` (see `herdr agent --help`). `<id>` is the tracker id as a file-safe key: Linear's `ABC-12` as is, GitHub's `#12` written `GH-12` (never a bare number: fleet-watch matches brief and report files by key). The same key names the branch, the worktree, the briefs and the reports.
 Briefs live in `<wt>/briefs/`, reports in `<wt>/reports/`, outside the repo.
 
 ```sh
@@ -53,6 +53,7 @@ When the wait returns:
   prompt). Missing or stale → `herdr agent read dev-<id> --source recent-unwrapped --lines 60`: the
   agent stopped early, likely with a question. (herdr reports `done` while an agent waits on a
   background shell; a report is final only when its mtime is newer than your last prompt.)
+- Once a report is read and handled, run `.claude/scripts/fleet-ack.sh <KEY>` so a re-armed `fleet-watch.sh` doesn't report it again.
 - `blocked` → it's waiting on a permission prompt or question in its tab. **Don't answer it
   yourself**: tell the user which tab, then wait again. If the same prompt keeps coming back,
   suggest the user allowlist it in the project's Claude settings.
@@ -181,6 +182,7 @@ you from `<main>` (a `/cd` doesn't reload this definition). A `PreToolUse` hook 
 worktree root from a session started in `<main>`: use `git -C` and absolute paths. Your shell stays in `<main>`: never `cd` into a worktree or the ledger folder (use `git -C`,
 absolute paths, or a subshell). The git stash stack is shared with every worktree: if you must stash,
 use a tagged stash entry and apply it by sha, never a bare `git stash pop`.
+Run a worktree's gate as `just --justfile <wt>/justfile --working-directory <wt> check` (no `cd`: a hook blocks it).
 
 ## 1. Build the queue
 
@@ -312,8 +314,8 @@ branches checked out in other worktrees in place.
   parent tip's sha into the brief as `BASE: <sha>` and keep it in your ledger (manual fallback). The
   developer works as usual, merging nothing from `<db>` until the parent is merged. Anything ordered
   (migrations, generated output) must stay after the parent's.
-- Publish: open the child's PR with `gh pr create --base <parent-branch> --body-file …` (keeps your
-  own body; say "stacked on #<parent>"), then `gh stack link <parent-pr> <child-pr>` to make it a
+- Publish: open the child's PR with `ship.sh --base <parent-branch> <wt> <title> <body-file> <id>`
+  (body says "stacked on #<parent>"), then `gh stack link <parent-pr> <child-pr>` to make it a
   stack on GitHub.
 - When `<db>` moves or the parent is squash-merged, **you** restack, but only while every developer
   in the stack is idle with a clean tree (a rebase under a working agent loses its edits):
@@ -339,8 +341,7 @@ stack with no child PR yet needs `gh stack rebase` run from the child's worktree
 When the child has merge commits (it merged an updated parent), the squash-merge leaves it
 CONFLICTING. If `git diff --stat <parent-tip> origin/<db>` is empty and the child contains the parent
 tip, `git -C <child-worktree> merge -s ours origin/<db>` is exact: check the tree is unchanged, push,
-no gate rerun needed. CI runs only on PRs based on `<db>`: a stacked child has no checks until it is
-retargeted, so watch its CI after the parent merges.
+no gate rerun needed.
 
 ## CI is yours, enforced by a hook
 
@@ -375,7 +376,9 @@ through `herdr agent prompt` instead. (Failure seen: agents sat idle on a questi
 
 ## PR watch (never rely on remembering to check)
 
-Keep **exactly one** watcher running with `run_in_background` for all open PRs: a loop that fetches,
+Keep **exactly one** watcher running with `run_in_background` for all open PRs:
+`.claude/scripts/pr-watch.sh [<pr>...]` (report-only, never merges; without args it reads
+`<wt>/supervisor/watch-prs`). `pr-merge-watch.sh` merges green PRs and needs a merge grant. The watcher fetches,
 polls every 5 minutes, and exits on the first event: a PR `MERGED` or `CLOSED`, `CONFLICTING`, a PR
 branch **behind** its base (`git rev-list --count origin/<head>..origin/<base>` > 0; GitHub still
 shows such a PR as mergeable), or a CI run finishing. Kill the previous watcher before arming a new
@@ -421,10 +424,19 @@ must lose nothing, so state lives outside the conversation:
 
 - **The ledger**, `<wt>/supervisor/ledger.md`: what live sources can't tell a successor: each item's
   stage, agent and model, `review: yes|no`, rework round, a stacked child's `BASE` sha, what each
-  wait is for, questions put to the user and not yet answered, work held by the quota gate, next
+  wait is for, questions put to the user and not yet answered (under the exact heading `## Pending questions`, numbered `1.` lines, which `pending-questions.sh` reads), work held by the quota gate, next
   items. **Rewrite it (don't append) at every transition**: dispatch, report read, rework sent, PR
   opened, CI result, merge, user decision. Keep it under ~60 lines. Git, the tracker, GitHub and
   herdr already hold the rest.
+  Skeleton (the heading must match exactly):
+
+  ```md
+  # Supervisor ledger
+  ## In flight
+  ## Next
+  ## Pending questions
+  1. <question> (default: <what happens if unanswered>)
+  ```
 - **The user log**, `<wt>/supervisor/user-log.md`: every user message that decides, prefers or
   corrects, **verbatim**, with its date and what it settled. Append-only, never summarised: the
   ledger's compressed questions lost the user's own words at each handoff, and successors re-asked

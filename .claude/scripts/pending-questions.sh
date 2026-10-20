@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pending-questions.sh: every question waiting on the user, from the two places they live:
 #   1. the tracker: open items labelled needs-info, and open items of type question;
-#   2. the ledger's "## Pending questions to user" section (questions not tied to an item).
+#   2. the ledger's "## Pending questions" section (questions not tied to an item).
 # The supervisor runs it before every reply that ends with the pending-questions list, and
 # restates each line in plain words with its default. "No questions pending" only on exit 0
 # with nothing printed. Exit 3 when there is at least one question.
@@ -24,9 +24,11 @@ while IFS= read -r row; do
   printf '%d. [%s] %s\n%s\n' "$n" "$id" "$title" "${q:-   (no Questions section: write one with a default, then ask)}"
 done <<<"$resp"
 if [ -f "$ledger" ]; then
+  grep -q '^## Pending questions' "$ledger" \
+    || echo "pending-questions: $ledger has no '## Pending questions' section" >&2
   while IFS= read -r line; do
     n=$((n + 1)); printf '%d. [ledger] %s\n' "$n" "$line"
-  done < <(awk '/^## Pending questions to user/{f=1;next} /^## /{f=0} f' "$ledger" \
+  done < <(awk '/^## Pending questions/{f=1;next} /^## /{f=0} f' "$ledger" \
            | grep -E '^[0-9]+\.' || true)
 fi
 [ "$n" -eq 0 ] || exit 3
