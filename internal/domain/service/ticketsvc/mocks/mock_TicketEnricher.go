@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -46,24 +47,24 @@ func (_m *MockTicketEnricher) EXPECT() *MockTicketEnricher_Expecter {
 	return &MockTicketEnricher_Expecter{mock: &_m.Mock}
 }
 
-// GetActiveSprintIssueKeys provides a mock function for the type MockTicketEnricher
-func (_mock *MockTicketEnricher) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
+// GetActiveSprint provides a mock function for the type MockTicketEnricher
+func (_mock *MockTicketEnricher) GetActiveSprint(ctx context.Context, boardID int) (*ticketsvc.Sprint, error) {
 	ret := _mock.Called(ctx, boardID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetActiveSprintIssueKeys")
+		panic("no return value specified for GetActiveSprint")
 	}
 
-	var r0 []string
+	var r0 *ticketsvc.Sprint
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int) ([]string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) (*ticketsvc.Sprint, error)); ok {
 		return returnFunc(ctx, boardID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int) []string); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) *ticketsvc.Sprint); ok {
 		r0 = returnFunc(ctx, boardID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]string)
+			r0 = ret.Get(0).(*ticketsvc.Sprint)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, int) error); ok {
@@ -74,19 +75,19 @@ func (_mock *MockTicketEnricher) GetActiveSprintIssueKeys(ctx context.Context, b
 	return r0, r1
 }
 
-// MockTicketEnricher_GetActiveSprintIssueKeys_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveSprintIssueKeys'
-type MockTicketEnricher_GetActiveSprintIssueKeys_Call struct {
+// MockTicketEnricher_GetActiveSprint_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveSprint'
+type MockTicketEnricher_GetActiveSprint_Call struct {
 	*mock.Call
 }
 
-// GetActiveSprintIssueKeys is a helper method to define mock.On call
+// GetActiveSprint is a helper method to define mock.On call
 //   - ctx context.Context
 //   - boardID int
-func (_e *MockTicketEnricher_Expecter) GetActiveSprintIssueKeys(ctx any, boardID any) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
-	return &MockTicketEnricher_GetActiveSprintIssueKeys_Call{Call: _e.mock.On("GetActiveSprintIssueKeys", ctx, boardID)}
+func (_e *MockTicketEnricher_Expecter) GetActiveSprint(ctx any, boardID any) *MockTicketEnricher_GetActiveSprint_Call {
+	return &MockTicketEnricher_GetActiveSprint_Call{Call: _e.mock.On("GetActiveSprint", ctx, boardID)}
 }
 
-func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Run(run func(ctx context.Context, boardID int)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
+func (_c *MockTicketEnricher_GetActiveSprint_Call) Run(run func(ctx context.Context, boardID int)) *MockTicketEnricher_GetActiveSprint_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -104,12 +105,12 @@ func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Run(run func(ctx con
 	return _c
 }
 
-func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) Return(strings []string, err error) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
-	_c.Call.Return(strings, err)
+func (_c *MockTicketEnricher_GetActiveSprint_Call) Return(sprint *ticketsvc.Sprint, err error) *MockTicketEnricher_GetActiveSprint_Call {
+	_c.Call.Return(sprint, err)
 	return _c
 }
 
-func (_c *MockTicketEnricher_GetActiveSprintIssueKeys_Call) RunAndReturn(run func(ctx context.Context, boardID int) ([]string, error)) *MockTicketEnricher_GetActiveSprintIssueKeys_Call {
+func (_c *MockTicketEnricher_GetActiveSprint_Call) RunAndReturn(run func(ctx context.Context, boardID int) (*ticketsvc.Sprint, error)) *MockTicketEnricher_GetActiveSprint_Call {
 	_c.Call.Return(run)
 	return _c
 }
