@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/adapters/demoadpt"
+	"github.com/ceffo/mrboard/internal/adapters/statestore"
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -396,6 +399,13 @@ func TestReviewerSaveAndUndraft_KeepTheSizeOfAnUnmovedDiff(t *testing.T) {
 	next, _ = m.Update(UndraftResultMsg{MR: fromRead})
 	m = next.(Model)
 	assert.Equal(t, stats, m.AllMRs()[0].DiffStats, "undraft")
+
+	pushed := []domain.FileDiffStat{{Path: "b.go", Additions: 40}}
+	next, _ = m.Update(FetchResultMsg{FetchStartedAt: time.Now(), MRs: []domain.MergeRequest{
+		{ProjectID: 1, IID: 7, Title: "x", HeadSHA: "pushed", DiffStats: pushed},
+	}})
+	m = next.(Model)
+	assert.Equal(t, pushed, m.AllMRs()[0].DiffStats, "a refresh after a push brings the new size")
 }
 
 func TestLoadView_ScrollKeepsTheHeaderAndReachesTheFootnotes(t *testing.T) {
@@ -484,4 +494,42 @@ func TestLoadView_SelectionKeepsItsGroupWhenTheHeadingChanges(t *testing.T) {
 	iid, group = selectedIn()
 	assert.Equal(t, 1, iid, "after a refresh")
 	assert.Equal(t, "grace", group, "after a refresh")
+}
+
+// A state.yaml from before the load view opens it with the defaults, and the
+// first settings change adds the load_* keys and changes nothing else.
+func TestLoadView_OlderStateFileGainsOnlyTheLoadKeys(t *testing.T) {
+	dir := t.TempDir()
+	store, err := statestore.New(statestore.Config{Dir: dir})
+	require.NoError(t, err)
+	older := domain.DefaultAppState()
+	older.SortField, older.ThemeName = "age", "nord"
+	require.NoError(t, store.Save(older))
+	before, err := os.ReadFile(filepath.Join(dir, "state.yaml"))
+	require.NoError(t, err)
+	require.NotContains(t, string(before), "load_")
+	loaded, err := store.Load()
+	require.NoError(t, err)
+
+	h := openedLoad(t, loaded)
+	assert.Equal(t, defaultLoadSettings(), h.m.loadView.Settings(), "defaults apply")
+	h.settle(t, h.press("g"))
+	require.NoError(t, store.Save(h.store.state))
+	after, err := os.ReadFile(filepath.Join(dir, "state.yaml"))
+	require.NoError(t, err)
+
+	kept := map[string]bool{}
+	for _, l := range strings.Split(string(before), "\n") {
+		kept[l] = true
+	}
+	var added []string
+	for _, l := range strings.Split(string(after), "\n") {
+		if !kept[l] {
+			added = append(added, strings.SplitN(l, ":", 2)[0])
+		}
+		delete(kept, l)
+	}
+	assert.Empty(t, kept, "no earlier line changes")
+	assert.Subset(t, []string{"load_group", "load_sort", "load_remaining"}, added)
+	assert.Contains(t, added, "load_group")
 }
