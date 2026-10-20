@@ -209,7 +209,7 @@ unreachable rather than slow — most often a VPN that is not connected. Confirm
 
 **Nothing in the Approved column.** That column means *every designated approver has
 approved*. An MR with no designated approvers stays in Needs Review no matter how many plain
-reviewers approve it. Use the reviewer editor (`v`, then `space`) to mark approvers.
+reviewers approve it. Use the reviewer editor (`a`, then `space`) to mark approvers.
 
 **Ticket icons not appearing.** Check `jira.instance_url`, `jira.email`, and `jira.api_token`
 (or `$JIRA_TOKEN`), then read the log — tracker errors are logged at `warn`.
