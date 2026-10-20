@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	"github.com/ceffo/mrboard/pkg/diskstore"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
@@ -109,18 +110,18 @@ func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string
 	return issue.Type, nil
 }
 
-// GetActiveSprintIssueKeys implements ticketsvc.TicketEnricher.
+// GetActiveSprint implements ticketsvc.TicketEnricher.
 // Returns (nil, nil) when no active sprint exists for boardID. Revalidation
 // is governed by cfg.SprintCacheTTL, not by the caller: within that window a
 // cached result is served, past it the next call fetches live and rewrites
 // the cache entry with a fresh expiry.
-func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error) {
+func (a *JiraAdapter) GetActiveSprint(ctx context.Context, boardID int) (*ticketsvc.Sprint, error) {
 	key := sprintCacheKey(boardID)
 
-	var cached []string
+	var cached ticketsvc.Sprint
 	if a.getCacheTTL(ctx, a.cfg.SprintCacheTTL, key, &cached) {
-		a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(cached))
-		return cached, nil
+		a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(cached.IssueKeys))
+		return &cached, nil
 	}
 
 	sprint, err := a.client.GetActiveSprint(ctx, boardID)
@@ -139,8 +140,9 @@ func (a *JiraAdapter) GetActiveSprintIssueKeys(ctx context.Context, boardID int)
 		keys[i] = a.cfg.KeyMatcher.Normalize(k)
 	}
 
-	a.setCacheTTL(ctx, a.cfg.SprintCacheTTL, key, keys)
-	return keys, nil
+	result := &ticketsvc.Sprint{Name: sprint.Name, Start: sprint.Start, End: sprint.End, IssueKeys: keys}
+	a.setCacheTTL(ctx, a.cfg.SprintCacheTTL, key, result)
+	return result, nil
 }
 
 // UpsertRemoteLink implements ticketsvc.TicketLinker.
@@ -260,6 +262,6 @@ func (a *JiraAdapter) setCacheTTL(ctx context.Context, ttl time.Duration, key st
 
 func issueTypeCacheKey(issueKey string) string { return "issue_" + issueKey }
 
-func sprintCacheKey(boardID int) string { return fmt.Sprintf("sprint_board_%d", boardID) }
+func sprintCacheKey(boardID int) string { return fmt.Sprintf("sprint_v2_board_%d", boardID) }
 
 func remoteLinkCacheKey(globalID string) string { return "remotelink_" + globalID }

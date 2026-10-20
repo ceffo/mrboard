@@ -363,9 +363,12 @@ func TestTicketsPortServesFixtureAndFallsBackOnUnknownKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, missing)
 
-	keys, err := tk.GetActiveSprintIssueKeys(context.Background(), 1)
+	sprint, err := tk.GetActiveSprint(context.Background(), 1)
 	require.NoError(t, err)
-	assert.Contains(t, keys, "DEMO-1421")
+	require.NotNil(t, sprint)
+	assert.Contains(t, sprint.IssueKeys, "DEMO-1421")
+	assert.Equal(t, "Demo Sprint 42", sprint.Name)
+	assert.True(t, sprint.Start.Before(sprint.End), "sprint start %v must precede end %v", sprint.Start, sprint.End)
 }
 
 func TestSprintFilterNarrowsTheBoard(t *testing.T) {
@@ -432,4 +435,30 @@ func TestEveryMRHasADiff(t *testing.T) {
 		assert.NotEmpty(t, diff.Files, "MR !%d has an empty diff", mr.IID)
 		assert.NotEmpty(t, diff.BaseSHA, "MR !%d has no base SHA", mr.IID)
 	}
+}
+
+func TestGetActiveSprint_FixtureWithoutSprintData(t *testing.T) {
+	t.Run("keys only serves zero dates", func(t *testing.T) {
+		a := newTestAdapter(t)
+		a.ds.hasSprint = false
+		a.ds.sprintName = ""
+		a.ds.sprintStart = time.Time{}
+		a.ds.sprintEnd = time.Time{}
+
+		sprint, err := a.Tickets().GetActiveSprint(context.Background(), 1)
+		require.NoError(t, err)
+		require.NotNil(t, sprint)
+		assert.NotEmpty(t, sprint.IssueKeys)
+		assert.True(t, sprint.Start.IsZero())
+		assert.True(t, sprint.End.IsZero())
+	})
+	t.Run("neither block nor keys is no sprint", func(t *testing.T) {
+		a := newTestAdapter(t)
+		a.ds.hasSprint = false
+		a.ds.sprintKeys = nil
+
+		sprint, err := a.Tickets().GetActiveSprint(context.Background(), 1)
+		require.NoError(t, err)
+		assert.Nil(t, sprint)
+	})
 }
