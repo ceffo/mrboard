@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.23.1] - 2026-10-20
+
+No user-facing changes. The demo data (`mrboard --demo`) now includes merged sprint MRs, so the review load view (`L`) has something to show, and the README demo GIF now walks through it.
+
 ## [0.23.0] - 2026-10-20
 
 No user-facing changes. The review load view and `mrboard load` shipped in 0.22.6; this release documents them in the README and ADR-0015.
