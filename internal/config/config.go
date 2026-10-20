@@ -113,6 +113,14 @@ type ReviewSizeBuckets struct {
 	L int `mapstructure:"l"` // default 1000
 }
 
+// ExclusionsFor is the per-MR exclusion lookup every review size is measured
+// with, so `mrboard fetch`, `mrboard load` and the TUI report the same size.
+func (r ReviewSize) ExclusionsFor() domain.SizeExclusionsFor {
+	return func(mr domain.MergeRequest) domain.SizeExclusions {
+		return domain.NewSizeExclusions(r.DefaultExcludes, r.Exclude, mr.GeneratedRules)
+	}
+}
+
 // Thresholds converts b to the domain's bucket thresholds.
 func (b ReviewSizeBuckets) Thresholds() domain.SizeThresholds {
 	return domain.SizeThresholds{S: b.S, M: b.M, L: b.L}
