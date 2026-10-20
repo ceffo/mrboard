@@ -18,9 +18,12 @@ repo=$(fleet_repo)
 base=$FLEET_DEFAULT_BRANCH
 cd "$main"
 refuse() { echo "REFUSED #$pr: $*"; exit 2; }
-j=$(gh pr view "$pr" -R "$repo" --json state,mergeable,mergeStateStatus,headRefOid,statusCheckRollup)
+j=$(gh pr view "$pr" -R "$repo" --json state,title,mergeable,mergeStateStatus,headRefOid,statusCheckRollup)
 [ "$(jq -r .state <<<"$j")" = OPEN ] || refuse "state $(jq -r .state <<<"$j")"
 sha=$(jq -r .headRefOid <<<"$j")
+# The squash subject is always the PR title: GitHub would use the commit subject for a one-commit PR,
+# and the release level (ADR-0011) is read from that subject.
+subject="$(jq -r .title <<<"$j") (#$pr)"
 [ "$(jq '.statusCheckRollup|length' <<<"$j")" -gt 0 ] || refuse "no checks reported yet"
 pending=$(jq -r '[.statusCheckRollup[]|select((.status // "COMPLETED")!="COMPLETED")|.name]|join(",")' <<<"$j")
 [ -z "$pending" ] || refuse "checks pending: $pending"
@@ -35,7 +38,7 @@ if [ -n "$FLEET_REVIEW_BOT" ]; then
   [ "$unanswered" = 0 ] || refuse "$unanswered review-bot comment thread(s) without a reply"
 fi
 # Pinned to the checked head: if the head moved after the checks, the merge fails and nothing is merged.
-if ! err=$(gh pr merge "$pr" -R "$repo" --squash --delete-branch --match-head-commit "$sha" 2>&1 >/dev/null); then
+if ! err=$(gh pr merge "$pr" -R "$repo" --squash --subject "$subject" --delete-branch --match-head-commit "$sha" 2>&1 >/dev/null); then
   # A PR in a GitHub stack can only merge through the stack merge. Only the stack's bottom PR (based on
   # main), and only if its head is still the checked sha: a higher PR would merge unchecked parents.
   grep -q "part of a stack" <<<"$err" || { echo "MERGE FAILED #$pr (head moved from ${sha:0:7}, or GitHub refused)"; exit 1; }
