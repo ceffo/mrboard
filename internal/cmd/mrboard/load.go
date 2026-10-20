@@ -145,14 +145,6 @@ func activeSprint(ctx context.Context, c *core.Core) (*ticketsvc.Sprint, error) 
 	return sprint, nil
 }
 
-// sprintStartDay is the sprint's start date as midnight of that day in the start's own
-// location: the calendar day the tracker reports, at the offset it reports it in.
-// Converting to the machine's zone could move the start to another day.
-func sprintStartDay(start time.Time) time.Time {
-	y, m, d := start.Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, start.Location())
-}
-
 // loadFilter is the header filter the load applies: the board's saved filters
 // and view scope, or none under --no-filters. A --view override applies either way.
 func loadFilter(
@@ -187,7 +179,7 @@ func execLoad(ctx context.Context, opts loadCmdOptions, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	start := sprintStartDay(sprint.Start)
+	start := sprint.StartDay()
 	mrs, errs, err := fetchMRs(fetchCtx, c, fetchRequest{
 		includeReviewerMRs: includeReviewerMRs,
 		cold:               opts.cold,
@@ -215,7 +207,7 @@ func execLoad(ctx context.Context, opts loadCmdOptions, out io.Writer) error {
 		KeyMatcher:    km,
 		Team:          config.TeamUsernames(c.Config.Sources),
 		Filter:        loadFilter(opts, state, c.Config.CurrentUser, km),
-		Exclusions:    reviewSizeExclusions(rs),
+		Exclusions:    rs.ExclusionsFor(),
 		Thresholds:    rs.Buckets.Thresholds(),
 		Group:         opts.group,
 		Sort:          opts.sort,

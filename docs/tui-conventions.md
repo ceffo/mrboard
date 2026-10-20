@@ -129,6 +129,9 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `column.go` | Column widget — one per `MRPhase`, owns its card list |
 | `card.go` | Card widget — renders one `domain.MergeRequest` |
 | `detail.go` | Detail panel widget — MR description + discussion threads |
+| `loadtree.go` | Review load tree renderer (`RenderLoad`) — shared by `mrboard load` and the load view, line by line (docs/adr/0015) |
+| `load_view.go` | Load view widget (`L`) — the load tree with a selection over MR lines; owns group/sort/remaining-only and computes the load |
+| `load_mode.go` | Root model side of the load view — open/close, the merged listing a fetch adds while it is open, the merged snapshot, the load's inputs |
 | `diff_view.go` | Full-screen diff view (`d`) — per-file lazy fetch + difft/go-gitdiff rendering |
 | `command_argv.go` | External command launcher — resolves a configured command's argv template against an MR (docs/adr/0004-external-command-launcher.md); exec + suspend/resume dispatch itself lives in `model.go` (`execCommandCmd`) |
 | `approver_editor.go` | Reviewer/approver editor overlay (`a`) — reads every approval rule, writes the `approvers_mrboard` rule (replacing manual rules); also shows a sibling-MR panel (tab) when the MR shares a JIRA key with other open MRs, previewing what applying the edit would add to each. Fixed-height body in every mode |

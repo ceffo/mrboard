@@ -45,6 +45,12 @@ type AppState struct {
 	ThemeMode          string         `yaml:"theme_mode"` // "" means "auto"
 	Filter             FilterCriteria `yaml:"filter,omitempty"`
 	IncludeReviewerMRs bool           `yaml:"include_reviewer_mrs,omitempty"`
+	// The TUI's review load view settings (docs/adr/0015, "TUI display mode").
+	// Empty means the default: grouped by person, sorted by size. `mrboard load`
+	// ignores them; its flags are its only input.
+	LoadGroup     string `yaml:"load_group,omitempty"`     // "person" | "jira"
+	LoadSort      string `yaml:"load_sort,omitempty"`      // "person" | "jira" | "size"
+	LoadRemaining bool   `yaml:"load_remaining,omitempty"` // remaining only
 }
 
 // DefaultAppState returns the out-of-box persisted state.

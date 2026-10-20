@@ -22,6 +22,13 @@ var (
 	actCopy   = Act("c", "copy URL", PriorityModal, CategoryAct)
 )
 
+// actToggleView is shared by the board and the load view; each keymap holds
+// its own copy, so enablement is set on both.
+func actToggleView() Action { return Act("tab", "toggle view", PriorityCommon, CategoryView) }
+
+// actRefresh is shared by the board and the load view.
+func actRefresh() Action { return Act("r", "refresh", PriorityCommon, CategoryAct) }
+
 // BaseKeyMap is always active at the bottom of the context stack. Its keys
 // are shadowed by any context that binds them and suppressed entirely while
 // a text input captures keys (except ctrl+c, which always quits).
@@ -74,6 +81,7 @@ type BoardKeyMap struct {
 	Filter     Action
 	Update     Action
 	Undraft    Action
+	Load       Action
 }
 
 // DefaultBoardKeyMap is the default keybinding set for board mode.
@@ -83,13 +91,13 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Left:       Act("←/h", "left", PriorityCore, CategoryNavigate, "left", "h"),
 	Right:      Act("→/l", "right", PriorityCore, CategoryNavigate, "right", "l"),
 	Detail:     Act("↵", "details", PriorityCore, CategoryNavigate, "enter"),
-	Refresh:    Act("r", "refresh", PriorityCommon, CategoryAct),
+	Refresh:    actRefresh(),
 	Open:       actOpenMR,
 	CopyURL:    actCopy,
 	Reviewers:  Act("a", "reviewers", PriorityCommon, CategoryAct),
 	Diff:       actDiff,
 	Sort:       Act("s", "sort", PriorityCommon, CategoryView),
-	ToggleView: Act("tab", "toggle view", PriorityCommon, CategoryView),
+	ToggleView: actToggleView(),
 	Sprint:     Act("S", "sprint filter", PriorityModal, CategoryView),
 	Notify:     Act("n", "notify", PriorityModal, CategoryAct),
 	OpenTicket: Act("J", "open jira", PriorityModal, CategoryAct),
@@ -97,6 +105,7 @@ var DefaultBoardKeyMap = BoardKeyMap{
 	Filter:     Act("f", "filter", PriorityModal, CategoryView),
 	Update:     Act("u", "update", PriorityModal, CategoryAct),
 	Undraft:    Act("U", "undraft", PriorityModal, CategoryAct),
+	Load:       Act("L", "review load", PriorityModal, CategoryView),
 }
 
 // BoardCtx is the board-mode context.
@@ -104,6 +113,45 @@ var BoardCtx = NewContext("board", "Board", &DefaultBoardKeyMap,
 	WithFooterGroup("↑↓←→", "move",
 		&DefaultBoardKeyMap.Up, &DefaultBoardKeyMap.Down,
 		&DefaultBoardKeyMap.Left, &DefaultBoardKeyMap.Right),
+)
+
+// LoadKeyMap holds keybindings for the review load view (docs/adr/0015, "TUI
+// display mode"). Selection moves over MR lines; detail, open, copy and diff
+// act on the selected MR as they do on the board's focused card.
+type LoadKeyMap struct {
+	Up         Action
+	Down       Action
+	Detail     Action
+	Group      Action
+	Sort       Action
+	Remaining  Action
+	Open       Action
+	CopyURL    Action
+	Diff       Action
+	Refresh    Action
+	ToggleView Action
+	Close      Action
+}
+
+// DefaultLoadKeyMap is the default keybinding set for the load view.
+var DefaultLoadKeyMap = LoadKeyMap{
+	Up:         Act("↑/k", "up", PriorityCore, CategoryNavigate, "up", "k"),
+	Down:       Act("↓/j", "down", PriorityCore, CategoryNavigate, "down", "j"),
+	Detail:     Act("↵", "details", PriorityCore, CategoryNavigate, "enter"),
+	Group:      Act("g", "group", PriorityCore, CategoryView),
+	Sort:       Act("s", "sort", PriorityCore, CategoryView),
+	Remaining:  Act("R", "remaining only", PriorityCommon, CategoryView),
+	Open:       actOpenMR,
+	CopyURL:    actCopy,
+	Diff:       actDiff,
+	Refresh:    actRefresh(),
+	ToggleView: actToggleView(),
+	Close:      Act("L/esc", "board", PriorityCore, CategoryGeneral, "L", "esc"),
+}
+
+// LoadCtx is the review load view context.
+var LoadCtx = NewContext("load", "Review load", &DefaultLoadKeyMap,
+	WithFooterGroup("↑↓", "move", &DefaultLoadKeyMap.Up, &DefaultLoadKeyMap.Down),
 )
 
 // DetailKeyMap contains keybindings while the detail panel owns focus.

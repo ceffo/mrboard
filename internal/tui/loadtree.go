@@ -29,25 +29,50 @@ func NewLoadStyles(themeName, mode string) Styles {
 // explain the figures (docs/adr/0015, "CLI output layout"). A zero Styles
 // renders plain text.
 func RenderLoad(load mrsvc.Load, sprint LoadSprint, st Styles) string {
-	var b strings.Builder
-	b.WriteString(loadHeader(load, sprint, st))
-	b.WriteString("\n")
-	if load.MRCount == 0 {
-		b.WriteString("\n" + st.LoadNote.Render("No MRs in scope.") + "\n")
+	lines := loadTree(load, sprint, st)
+	texts := make([]string, len(lines))
+	for i, l := range lines {
+		texts[i] = l.text
 	}
-	for _, g := range load.Groups {
-		b.WriteString("\n")
-		b.WriteString(loadGroupHeading(g, load, st))
-		b.WriteString("\n")
-		writeLoadLines(&b, g, load, st)
+	return strings.Join(texts, "\n") + "\n"
+}
+
+// loadTreeLine is one rendered line of the load tree. MR lines also carry the
+// plain text of their cells, so a view can restyle the selected one whole, and
+// the line they draw and the group they sit in.
+type loadTreeLine struct {
+	text  string
+	plain string // unstyled MR line, without its indent; empty on other lines
+	entry *mrsvc.LoadLine
+	group loadGroupID // set on MR lines
+}
+
+// loadGroupID identifies a load group independently of how its heading
+// renders, which changes with its total, the theme and the toggles.
+type loadGroupID struct {
+	key      string
+	catchAll bool
+}
+
+// loadTree is the load tree line by line, shared by RenderLoad and the TUI's
+// load view so both draw the same tree.
+func loadTree(load mrsvc.Load, sprint LoadSprint, st Styles) []loadTreeLine {
+	lines := []loadTreeLine{{text: loadHeader(load, sprint, st)}}
+	if load.MRCount == 0 {
+		lines = append(lines, loadTreeLine{}, loadTreeLine{text: st.LoadNote.Render("No MRs in scope.")})
+	}
+	for gi := range load.Groups {
+		g := &load.Groups[gi]
+		lines = append(lines, loadTreeLine{}, loadTreeLine{text: loadGroupHeading(*g, load, st)})
+		lines = append(lines, loadLines(g, load, st)...)
 	}
 	for i, note := range loadFootnotes(load) {
 		if i == 0 {
-			b.WriteString("\n")
+			lines = append(lines, loadTreeLine{})
 		}
-		b.WriteString(st.LoadNote.Render(note) + "\n")
+		lines = append(lines, loadTreeLine{text: st.LoadNote.Render(note)})
 	}
-	return b.String()
+	return lines
 }
 
 // loadHeader states the sprint, the MRs in scope and the scope. The count is the
@@ -119,10 +144,12 @@ type loadRow struct {
 	line                                         mrsvc.LoadLine
 }
 
-func writeLoadLines(b *strings.Builder, g mrsvc.LoadGroup, load mrsvc.Load, st Styles) {
+// loadIndent prefixes every MR line of the tree.
+const loadIndent = "  "
+
+func loadLines(g *mrsvc.LoadGroup, load mrsvc.Load, st Styles) []loadTreeLine {
 	if len(g.Lines) == 0 {
-		b.WriteString("  " + st.LoadNote.Render("no MRs") + "\n")
-		return
+		return []loadTreeLine{{text: loadIndent + st.LoadNote.Render("no MRs")}}
 	}
 	byTicket := load.Group == mrsvc.LoadByTicket
 	rows := make([]loadRow, 0, len(g.Lines))
@@ -151,10 +178,13 @@ func writeLoadLines(b *strings.Builder, g mrsvc.LoadGroup, load mrsvc.Load, st S
 		w.who = widest(w.who, r.who)
 		w.state = widest(w.state, r.state)
 	}
-	for _, r := range rows {
-		cells := []string{"  " + st.MRNumberBang.Render(pad(r.ref, w.ref))}
+	out := make([]loadTreeLine, 0, len(rows))
+	for i, r := range rows {
+		cells := []string{st.MRNumberBang.Render(pad(r.ref, w.ref))}
+		plain := []string{pad(r.ref, w.ref)}
 		if !byTicket {
 			cells = append(cells, st.LoadMeta.Render(pad(r.ticket, w.ticket)))
+			plain = append(plain, pad(r.ticket, w.ticket))
 		}
 		cells = append(cells,
 			st.LoadHeading.Render(padLeft(r.size, w.size)),
@@ -163,8 +193,16 @@ func writeLoadLines(b *strings.Builder, g mrsvc.LoadGroup, load mrsvc.Load, st S
 			paint(stateStyle(r.line, byTicket, st), pad(r.state, w.state)),
 			st.LoadMeta.Render(r.title),
 		)
-		b.WriteString(strings.TrimRight(strings.Join(cells, "  "), " ") + "\n")
+		plain = append(plain, padLeft(r.size, w.size), pad(r.bucket, w.bucket), pad(r.who, w.who),
+			pad(r.state, w.state), r.title)
+		out = append(out, loadTreeLine{
+			text:  strings.TrimRight(loadIndent+strings.Join(cells, "  "), " "),
+			plain: strings.TrimRight(strings.Join(plain, "  "), " "),
+			entry: &g.Lines[i],
+			group: loadGroupID{key: g.Key, catchAll: g.CatchAll},
+		})
 	}
+	return out
 }
 
 // paint styles s, leaving a blank cell unstyled so it adds no escape codes.

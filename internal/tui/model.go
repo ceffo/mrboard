@@ -167,6 +167,9 @@ type FetchResultMsg struct {
 	Errors         []error
 	FetchStartedAt time.Time
 	Seq            int
+	// MergedSince is the date the fetch listed merged MRs since; zero when it
+	// listed open MRs only.
+	MergedSince time.Time
 }
 
 // FetchErrMsg carries a fatal fetch error (e.g. network down, bad token).
@@ -204,7 +207,9 @@ type TicketIssueTypeMsg struct {
 // SprintIssueKeysMsg carries the result of a background active-sprint key fetch.
 type SprintIssueKeysMsg struct {
 	Keys []string // nil when no active sprint exists
-	Err  error
+	// Sprint is the active sprint the keys belong to; nil when none exists.
+	Sprint *ticketsvc.Sprint
+	Err    error
 }
 
 // TicketLinkResultMsg carries the result of a background UpsertRemoteLink call.
@@ -331,6 +336,15 @@ type Model struct {
 	refreshInterval    time.Duration                    // auto-refresh cadence; <= 0 disables it, see docs/adr/0005
 	refreshGen         int                              // bumped on manual refresh to invalidate pending ticks
 	exitMessage        string                           // set on a successful self-update; printed after Run() returns
+	loadView           loadViewWidget                   // review load view, docs/adr/0015 "TUI display mode"
+	loadOpen           bool                             // the load view replaces the board; never persisted
+	loadKeys           *LoadKeyMap                      // points at DefaultLoadKeyMap, shared with LoadCtx
+	mergedStore        domain.MergedSnapshotStore       // nil when merged MRs are not persisted
+	mergedMRs          []domain.MergeRequest            // merged MRs listed since mergedSince; never in allMRs
+	mergedSince        time.Time                        // the sprint start mergedMRs were listed for
+	sprint             *ticketsvc.Sprint                // last active sprint read; nil when none
+	sprintRead         bool                             // a sprint read has answered at least once
+	sprintErr          error                            // the last sprint read's error
 }
 
 // ExitMessage returns the message to print after the terminal is restored,
@@ -398,6 +412,9 @@ func New(
 	keys.Notify.SetEnabled(notifier != nil)
 	keys.Sprint.SetEnabled(cfg.Jira.BoardID != 0)
 	keys.OpenTicket.SetEnabled(false) // enabled dynamically when focused MR has a ticket ID
+	keys.Load.SetEnabled(cfg.Jira.BoardID != 0 && ticketEnricher != nil)
+	loadKeys := &DefaultLoadKeyMap
+	loadKeys.ToggleView.SetEnabled(cfg.CurrentUser != "")
 
 	sf := sortFieldFromState(st.SortField)
 
@@ -429,6 +446,8 @@ func New(
 		batchPreviewKeys:   DefaultBatchPreviewKeyMap,
 		confirmKeys:        DefaultConfirmKeyMap,
 		diffView:           newDiffViewWidget(ctx, styles, DefaultDiffViewKeyMap, src),
+		loadView:           newLoadViewWidget(styles, DefaultLoadKeyMap, loadSettingsFromState(st)),
+		loadKeys:           loadKeys,
 		styles:             styles,
 		theme:              th,
 		themeName:          themeName,
@@ -569,7 +588,11 @@ func (m *Model) startFetch() tea.Cmd {
 	seq := m.fetchSeq
 	src := m.src
 	includeReviewerMRs := m.includeReviewerMRs
+	mergedSince := m.loadMergedSince()
 	previous := m.allMRs
+	if !mergedSince.IsZero() && mergedSince.Equal(m.mergedSince) {
+		previous = append(append([]domain.MergeRequest(nil), m.allMRs...), m.mergedMRs...)
+	}
 	forceStale := m.dirty.Keys()
 	fetchStartedAt := time.Now()
 	return func() tea.Msg {
@@ -578,8 +601,11 @@ func (m *Model) startFetch() tea.Cmd {
 			IncludeReviewerMRs: includeReviewerMRs,
 			Previous:           previous,
 			ForceStale:         forceStale,
+			MergedSince:        mergedSince,
 		})
-		return FetchResultMsg{MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt, Seq: seq}
+		return FetchResultMsg{
+			MRs: mrs, Errors: errs, FetchStartedAt: fetchStartedAt, Seq: seq, MergedSince: mergedSince,
+		}
 	}
 }
 
@@ -596,8 +622,9 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.state = stateBoard
 	m.isRefreshing = false
-	m.allMRs = m.dirty.Resolve(m.allMRs, msg.MRs, msg.FetchStartedAt)
+	m.allMRs = m.dirty.Resolve(m.allMRs, domain.OpenMRs(msg.MRs), msg.FetchStartedAt)
 	m.errors = msg.Errors
+	m.landMerged(msg)
 	m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
 	// Only a wholly clean fetch may overwrite the cache. A partial or total
 	// failure yields a truncated or empty board, and persisting that would
@@ -757,7 +784,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCommandResult(msg)
 
 	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg,
-		selfUpdateSucceededMsg, dismissOverlayMsg, toastMsg:
+		selfUpdateSucceededMsg, dismissOverlayMsg, toastMsg, loadSettingsChangedMsg:
 		return m.handleWidgetMsg(msg)
 
 	case TicketIssueTypeMsg, SprintIssueKeysMsg, TicketDescriptionLinkResultMsg, TicketLinkResultMsg:
@@ -813,6 +840,9 @@ func (m Model) baseStack() []*Context {
 	}
 	if m.showDetail {
 		return append(stack, DetailCtx)
+	}
+	if m.loadOpen {
+		return append(stack, LoadCtx)
 	}
 	return append(stack, BoardCtx, m.customCommands.Context())
 }
@@ -888,6 +918,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.showDetail {
 		return m.handleKeyDetail(msg)
 	}
+	if m.loadOpen {
+		return m.handleKeyLoad(msg)
+	}
 	return m.handleKeyBoard(msg)
 }
 
@@ -899,7 +932,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) requireFocusedMR(
 	action string, fn func(mr *domain.MergeRequest) (tea.Model, tea.Cmd),
 ) (tea.Model, tea.Cmd) {
-	mr := m.board.FocusedMR()
+	mr := m.focusedMR()
 	if mr == nil {
 		m.logger.Debug("tui: action requires a focused MR but none is focused", "action", action)
 		return m, nil
@@ -933,6 +966,46 @@ func (m Model) handleKeyDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// manualRefresh fetches now and restarts the refresh cadence.
+func (m Model) manualRefresh() (tea.Model, tea.Cmd) {
+	if m.showDetail {
+		m.closeDetail()
+	}
+	// Bump refreshGen so any auto-refresh tick already scheduled under the
+	// old generation is dropped on arrival instead of firing early, then
+	// install a fresh schedule — this is what "manual refresh resets the
+	// timer" means (docs/adr/0005, "Refresh cadence").
+	m.refreshGen++
+	resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
+	sprintCmd := m.sprintFetchCmd()
+	if m.isRefreshing {
+		// A fetch is already in flight. Starting a second one would cancel
+		// it (startFetch cancels the previous context) and land a degraded
+		// partial result, so skip — not queue — this fetch, the same rule
+		// handleRefreshTick applies. The cadence is still reset above. The
+		// sprint fetch is independent of the MR fetch's cancellation, so it
+		// still runs.
+		return m, tea.Batch(resetTimer, sprintCmd)
+	}
+	if len(m.allMRs) > 0 {
+		m.isRefreshing = true
+		return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
+	}
+	m.state = stateLoading
+	return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
+}
+
+// toggleView flips My View, which narrows the board and the load view alike.
+func (m *Model) toggleView() {
+	if m.viewMode == domain.ViewMine {
+		m.viewMode = domain.ViewAll
+	} else {
+		m.viewMode = domain.ViewMine
+	}
+	m.applyMRFilter()
+	m.saveState()
+}
+
 // handleKeyBoard handles keys while the kanban board owns focus.
 func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Custom commands sit above BoardCtx in the stack (see baseStack), so a
@@ -956,31 +1029,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.board.MoveRight()
 		m.updateTicketKey()
 	case m.keys.Refresh.Match(msg):
-		if m.showDetail {
-			m.closeDetail()
-		}
-		// Bump refreshGen so any auto-refresh tick already scheduled under the
-		// old generation is dropped on arrival instead of firing early, then
-		// install a fresh schedule — this is what "manual refresh resets the
-		// timer" means (docs/adr/0005, "Refresh cadence").
-		m.refreshGen++
-		resetTimer := refreshTickCmd(m.refreshInterval, m.refreshGen)
-		sprintCmd := m.sprintFetchCmd()
-		if m.isRefreshing {
-			// A fetch is already in flight. Starting a second one would cancel
-			// it (startFetch cancels the previous context) and land a degraded
-			// partial result, so skip — not queue — this fetch, the same rule
-			// handleRefreshTick applies. The cadence is still reset above. The
-			// sprint fetch is independent of the MR fetch's cancellation, so it
-			// still runs.
-			return m, tea.Batch(resetTimer, sprintCmd)
-		}
-		if len(m.allMRs) > 0 {
-			m.isRefreshing = true
-			return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
-		}
-		m.state = stateLoading
-		return m, tea.Batch(m.sp.Init(), resetTimer, m.startFetch(), sprintCmd)
+		return m.manualRefresh()
 	case m.keys.Sort.Match(msg):
 		m.sortField, m.sortDesc = advanceSort(m.sortField, m.sortDesc)
 		m.header.SetSort(sortLabel(m.sortField, m.sortDesc))
@@ -990,13 +1039,10 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sprintFilterActive = !m.sprintFilterActive
 		m.applyMRFilter()
 	case m.keys.ToggleView.Match(msg):
-		if m.viewMode == domain.ViewMine {
-			m.viewMode = domain.ViewAll
-		} else {
-			m.viewMode = domain.ViewMine
-		}
-		m.applyMRFilter()
-		m.saveState()
+		m.toggleView()
+	case m.keys.Load.Match(msg):
+		cmd := m.openLoad()
+		return m, cmd
 	case m.keys.Open.Match(msg):
 		return m.requireFocusedMR("open", func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
 			return m, openBrowser(mr.WebURL)
@@ -1064,6 +1110,7 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) openDetail(mr *domain.MergeRequest) {
 	m.showDetail = true
 	m.board.SetActive(false)
+	m.loadView.SetFocused(false)
 	m.detail.SetMR(mr)
 	m.resizeBoard()
 }
@@ -1071,6 +1118,7 @@ func (m *Model) openDetail(mr *domain.MergeRequest) {
 func (m *Model) closeDetail() {
 	m.showDetail = false
 	m.board.SetActive(true)
+	m.loadView.SetFocused(true)
 	m.resizeBoard()
 }
 
@@ -1183,9 +1231,11 @@ func (m *Model) resizeBoard() {
 		detailW := m.width * detailWidthRatio / detailWidthDivisor
 		boardW := m.width - detailW
 		m.board.SetSize(boardW, m.height-chromeHeight)
+		m.loadView.SetSize(boardW, m.height-chromeHeight)
 		m.detail.SetSize(detailW, m.height-chromeHeight)
 	} else {
 		m.board.SetSize(m.width, m.height-chromeHeight)
+		m.loadView.SetSize(m.width, m.height-chromeHeight)
 	}
 	if m.overlay.isDiffView() {
 		m.diffView.SetSize(m.width, m.height-chromeHeight)
@@ -1267,6 +1317,9 @@ func (m Model) handleWidgetMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toastMsg:
 		return m, m.toast(msg.spec, msg.text)
+	case loadSettingsChangedMsg:
+		m.saveState()
+		return m, nil
 	case selfUpdateSucceededMsg:
 		m.exitMessage = msg.message
 		return m, tea.Quit
@@ -1359,6 +1412,10 @@ func (m Model) renderBoard() string {
 	boardH := m.height - chromeHeight
 
 	boardStr := m.board.render()
+	if m.loadOpen {
+		headerStr = m.loadHeader().render()
+		boardStr = m.loadView.render()
+	}
 	if boardH > 0 {
 		lines := strings.SplitN(boardStr, "\n", boardH+2) //nolint:mnd
 		if len(lines) > boardH {
@@ -1433,6 +1490,7 @@ func (m Model) handleReviewersSaved(msg ReviewersSavedMsg) (tea.Model, tea.Cmd) 
 	for i, mr := range m.allMRs {
 		if mr.ProjectID == updatedMR.ProjectID && mr.IID == updatedMR.IID {
 			approversBefore = mr.Approvers
+			updatedMR = keepDiffStats(mr, updatedMR)
 			m.allMRs[i] = updatedMR
 			break
 		}
@@ -1503,20 +1561,26 @@ func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd
 
 // handleSprintIssueKeys stores the active sprint key set and re-applies the filter.
 func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
+	m.sprintRead = true
+	m.sprintErr = msg.Err
 	if msg.Err != nil {
 		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
+		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
 	}
+	m.sprint = msg.Sprint
+	loadCmd := m.syncLoadSprint()
 	if len(msg.Keys) == 0 {
 		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.
-		return m, nil
+		m.refreshLoad()
+		return m, loadCmd
 	}
 	m.sprintIssueKeys = make(map[string]bool, len(msg.Keys))
 	for _, k := range msg.Keys {
 		m.sprintIssueKeys[k] = true
 	}
 	m.applyMRFilter()
-	return m, nil
+	return m, loadCmd
 }
 
 func (m Model) handleDetailFetchResult(msg DetailFetchResultMsg) (tea.Model, tea.Cmd) {
@@ -1653,7 +1717,7 @@ func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher,
 		if err != nil || sprint == nil {
 			return SprintIssueKeysMsg{Err: err}
 		}
-		return SprintIssueKeysMsg{Keys: sprint.IssueKeys}
+		return SprintIssueKeysMsg{Keys: sprint.IssueKeys, Sprint: sprint}
 	}
 }
 
@@ -1883,6 +1947,7 @@ func (m Model) handleUndraftResult(msg UndraftResultMsg) (tea.Model, tea.Cmd) {
 	updatedMR := msg.MR
 	for i, mr := range m.allMRs {
 		if mr.ProjectID == updatedMR.ProjectID && mr.IID == updatedMR.IID {
+			updatedMR = keepDiffStats(mr, updatedMR)
 			m.allMRs[i] = updatedMR
 			break
 		}
@@ -1928,6 +1993,7 @@ func (m *Model) applyTheme() {
 	m.helpModal.SetStyles(m.styles)
 	m.detail.SetStyles(m.styles)
 	m.diffView.SetStyles(m.styles)
+	m.loadView.SetStyles(m.styles)
 	m.settings.styles = m.styles
 	if m.reviewerEditor != nil {
 		m.reviewerEditor.styles = m.styles
@@ -1944,17 +2010,19 @@ func (m *Model) applyTheme() {
 func (m *Model) applyMRFilter() {
 	m.buildTicketIndex()
 	m.userMap = mrsvc.BuildUserMap(m.allMRs)
-	src := m.allMRs
-	if !m.includeReviewerMRs {
-		filtered := make([]domain.MergeRequest, 0, len(src))
-		for _, mr := range src {
-			if !mr.ReviewerSource {
-				filtered = append(filtered, mr)
-			}
-		}
-		src = filtered
-	}
-	mrs := mrsvc.FilterAndSort(src, mrsvc.FilterOptions{
+	src := m.inFetchScope(m.allMRs)
+	mrs := mrsvc.FilterAndSort(src, m.filterOptions())
+	displayMRs := visibleMRs(mrs, m.currentUser)
+	m.board.SetAttention(attentionKeys(displayMRs, m.currentUser))
+	m.selected = m.board.SetMRs(displayMRs, m.selected)
+	m.header.SetMRs(displayMRs)
+	m.header.SetFilterState(len(src), m.headerFilterState())
+	m.refreshLoad()
+}
+
+// filterOptions are the header filters and board sort as the board applies them.
+func (m *Model) filterOptions() mrsvc.FilterOptions {
+	return mrsvc.FilterOptions{
 		MyView:             m.viewMode == domain.ViewMine,
 		CurrentUser:        m.currentUser,
 		SortField:          m.sortField.stateKey(),
@@ -1967,12 +2035,7 @@ func (m *Model) applyMRFilter() {
 		SprintFilter:       m.sprintFilterActive,
 		SprintKeys:         m.sprintIssueKeys,
 		KeyMatcher:         m.keyMatcher,
-	})
-	displayMRs := visibleMRs(mrs, m.currentUser)
-	m.board.SetAttention(attentionKeys(displayMRs, m.currentUser))
-	m.selected = m.board.SetMRs(displayMRs, m.selected)
-	m.header.SetMRs(displayMRs)
-	m.header.SetFilterState(len(src), m.headerFilterState())
+	}
 }
 
 // headerFilterState summarizes the active filters for the header bar. Counts
@@ -2000,6 +2063,21 @@ func (m *Model) headerFilterState() headerFilterState {
 		s.Tickets++
 	}
 	return s
+}
+
+// inFetchScope drops reviewer-sourced MRs while the reviewer-MRs setting is
+// off: they stay cached from when it was on, but are not in scope.
+func (m *Model) inFetchScope(mrs []domain.MergeRequest) []domain.MergeRequest {
+	if m.includeReviewerMRs {
+		return mrs
+	}
+	out := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if !mr.ReviewerSource {
+			out = append(out, mr)
+		}
+	}
+	return out
 }
 
 func visibleMRs(mrs []domain.MergeRequest, _ string) []domain.MergeRequest {
@@ -2044,7 +2122,11 @@ func (m Model) SiblingMRs(issueKey string) []domain.MergeRequest {
 }
 
 func (m *Model) saveState() {
+	load := m.loadView.Settings()
 	if err := m.store.Save(domain.AppState{
+		LoadGroup:          load.groupKey(),
+		LoadSort:           load.sortKey(),
+		LoadRemaining:      load.remaining,
 		SortField:          m.sortField.stateKey(),
 		SortDesc:           m.sortDesc,
 		ViewMode:           m.viewMode,

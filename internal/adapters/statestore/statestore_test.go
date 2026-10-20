@@ -63,3 +63,40 @@ func TestYAMLStore_Load_AbsentFileReturnsDefaultState(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, domain.DefaultAppState(), got)
 }
+
+func TestYAMLStore_SaveLoad_RoundTripsLoadViewSettings(t *testing.T) {
+	dir := t.TempDir()
+	store, err := New(Config{Dir: dir})
+	require.NoError(t, err)
+
+	want := domain.DefaultAppState()
+	want.LoadGroup, want.LoadSort, want.LoadRemaining = "jira", "person", true
+	require.NoError(t, store.Save(want))
+
+	got, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+	raw, err := os.ReadFile(filepath.Join(dir, "state.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "load_group: jira")
+	assert.Contains(t, string(raw), "load_sort: person")
+	assert.Contains(t, string(raw), "load_remaining: true")
+}
+
+// A state.yaml written before the load view existed loads with the view's
+// settings empty, which the TUI reads as its defaults.
+func TestYAMLStore_Load_FileWithoutLoadViewSettingsStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	old := "sort_field: age\nsort_desc: true\nview_mode: 1\ntheme_name: nord\ntheme_mode: dark\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "state.yaml"), []byte(old), 0o600))
+	store, err := New(Config{Dir: dir})
+	require.NoError(t, err)
+
+	got, err := store.Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "age", got.SortField)
+	assert.Empty(t, got.LoadGroup)
+	assert.Empty(t, got.LoadSort)
+	assert.False(t, got.LoadRemaining)
+}

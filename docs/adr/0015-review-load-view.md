@@ -327,7 +327,19 @@ stay the only input, so the same command gives the same output.
 
 **Merged listing timing.** The TUI passes `FetchOptions.MergedSince` only while the view is open.
 Opening it renders the cached merged snapshot at once and starts a fetch with `MergedSince`;
-refreshes keep passing it until the view closes. Board-only use costs no extra request.
+refreshes keep passing it until the view closes. Board-only use costs no extra request. A sprint
+read that lands after the view opened starts that fetch, superseding a board-only one in flight.
+Merged MRs never join the board's MR set, so no board write (auto-assign, ticket back-links) and
+no board snapshot ever sees them.
+
+**Header.** While the view is open the header's count is the load's MRs in scope against the
+sprint's population, the sprint segment is not shown (sprint scoping is what the view is), and the
+sort indicator names the grouping and sort (`sort size · by person`). `↑↓`, `r` refresh and `tab` My
+View work as on the board.
+
+**Sizes after a single-MR write.** A reviewer save or an undraft replaces the MR with a single-MR
+read that carries no diff stats; while its head SHA is unchanged the MR keeps its stats and
+generated-file rules, so its size stays known until the next fetch.
 
 ## Consequences
 

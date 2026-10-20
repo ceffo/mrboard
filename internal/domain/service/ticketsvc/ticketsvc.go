@@ -19,6 +19,15 @@ type Sprint struct {
 	IssueKeys []string
 }
 
+// StartDay is the sprint's start date as midnight of that day in the start's own
+// location: the calendar day the tracker reports, at the offset it reports it in.
+// Converting to the machine's zone could move the start to another day. The
+// review load bounds merged MRs, and tags the merged snapshot, with it.
+func (s Sprint) StartDay() time.Time {
+	y, m, d := s.Start.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, s.Start.Location())
+}
+
 // TicketEnricher is the driven port for fetching issue-tracker metadata.
 type TicketEnricher interface {
 	// GetIssueType returns the issue type name (e.g. "Bug", "Story") for the

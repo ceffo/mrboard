@@ -58,7 +58,7 @@ const (
 
 func testSizing(verbose bool) sizeOptions {
 	return sizeOptions{
-		exclusions: reviewSizeExclusions(config.ReviewSize{DefaultExcludes: true}),
+		exclusions: config.ReviewSize{DefaultExcludes: true}.ExclusionsFor(),
 		thresholds: domain.DefaultSizeThresholds,
 		verbose:    verbose,
 	}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/core"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -218,19 +217,11 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	}
 	rs := c.Config.ReviewSize
 	sizing := sizeOptions{
-		exclusions: reviewSizeExclusions(rs),
+		exclusions: rs.ExclusionsFor(),
 		thresholds: rs.Buckets.Thresholds(),
 		verbose:    opts.verbose,
 	}
 	return printJSON(mrs, c.Config.CurrentUser, sizing)
-}
-
-// reviewSizeExclusions is the per-MR exclusion lookup every command measures review
-// size with, so `mrboard fetch` and the review load report the same size.
-func reviewSizeExclusions(rs config.ReviewSize) domain.SizeExclusionsFor {
-	return func(mr domain.MergeRequest) domain.SizeExclusions {
-		return domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, mr.GeneratedRules)
-	}
 }
 
 // sizeOptions controls how fetch output reports each MR's review size
