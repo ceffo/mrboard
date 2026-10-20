@@ -56,7 +56,7 @@ Cards are grouped by whose turn it is, not by GitLab's merge status:
 
 The Approved column is about approvers specifically. An MR with no designated approvers stays
 in Needs Review however many plain reviewers approve it — mark approvers in the reviewer editor
-(`v`, then `space`). GitLab's `detailed_merge_status` doesn't decide the column; it only tints
+(`a`, then `space`). GitLab's `detailed_merge_status` doesn't decide the column; it only tints
 an approved card green when it is genuinely mergeable and red when something still blocks it.
 
 Each reviewer shows as a pill with their state:
@@ -70,7 +70,7 @@ Each reviewer shows as a pill with their state:
 
 With `current_user` set, **`tab`** toggles *my view*: every MR you authored, are assigned to, or
 review (when an MR designates approvers, only its approvers count as reviewers). Independently of
-the view, a card whose turn is yours gets a warning-colored border: you are the author or
+the view, an unfocused card whose turn is yours gets a warning-colored border: you are the author or
 assignee and a reviewer commented or the MR is ready to merge, or you are a reviewer who hasn't
 started or was asked to re-review. Drafts never ask for attention.
 
@@ -82,13 +82,13 @@ Card ages turn amber after `lifetime_warn_after` (72h) and red after `lifetime_e
 Press **`?`** for every binding available in the current context — that modal is the source of
 truth, and the footer always shows the most useful ones for where you are.
 
-The four worth knowing up front: `↵` opens the detail pane, `d` the diff view, `v` the reviewer
+The four worth knowing up front: `↵` opens the detail pane, `d` the diff view, `a` the reviewer
 editor, and `,` the settings panel.
 
 `c` copies the selected MR's URL to the clipboard. Focus stops at the first and last card of a
 column instead of wrapping around.
 
-`L` swaps the board for the **review load** of the active sprint: the tree `mrboard load` prints,
+`L` (needs a Jira board in the config) swaps the board for the **review load** of the active sprint: the tree `mrboard load` prints,
 with a selection on its MR lines (`↵`, `o`, `c` and `d` act on it as on a card). `g` groups by
 person or ticket, `s` cycles the sort, `R` keeps only what is left to approve; all three are
 remembered across sessions. `L` or `esc` returns to the board.
@@ -127,7 +127,7 @@ logs what would be assigned without writing to GitLab.
 
 ## Notifications
 
-With a Teams webhook configured, `n` posts the selected MR to Teams. Set
+With a Teams webhook configured, `n` sends a notification about the focused MR to Teams. Set
 `announce_approver_changes` and every running mrboard also announces approver changes it finds on
 any MR, including ones made directly in GitLab; see [docs/configuration.md](docs/configuration.md).
 
