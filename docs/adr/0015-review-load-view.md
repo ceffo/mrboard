@@ -1,6 +1,6 @@
 # ADR-0015: Review Load View
 
-**Status**: Proposed — wayfinder complete; ready to cut into implementation tickets
+**Status**: Accepted
 
 ## Context
 

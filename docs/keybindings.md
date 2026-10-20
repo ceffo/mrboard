@@ -132,6 +132,27 @@ at load time (mrboard refuses to start) — distinct from `NewContext`'s
 init-time panic, which is reserved for bugs in `keys.go` itself, not user
 config mistakes.
 
+### Review load view (`LoadCtx`)
+
+`L` (board action `Load`, view category) opens the review load view; the context stack then
+carries `LoadCtx` instead of `Board` (see `contextStack` above). `LoadCtx` is
+`NewContext("load", "Review load", &DefaultLoadKeyMap, ...)` in `keys.go`
+(`docs/adr/0015-review-load-view.md`, "TUI display mode"). Selection moves over MR lines only.
+
+| Key | Action | Priority |
+|---|---|---|
+| `↑/k`, `↓/j` | Move over MR lines (footer group `↑↓ move`) | core |
+| `↵` | Details of the selected MR | core |
+| `g` | Toggle grouping: person ↔ jira | core |
+| `s` | Cycle sort: person → jira → size | core |
+| `R` | Toggle remaining only | common |
+| `o`, `c`, `d` | Open MR, copy URL, diff of the selected MR (the board's shared actions) | common / modal / common |
+| `r` | Refresh | as on the board |
+| `tab` | Toggle My View, narrowing the load as any header filter | as on the board |
+| `L/esc` | Back to the board | core |
+
+Group, sort and remaining-only are saved in `state.yaml`. `Open`, `CopyURL` and `Diff` reuse the board's shared `Action` values, so their keys cannot drift.
+
 ## Footer (status line)
 
 ```
