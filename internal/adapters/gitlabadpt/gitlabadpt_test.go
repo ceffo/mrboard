@@ -24,6 +24,13 @@ type fakeFetchClient struct {
 	userMRs     map[string][]pkggitlab.GQLMergeRequest
 	reviewerMRs map[string][]pkggitlab.GQLMergeRequest
 
+	// merged answers the merged-since listings by "user:<name>", "reviewer:<name>"
+	// or "group:<id>"; mergedErr fails the listing of the same key.
+	merged         map[string][]pkggitlab.GQLMergeRequest
+	mergedErr      map[string]error
+	mergedCalls    []string
+	mergedAfterArg []time.Time
+
 	mu             sync.Mutex
 	batchCalls     int
 	discussionReqs []pkggitlab.MRDiscussionsRequest // every req seen across all batch calls
@@ -89,6 +96,32 @@ func (f *fakeFetchClient) FetchReviewerMRsThinGraphQL(
 	_ context.Context, username string,
 ) ([]pkggitlab.GQLMergeRequest, error) {
 	return f.reviewerMRs[username], nil
+}
+
+func (f *fakeFetchClient) mergedListing(key string, after time.Time) ([]pkggitlab.GQLMergeRequest, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.mergedCalls = append(f.mergedCalls, key)
+	f.mergedAfterArg = append(f.mergedAfterArg, after)
+	return f.merged[key], f.mergedErr[key]
+}
+
+func (f *fakeFetchClient) FetchUserMergedMRsGraphQL(
+	_ context.Context, username string, after time.Time,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	return f.mergedListing("user:"+username, after)
+}
+
+func (f *fakeFetchClient) FetchReviewerMergedMRsGraphQL(
+	_ context.Context, username string, after time.Time,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	return f.mergedListing("reviewer:"+username, after)
+}
+
+func (f *fakeFetchClient) FetchGroupMergedMRsGraphQL(
+	_ context.Context, groupID string, after time.Time,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	return f.mergedListing("group:"+groupID, after)
 }
 
 func (f *fakeFetchClient) FetchMRsDiscussionsGraphQL(
@@ -165,8 +198,9 @@ func (f *fakeFetchClient) FetchReviewerMRsGraphQL(
 	panic("not implemented")
 }
 
+// ListGroupMRs answers every group with no open MRs.
 func (f *fakeFetchClient) ListGroupMRs(_ context.Context, _, _ string) ([]*gl.BasicMergeRequest, error) {
-	panic("not implemented")
+	return nil, nil
 }
 
 func (f *fakeFetchClient) ListUserMRs(_ context.Context, _ string) ([]*gl.BasicMergeRequest, error) {
@@ -178,7 +212,7 @@ func (f *fakeFetchClient) ListReviewerMRs(_ context.Context, _ string) ([]*gl.Ba
 }
 
 func (f *fakeFetchClient) ListNonArchivedProjectIDs(_ context.Context, _ string) (map[int64]bool, error) {
-	panic("not implemented")
+	return map[int64]bool{}, nil
 }
 
 func (f *fakeFetchClient) IsProjectArchived(_ context.Context, _ int64) (bool, error) {

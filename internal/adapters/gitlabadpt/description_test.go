@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,6 +75,24 @@ func (f *fakeDescriptionClient) FetchUserMRsThinGraphQL(
 
 func (f *fakeDescriptionClient) FetchReviewerMRsThinGraphQL(
 	_ context.Context, _ string,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) FetchUserMergedMRsGraphQL(
+	_ context.Context, _ string, _ time.Time,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) FetchReviewerMergedMRsGraphQL(
+	_ context.Context, _ string, _ time.Time,
+) ([]pkggitlab.GQLMergeRequest, error) {
+	panic("not implemented")
+}
+
+func (f *fakeDescriptionClient) FetchGroupMergedMRsGraphQL(
+	_ context.Context, _ string, _ time.Time,
 ) ([]pkggitlab.GQLMergeRequest, error) {
 	panic("not implemented")
 }
