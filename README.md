@@ -81,10 +81,11 @@ editor, and `,` the settings panel.
 
 ## CLI commands
 
-Alongside the interactive board, `mrboard` has two one-shot commands for scripting and automation:
+Alongside the interactive board, `mrboard` has three one-shot commands for scripting and automation:
 
 ```bash
 mrboard fetch    # fetch every configured MR and print it as JSON
+mrboard load     # print the active sprint's review load per approver or ticket
 mrboard auto     # run mrboard's automatic write actions once, outside the TUI
 ```
 
@@ -95,6 +96,14 @@ setting; `--cold` ignores the snapshots and caches and recomputes every MR from 
 cached in a merged snapshot of their own, kept for that date only. Each MR carries its
 review size (`review_size`, null when unknown, and `size_bucket`); `--verbose` adds the counted
 and excluded files behind it.
+
+`load` prints how much review size each approver carries in the active sprint (open MRs, plus MRs
+merged since it started), as a tree. `--group person|jira`, `--sort person|jira|size` and
+`--remaining` shape it and are never saved; the board's saved header filters apply unless
+`--no-filters`; `--json` emits the computed rows; `--color auto|always|never`; `--view`,
+`--reviewer-mrs` and `--cold` work as in `fetch`. It fails, rather than print a near-empty report,
+when the board has no active sprint, the sprint has no issues or no start date, or the sprint
+cannot be read. See [docs/adr/0015-review-load-view.md](docs/adr/0015-review-load-view.md).
 
 `auto` runs mrboard's automatic write actions (currently: auto-assigning the team as reviewers
 on newly opened, ticket-linked MRs — see `auto_assign_reviewers` in

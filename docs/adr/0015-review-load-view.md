@@ -204,6 +204,17 @@ The TUI's saved header filters apply by default — every one except sprint, per
 `--group`, `--sort` and `--remaining` are flags only and never persisted: the same command gives
 the same output.
 
+**Edge rules.** A sprint the load cannot be scoped to is an error, not a report: no ticket board, an
+active sprint that is missing, has no issue keys (every ticketed MR would drop out silently) or has
+no start date, or a failed sprint read, each exit non-zero with the reason. The sprint start passed
+to `ComputeLoad` and to the merged listing is midnight of the start date in the machine's local
+zone, read from the tracker's timestamp converted to local time (the tracker reports its own
+offset, typically UTC, whose calendar day can differ from the team's). `--no-filters` also drops the
+saved view scope unless `--view` is given. The header counts "MRs in scope" (and "of N in the
+sprint" when filters narrowed it); person grouping adds a footnote when person loads exceed the team
+total and when counted MRs sit on no person line. The `--filtered` path of `mrboard fetch` narrows
+open MRs only by phase, like the load.
+
 **One fetch path.** `mrboard load` calls the same core fetch as `mrboard fetch` — snapshot cache,
 saved reviewer-MRs setting — and adds the sprint population (sprint dates, merged-since listing)
 on top. The two commands stay at parity by construction.
