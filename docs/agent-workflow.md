@@ -178,6 +178,10 @@ domain struct. In this repo, these serialize: `internal/adapters/gitlabadpt/`, `
 - `Release on merge` runs on every push to `main`: the squashed subject (the PR title) picks the bump
   (`scripts/next-version.sh`), and `Release` publishes the tag. A title with `[skip release]`, or a
   non-releasing type, publishes nothing.
+- An epic's slices ship with `[skip release]` so a half-built feature doesn't release on its own. The
+  epic's **last** PR drops `[skip release]` and takes the type of the highest bump among the epic's
+  skipped PRs: `feat` if any of them was a `feat` (minor), else `fix` (patch). If that last PR is
+  docs-only, its title still takes that type, so finishing the epic always publishes its release.
 
 PR body has a **What changes for you locally** line (dev commands, ports, tools, local data, one-off
 steps; or "nothing"), a `Closes <id>` line, the `just release-preview` level, and ends with the
