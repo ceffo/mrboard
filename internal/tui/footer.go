@@ -32,6 +32,9 @@ func (f *footerWidget) SetWidth(w int) { f.width = w }
 // While the top context captures text, only its own items are shown (base
 // help/quit keys go to the text input instead).
 func (f footerWidget) render(stack []*Context) string {
+	// Footer-transparent contexts (configured commands) sit on top for key
+	// shadowing but never own the status line.
+	stack = footerStack(stack)
 	top := stack[len(stack)-1]
 
 	var items []footerItem
@@ -60,6 +63,15 @@ func (f footerWidget) render(stack []*Context) string {
 		pad = 1
 	}
 	return f.styles.Footer.Render(line + strings.Repeat(" ", pad) + ver)
+}
+
+// footerStack drops footer-transparent contexts from the top of the stack,
+// always keeping at least the bottom entry.
+func footerStack(stack []*Context) []*Context {
+	for len(stack) > 1 && stack[len(stack)-1].footerTransparent {
+		stack = stack[:len(stack)-1]
+	}
+	return stack
 }
 
 // baseItem converts a base-context action into a pinned footer item.
