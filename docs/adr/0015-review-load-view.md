@@ -254,8 +254,11 @@ generated-file markings change rarely, and `--cold` is the escape hatch.
   (`gqlGitAttributesBatchSize`). An alias selects five fields, two of them Gitaly-backed: 7 by
   the diffStats reasoning; budgeting 10 covers resolver surcharges and the connection
   multiplier, so 20 aliases stay at about 203. The query also requests `queryComplexity`, logged
-  at debug level. A failed batch, or a project GitLab does not find, leaves its MRs without rules
-  for that fetch and is not cached; the error joins `FetchAll`'s partial-result errors.
+  at debug level. A failed batch, or a project GitLab does not find, is not cached; the error
+  joins `FetchAll`'s partial-result errors. Each of its MRs keeps the rules the previous snapshot
+  recorded for it on the same target branch; an MR with none to keep has unknown rules
+  (`MergeRequest.GeneratedRulesUnknown`) and so an unknown size (`?`, totals partial) until a
+  read succeeds, as the stats failure rule gives: never a known size that counts generated files.
 - **Markings.** The parsed rules ride on each MR (`MergeRequest.GeneratedRules`, in file order)
   and feed `domain.NewSizeExclusions` per MR, so a per-MR exclusions lookup is
   `NewSizeExclusions(defaults, configured, mr.GeneratedRules)`. As in git, the last matching line

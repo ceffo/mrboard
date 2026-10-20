@@ -74,3 +74,10 @@ func TestNewSizeExclusions_GeneratedRules(t *testing.T) {
 	assert.Equal(t, []FileDiffStat{{Path: "gen/client.go", Additions: 500}, {Path: "go.sum", Additions: 40}},
 		m.Excluded, "an unset marking never re-includes a file a built-in glob excludes")
 }
+
+func TestMeasureReviewSize_UnknownGeneratedRules(t *testing.T) {
+	mr := MergeRequest{DiffStats: []FileDiffStat{{Path: "app.go", Additions: 10}}, GeneratedRulesUnknown: true}
+
+	assert.Equal(t, UnknownReviewSize, mr.MeasureReviewSize(NewSizeExclusions(true, nil, nil)).Size,
+		"unknown rules make the size unknown, never one that may count generated files")
+}

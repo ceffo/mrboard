@@ -117,7 +117,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 
 	<-attrsDone
 	errs = append(errs, attrsErrs...)
-	applyGeneratedRules(finalMRs, attrsKeys, generated)
+	applyGeneratedRules(finalMRs, attrsKeys, generated, opts.Previous)
 
 	// Mark MRs that came exclusively from the reviewer fetch.
 	if opts.IncludeReviewerMRs {

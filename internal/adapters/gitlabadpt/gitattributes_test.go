@@ -173,11 +173,57 @@ func TestFetchAll_GitAttributes_FailureJoinsErrorsAndIsNotCached(t *testing.T) {
 	assert.Len(t, errs, 1)
 	require.Len(t, mrs, 1, "the MR is still returned")
 	assert.Nil(t, mrs[0].GeneratedRules)
+	assert.True(t, mrs[0].GeneratedRulesUnknown, "with no earlier rules to keep, the rules are unknown")
+	assert.False(t, mrs[0].MeasureReviewSize(domain.NewSizeExclusions(true, nil, nil)).Size.Known,
+		"unknown rules give an unknown size, not one that counts generated files")
 
 	client.gitAttrsErr = nil
-	_, errs = adapter.FetchAll(context.Background(), mrsvc.FetchOptions{})
+	mrs, errs = adapter.FetchAll(context.Background(), mrsvc.FetchOptions{})
 	assert.Empty(t, errs)
 	assert.Equal(t, 2, client.gitAttrsCalls, "a failed read is retried on the next fetch")
+	require.Len(t, mrs, 1)
+	assert.False(t, mrs[0].GeneratedRulesUnknown, "a good read clears the unknown mark")
+}
+
+// TestFetchAll_GitAttributes_FailureKeepsPreviousRules checks a failed read keeps the
+// rules the previous snapshot recorded, for an MR that did not change since and for one
+// that did, and still reports the error.
+func TestFetchAll_GitAttributes_FailureKeepsPreviousRules(t *testing.T) {
+	unchanged := gqlMROnBranch("gid://gitlab/Project/1", "1", testProjectOne, testBranchMain)
+	changed := gqlMROnBranch("gid://gitlab/Project/1", "2", testProjectOne, testBranchMain)
+	changed.UpdatedAt = "2026-08-01T00:00:00Z"
+	retargeted := gqlMROnBranch("gid://gitlab/Project/1", "3", testProjectOne, "release")
+	client := newFakeFetchClient()
+	client.userMRs[testUserPriya] = []pkggitlab.GQLMergeRequest{unchanged, changed, retargeted}
+	client.gitAttrsErr = errors.New("timeout")
+	rules := domain.ParseGeneratedRules(testAttrsGenerated)
+	snapshotAt := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	previous := []domain.MergeRequest{
+		{ProjectID: 1, IID: 1, TargetBranch: testBranchMain, UpdatedAt: snapshotAt, GeneratedRules: rules},
+		{ProjectID: 1, IID: 2, TargetBranch: testBranchMain, UpdatedAt: snapshotAt, GeneratedRules: rules},
+		{ProjectID: 1, IID: 3, TargetBranch: testBranchMain, UpdatedAt: snapshotAt, GeneratedRules: rules},
+	}
+	cache, _ := newTestAttrsCache(t)
+
+	mrs, errs := attrsAdapter(client, cache).FetchAll(context.Background(), mrsvc.FetchOptions{Previous: previous})
+
+	assert.Len(t, errs, 1, "the failed read is still reported")
+	require.Len(t, mrs, 3)
+	reqIIDs := []string{}
+	for _, r := range client.discussionReqs {
+		reqIIDs = append(reqIIDs, r.IID)
+	}
+	require.NotContains(t, reqIIDs, "1", "precondition: !1 is restored from the snapshot")
+	require.Contains(t, reqIIDs, "2", "precondition: !2 is refetched")
+	byIID := map[int]domain.MergeRequest{}
+	for _, mr := range mrs {
+		byIID[mr.IID] = mr
+	}
+	assert.Equal(t, rules, byIID[1].GeneratedRules, "an unchanged MR keeps its previous rules")
+	assert.Equal(t, rules, byIID[2].GeneratedRules, "a changed MR keeps its previous rules")
+	assert.False(t, byIID[1].GeneratedRulesUnknown)
+	assert.False(t, byIID[2].GeneratedRulesUnknown)
+	assert.True(t, byIID[3].GeneratedRulesUnknown, "rules of another target branch are not kept")
 }
 
 func TestGitAttributesStage_Batches(t *testing.T) {

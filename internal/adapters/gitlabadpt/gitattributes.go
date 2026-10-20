@@ -166,13 +166,32 @@ func (a *GitLabAdapter) gitAttributesStage(
 	return rules, errs
 }
 
-// applyGeneratedRules sets each MR's GeneratedRules from the rules of its key.
+// applyGeneratedRules sets each MR's GeneratedRules from the rules of its key. An MR
+// whose key has no rules (its read failed or its project was not found) keeps the rules
+// the previous snapshot recorded for it on the same target branch; with none to keep,
+// its rules are marked unknown, which makes its review size unknown rather than one
+// that counts generated files.
 func applyGeneratedRules(
 	mrs []domain.MergeRequest, keys map[mrKey]gitAttrsKey, rules map[gitAttrsKey][]domain.GeneratedRule,
+	previous []domain.MergeRequest,
 ) {
+	prevByKey := make(map[mrKey]domain.MergeRequest, len(previous))
+	for _, mr := range previous {
+		prevByKey[mr.Key()] = mr
+	}
 	for i := range mrs {
-		if k, ok := keys[mrs[i].Key()]; ok {
-			mrs[i].GeneratedRules = rules[k]
+		k, ok := keys[mrs[i].Key()]
+		if !ok {
+			continue
 		}
+		if r, read := rules[k]; read {
+			mrs[i].GeneratedRules, mrs[i].GeneratedRulesUnknown = r, false
+			continue
+		}
+		if prev, found := prevByKey[mrs[i].Key()]; found && prev.TargetBranch == k.ref {
+			mrs[i].GeneratedRules, mrs[i].GeneratedRulesUnknown = prev.GeneratedRules, prev.GeneratedRulesUnknown
+			continue
+		}
+		mrs[i].GeneratedRules, mrs[i].GeneratedRulesUnknown = nil, true
 	}
 }
