@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.23.0] - 2026-10-20
+
+No user-facing changes. The review load view and `mrboard load` shipped in 0.22.6; this release documents them in the README and ADR-0015.
+
+## [0.22.7] - 2026-10-20
+
+### Fixed
+- Custom external commands no longer push the board's key hints out of the footer.
+
+## [0.22.6] - 2026-10-20
+
+### Added
+- A review load view, opened with `L`: the active sprint's review size per approver or ticket, as a tree. `↵`, `o`, `c` and `d` act on the selected MR line. `g` groups by person or ticket, `s` cycles the sort, `R` keeps only what is left to approve; these choices are remembered across sessions, and `tab` narrows it to My View.
+- `mrboard load` prints the same tree from the command line, with `--group`, `--sort`, `--remaining`, `--no-filters`, `--json`, `--color`, `--view`, `--reviewer-mrs` and `--cold`. It fails instead of printing a near-empty report when the board has no active sprint or the sprint cannot be read.
+- Review size: each MR's size is counted from its diff, skipping files marked generated in `.gitattributes`. `mrboard fetch` reports it as `review_size` and `size_bucket`, and `--merged-since YYYY-MM-DD` also lists recently merged MRs.
+
+### Fixed
+- The detail pane of a merged MR now shows it as merged.
+
+## [0.22.5] - 2026-10-14
+
+### Fixed
+- Approvers of draft MRs are read correctly again.
+
+## [0.22.4] - 2026-10-14
+
+### Fixed
+- Approvers are now read from GitLab's approval state, so they no longer go missing or stale.
+
+## [0.22.3] - 2026-10-08
+
+### Fixed
+- The approver-change ledger is never written as a public note on the MR anymore.
+
+## [0.22.2] - 2026-10-08
+
+### Fixed
+- mrboard no longer leaves silent baseline notes on MRs whose approvers have not changed.
+
+## [0.22.1] - 2026-10-07
+
+### Fixed
+- Copying an MR URL uses the native system clipboard, so it works in more terminals.
+
+## [0.22.0] - 2026-10-07
+
+### Added
+- With `notifications.teams.announce_approver_changes`, mrboard announces approver changes it finds on any MR, including ones made directly in GitLab. Running instances agree through a ledger of internal notes so each change is announced once.
+
+## [0.21.0] - 2026-10-07
+
+### Added
+- `c` copies the selected MR's URL to the clipboard.
+
+## [0.20.1] - 2026-10-07
+
+### Fixed
+- Card focus no longer wraps around at the first and last card of a column.
+
+## [0.20.0] - 2026-10-07
+
+### Added
+- Cards that need your attention get a warning-colored border: you are the author or assignee and a reviewer commented or the MR is ready to merge, or you are a reviewer who has not started or was asked to re-review. Drafts never do.
+- `mrboard fetch` adds `roles` and `needs_attention` to each MR and accepts `--filtered` and `--view mine|all`.
+
+### Changed
+- My View now shows every MR you authored, are assigned to, or review, so your own MRs no longer vanish while they wait on approvers.
+
 ## [0.19.0] - 2026-09-29
 
 ### Added
