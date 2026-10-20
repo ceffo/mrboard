@@ -145,13 +145,12 @@ func activeSprint(ctx context.Context, c *core.Core) (*ticketsvc.Sprint, error) 
 	return sprint, nil
 }
 
-// sprintStartDay is the sprint's start date as midnight of that day in the team's
-// location, which is the machine's local zone, as `--merged-since` reads a date.
-// The ticket port's start carries the tracker's own offset, typically UTC, whose
-// calendar day can differ from the team's.
+// sprintStartDay is the sprint's start date as midnight of that day in the start's own
+// location: the calendar day the tracker reports, at the offset it reports it in.
+// Converting to the machine's zone could move the start to another day.
 func sprintStartDay(start time.Time) time.Time {
-	y, m, d := start.In(time.Local).Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
+	y, m, d := start.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, start.Location())
 }
 
 // loadFilter is the header filter the load applies: the board's saved filters
@@ -223,16 +222,32 @@ func execLoad(ctx context.Context, opts loadCmdOptions, out io.Writer) error {
 		RemainingOnly: opts.remainingOnly,
 	})
 
-	view := tui.LoadSprint{Name: sprint.Name, Start: sprint.Start.In(time.Local), End: sprint.End.In(time.Local)}
+	view := tui.LoadSprint{Name: sprint.Name, Start: start, End: sprint.End}
+	partial := len(errs) > 0
 	if opts.json {
-		return writeLoadJSON(out, load, view)
+		err = writeLoadJSON(out, load, view, partial)
+	} else {
+		var styles tui.Styles
+		if useColor(opts.color, out) {
+			styles = tui.NewLoadStyles(state.ThemeName, state.ThemeMode)
+		}
+		_, err = io.WriteString(out, tui.RenderLoad(load, view, styles))
 	}
-	var styles tui.Styles
-	if useColor(opts.color, out) {
-		styles = tui.NewLoadStyles(state.ThemeName, state.ThemeMode)
+	if err != nil {
+		return err
 	}
-	_, err = io.WriteString(out, tui.RenderLoad(load, view, styles))
-	return err
+	if partial {
+		return fmt.Errorf("mrboard: the load is partial: %d fetch %s failed, so MRs may be missing",
+			len(errs), plural(len(errs), "error", "errors"))
+	}
+	return nil
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // fetchTimeout bounds one CLI fetch by the configured GitLab timeout.
@@ -260,10 +275,12 @@ func useColor(mode string, out io.Writer) bool {
 }
 
 type loadJSON struct {
-	Sprint          loadSprintJSON  `json:"sprint"`
-	Group           string          `json:"group"`
-	Sort            string          `json:"sort"`
-	RemainingOnly   bool            `json:"remaining_only"`
+	Sprint        loadSprintJSON `json:"sprint"`
+	Group         string         `json:"group"`
+	Sort          string         `json:"sort"`
+	RemainingOnly bool           `json:"remaining_only"`
+	// Partial is true when the fetch reported errors: MRs may be missing from the load.
+	Partial         bool            `json:"partial"`
 	MRCount         int             `json:"mr_count"`
 	PopulationCount int             `json:"population_count"`
 	TeamTotal       loadTotalJSON   `json:"team_total"`
@@ -314,13 +331,13 @@ type loadApproverJSON struct {
 	InTeam   bool   `json:"in_team"`
 }
 
-func writeLoadJSON(out io.Writer, load mrsvc.Load, sprint tui.LoadSprint) error {
+func writeLoadJSON(out io.Writer, load mrsvc.Load, sprint tui.LoadSprint, partial bool) error {
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
-	return enc.Encode(toLoadJSON(load, sprint))
+	return enc.Encode(toLoadJSON(load, sprint, partial))
 }
 
-func toLoadJSON(load mrsvc.Load, sprint tui.LoadSprint) loadJSON {
+func toLoadJSON(load mrsvc.Load, sprint tui.LoadSprint, partial bool) loadJSON {
 	groupNames := map[mrsvc.LoadGrouping]string{mrsvc.LoadByPerson: loadPerson, mrsvc.LoadByTicket: loadJira}
 	sortNames := map[mrsvc.LoadSort]string{
 		mrsvc.LoadSortPerson: loadPerson, mrsvc.LoadSortTicket: loadJira, mrsvc.LoadSortSize: "size",
@@ -330,6 +347,7 @@ func toLoadJSON(load mrsvc.Load, sprint tui.LoadSprint) loadJSON {
 		Group:           groupNames[load.Group],
 		Sort:            sortNames[load.Sort],
 		RemainingOnly:   load.RemainingOnly,
+		Partial:         partial,
 		MRCount:         load.MRCount,
 		PopulationCount: load.PopulationCount,
 		TeamTotal:       loadTotalJSON(load.TeamTotal),
