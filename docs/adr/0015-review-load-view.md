@@ -224,6 +224,24 @@ the ticket cache in the XDG cache dir; a missing file is cached as "no rules". E
 read together in one aliased GraphQL `repository.blobs` query. The TTL is not configurable:
 generated-file markings change rarely, and `--cold` is the escape hatch.
 
+- **Query shape.** One aliased `repository { blobs(ref:, paths: [".gitattributes"], first: 1)
+  { nodes { rawTextBlob } } }` per expired (project, target branch), at most 20 per query
+  (`gqlGitAttributesBatchSize`). An alias selects five fields, two of them Gitaly-backed: 7 by
+  the diffStats reasoning; budgeting 10 covers resolver surcharges and the connection
+  multiplier, so 20 aliases stay at about 203. The query also requests `queryComplexity`, logged
+  at debug level. A failed batch, or a project GitLab does not find, leaves its MRs without rules
+  for that fetch and is not cached; the error joins `FetchAll`'s partial-result errors.
+- **Markings.** The parsed rules ride on each MR (`MergeRequest.GeneratedRules`, in file order)
+  and feed `domain.NewSizeExclusions` per MR, so a per-MR exclusions lookup is
+  `NewSizeExclusions(defaults, configured, mr.GeneratedRules)`. As in git, the last matching line
+  decides each attribute: `attr` and `attr=<value>` set it (`attr=false` unsets), `-attr` unsets,
+  `!attr` returns it to unspecified. `gitlab-generated` decides when set or unset;
+  `linguist-generated` decides when it is unspecified. An unset marking never re-includes a file
+  a built-in or configured glob excludes. Patterns ending in `/` match no file in
+  `.gitattributes` and are ignored, as are quoted patterns and `[attr]` macros.
+- **`--cold`** reaches the adapter as `mrsvc.FetchOptions.Cold`: entries are re-read and the
+  fresh content replaces the cached one.
+
 **The merged-since listing is gated.** `mrsvc.FetchOptions.MergedSince` (zero means skip) adds
 merged-after listings over the board's sources to the list stage, through the same dedup and
 exclusions. Merged MRs need only the thin query — reviewers, `approvedBy` and approval rules give
