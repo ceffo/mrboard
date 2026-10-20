@@ -39,9 +39,12 @@ type Issue struct {
 }
 
 // Sprint is a minimal representation of a JIRA Agile sprint.
+// Start and End are zero when the board does not report them.
 type Sprint struct {
-	ID   int
-	Name string
+	ID    int
+	Name  string
+	Start time.Time
+	End   time.Time
 }
 
 const defaultTimeout = 30 * time.Second
@@ -90,8 +93,10 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 	url := fmt.Sprintf("%s/rest/agile/1.0/board/%d/sprint?state=active", c.instanceURL, boardID)
 	var body struct {
 		Values []struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
+			ID        int    `json:"id"`
+			Name      string `json:"name"`
+			StartDate string `json:"startDate"`
+			EndDate   string `json:"endDate"`
 		} `json:"values"`
 	}
 	if err := c.get(ctx, url, &body); err != nil {
@@ -101,7 +106,24 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 		return nil, nil
 	}
 	s := body.Values[0]
-	return &Sprint{ID: s.ID, Name: s.Name}, nil
+	start, err := parseSprintDate(s.StartDate)
+	if err != nil {
+		return nil, fmt.Errorf("jira: sprint %d start date: %w", s.ID, err)
+	}
+	end, err := parseSprintDate(s.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("jira: sprint %d end date: %w", s.ID, err)
+	}
+	return &Sprint{ID: s.ID, Name: s.Name, Start: start, End: end}, nil
+}
+
+// parseSprintDate reads a sprint timestamp as the agile API renders it (RFC 3339,
+// with fractional seconds). An empty value is the zero time.
+func parseSprintDate(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, s)
 }
 
 const sprintIssuePageSize = 50

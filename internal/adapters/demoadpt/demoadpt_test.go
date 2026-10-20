@@ -363,9 +363,12 @@ func TestTicketsPortServesFixtureAndFallsBackOnUnknownKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, missing)
 
-	keys, err := tk.GetActiveSprintIssueKeys(context.Background(), 1)
+	sprint, err := tk.GetActiveSprint(context.Background(), 1)
 	require.NoError(t, err)
-	assert.Contains(t, keys, "DEMO-1421")
+	require.NotNil(t, sprint)
+	assert.Contains(t, sprint.IssueKeys, "DEMO-1421")
+	assert.Equal(t, "Demo Sprint 42", sprint.Name)
+	assert.True(t, sprint.Start.Before(sprint.End), "sprint start %v must precede end %v", sprint.Start, sprint.End)
 }
 
 func TestSprintFilterNarrowsTheBoard(t *testing.T) {

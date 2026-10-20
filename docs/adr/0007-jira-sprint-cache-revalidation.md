@@ -37,3 +37,9 @@ how often that actually turns into a JIRA call.
   is already in flight — cheap by design, since a cache hit is the common case.
 - Adding a future caller that needs sprint data (e.g. a new keybinding) requires no forceRefresh
   reasoning: call the port, the adapter's policy applies uniformly.
+
+## Amendment (ADR-0015)
+
+The method is now `GetActiveSprint(ctx, boardID) (*ticketsvc.Sprint, error)`: the sprint's name,
+start, end and issue keys, with the same `SprintCacheTTL` policy and `(nil, nil)` for no active
+sprint. The cache key is versioned (`sprint_v2_board_<id>`) because the cached value changed shape.
