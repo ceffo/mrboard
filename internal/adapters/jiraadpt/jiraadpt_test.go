@@ -18,6 +18,7 @@ import (
 const (
 	issueKeyOD10 = "OD-10"
 	issueKeyOD11 = "OD-11"
+	sprintName1  = "Sprint 1"
 )
 
 // fakeClient is a trivial in-memory implementation of jiraClient for tests.
@@ -153,13 +154,13 @@ func TestGetActiveSprint(t *testing.T) {
 	}{
 		{
 			name:      "cached within the sprint TTL",
-			sprint:    &pkgjira.Sprint{ID: 42, Name: "Sprint 1", Start: sprintStart, End: sprintEnd},
+			sprint:    &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
 			ttl:       time.Hour,
 			wantCalls: []int{2, 2},
 		},
 		{
 			name:      "expired TTL revalidates every ask",
-			sprint:    &pkgjira.Sprint{ID: 42, Name: "Sprint 1", Start: sprintStart, End: sprintEnd},
+			sprint:    &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
 			ttl:       -time.Second,
 			wantCalls: []int{2, 4},
 		},
@@ -183,7 +184,7 @@ func TestGetActiveSprint(t *testing.T) {
 					assert.Nil(t, got)
 				} else {
 					require.NotNil(t, got)
-					assert.Equal(t, "Sprint 1", got.Name)
+					assert.Equal(t, sprintName1, got.Name)
 					assert.True(t, sprintStart.Equal(got.Start), "start %v", got.Start)
 					assert.True(t, sprintEnd.Equal(got.End), "end %v", got.End)
 					assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, got.IssueKeys)
@@ -196,7 +197,7 @@ func TestGetActiveSprint(t *testing.T) {
 
 func TestGetActiveSprint_ExpiredCacheObservesRollover(t *testing.T) {
 	fc := &fakeClient{
-		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
+		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1},
 		sprintKeys: []string{issueKeyOD10},
 	}
 	// A long general TTL alongside an already-expired SprintCacheTTL: the sprint
