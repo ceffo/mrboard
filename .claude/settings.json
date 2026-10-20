@@ -35,5 +35,13 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Write(//Users/moncefnaji/code/github.com/mrboard.worktrees/supervisor/**)",
+      "Edit(//Users/moncefnaji/code/github.com/mrboard.worktrees/supervisor/**)",
+      "Write(//Users/moncefnaji/code/github.com/mrboard.worktrees/briefs/**)",
+      "Edit(//Users/moncefnaji/code/github.com/mrboard.worktrees/briefs/**)"
+    ]
   }
 }
