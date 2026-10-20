@@ -379,7 +379,7 @@ func BuildCustomCommands(cmds []config.Command) *CustomCommands {
 		byAction[&a] = cmd
 	}
 	return &CustomCommands{
-		ctx:      NewDynamicContext("custom-commands", "Commands", actions),
+		ctx:      NewDynamicContext("custom-commands", "Commands", actions, WithFooterTransparent()),
 		byAction: byAction,
 	}
 }

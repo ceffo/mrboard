@@ -94,7 +94,9 @@ type Context struct {
 	capturesText bool // a focused text input consumes printable keys
 	actions      []*Action
 	groups       []footerGroup
-	byKey        map[string]string // raw key → field name, for conflict checks
+	// footerTransparent: see WithFooterTransparent.
+	footerTransparent bool
+	byKey             map[string]string // raw key → field name, for conflict checks
 }
 
 // ContextOpt customises a Context at construction time.
@@ -105,6 +107,13 @@ type ContextOpt func(*Context)
 // are suppressed while it is on top of the stack.
 func WithCapturesText() ContextOpt {
 	return func(c *Context) { c.capturesText = true }
+}
+
+// WithFooterTransparent marks a context that adds key bindings to the stack
+// without owning the status line: the footer renders the nearest context below
+// it that does. Its own bindings still shadow lower contexts for dispatch.
+func WithFooterTransparent() ContextOpt {
+	return func(c *Context) { c.footerTransparent = true }
 }
 
 // WithFooterGroup renders the given member actions as a single footer item.

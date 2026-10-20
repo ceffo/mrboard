@@ -123,6 +123,9 @@ The resulting context is pushed only in the `[Base, Board]` stack —
 `[Base, Board, Commands]` — never in Detail or an overlay. Sitting above
 `Board` means a configured key colliding with a board default (e.g. `r`)
 shadows it via the ordinary shadowing rule, with no override logic of its own.
+The context is built with `WithFooterTransparent()`: it shadows keys but never
+owns the status line, so the footer renders `Board`'s hints (`footerStack` in
+`footer.go` drops transparent contexts from the top before choosing).
 Every configured command is `PriorityModal` (footer never shows it,
 regardless of count) and `CategoryAct` (grouped with `refresh`/`open
 MR`/`reviewers`/`diff` in the `?` help modal).
