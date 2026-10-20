@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 func TestParseViewMode(t *testing.T) {
@@ -56,7 +57,7 @@ const (
 
 func testSizing(verbose bool) sizeOptions {
 	return sizeOptions{
-		exclusions: domain.NewSizeExclusions(true, nil, nil),
+		exclusions: domain.UniformSizeExclusions(domain.NewSizeExclusions(true, nil, nil)),
 		thresholds: domain.DefaultSizeThresholds,
 		verbose:    verbose,
 	}
@@ -99,4 +100,44 @@ func TestToMRJSON_UnknownReviewSize(t *testing.T) {
 	data, err := json.Marshal(got)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"review_size":null`)
+}
+
+// TestReviewSize_FetchMatchesLoadPerMR checks fetch output and the review load
+// measure each MR with the same per-MR exclusions, when two projects mark
+// different files generated.
+func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
+	stats := []domain.FileDiffStat{{Path: "api.gen.go", Additions: 300}, {Path: testPathMain, Additions: 20}}
+	mrs := []domain.MergeRequest{
+		{IID: 1, ProjectID: 1, Title: "feat(OD-1): a", DiffStats: stats},
+		{IID: 2, ProjectID: 2, Title: "feat(OD-1): b", DiffStats: stats},
+	}
+	sizing := testSizing(false)
+	sizing.exclusions = func(mr domain.MergeRequest) domain.SizeExclusions {
+		if mr.ProjectID == 1 {
+			return domain.NewSizeExclusions(true, nil, []string{"*.gen.go"})
+		}
+		return domain.NewSizeExclusions(true, nil, nil)
+	}
+
+	load := mrsvc.ComputeLoad(mrs, mrsvc.LoadOptions{
+		SprintKeys: map[string]bool{"OD-1": true},
+		Exclusions: sizing.exclusions,
+		Thresholds: sizing.thresholds,
+		Group:      mrsvc.LoadByTicket,
+	})
+
+	require.Len(t, load.Groups, 1)
+	require.Len(t, load.Groups[0].Lines, 2)
+	loadSize := map[int]int{}
+	for _, l := range load.Groups[0].Lines {
+		require.True(t, l.Size.Known)
+		loadSize[l.MR.IID] = l.Size.Lines
+	}
+	for _, mr := range mrs {
+		got := toMRJSON(mr, "", sizing)
+		require.NotNil(t, got.ReviewSize)
+		assert.Equal(t, loadSize[mr.IID], *got.ReviewSize, "MR !%d", mr.IID)
+	}
+	assert.Equal(t, 20, loadSize[1])
+	assert.Equal(t, 320, loadSize[2])
 }
