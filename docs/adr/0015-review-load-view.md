@@ -132,6 +132,22 @@ silently disappears.
 **Remaining only.** The toggle hides a person's row for an MR once that person has approved it or
 the MR is merged. Drafts stay, marked as drafts.
 
+**Computation details** (`mrsvc.ComputeLoad`, shared by the CLI and the TUI):
+
+- An MR is merged when `MergeRequest.MergedAt` is set; a listed MR without it is open. Closed
+  unmerged MRs are never listed. An MR listed both open and merged counts once, as merged.
+- Every roster member gets a person group, even with no load, unless the reviewer filter excludes
+  them. The "others" group holds one line per (MR, outside approver), each credited the full size,
+  and appears only when it has lines.
+- An excluded reviewer loses their group (or their lines in "others") but stays listed as an
+  approver on MR lines: the MR and its co-approvers are facts the filter does not change.
+- In a ticket group, "remaining only" keeps an MR line while it is open and some approver has not
+  approved; an open MR with no approver stays. The team total and MR count cover the same lines.
+- MRs with no assigned approver carry no person load but count in their ticket group and the team
+  total.
+- Line order under a size sort puts unknown sizes last; a ticket sort orders keys of one project by
+  number (`OD-9` before `OD-10`).
+
 ### CLI output layout (resolved 2026-10-19)
 
 Prototype: `prototypes/review-load-cli/` on branch `prototype/review-load-cli` — three layouts
