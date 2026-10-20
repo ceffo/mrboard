@@ -98,6 +98,7 @@ query($username: String!) {
         }
         resolvedDiscussionsCount
         resolvableDiscussionsCount
+        diffHeadSha
       }
     }
   }
@@ -168,7 +169,10 @@ type GQLMergeRequest struct {
 	// phase uses them as a second cache-invalidation signal alongside updatedAt.
 	ResolvedDiscussionsCount   int `json:"resolvedDiscussionsCount"`
 	ResolvableDiscussionsCount int `json:"resolvableDiscussionsCount"`
-	Discussions                struct {
+	// DiffHeadSHA is the head commit of the MR's diff, requested by the thin query
+	// only; it keys the diff-stats cache.
+	DiffHeadSHA string `json:"diffHeadSha"`
+	Discussions struct {
 		PageInfo struct {
 			HasNextPage bool `json:"hasNextPage"`
 		} `json:"pageInfo"`
@@ -324,6 +328,7 @@ query($username: String!) {
         }
         resolvedDiscussionsCount
         resolvableDiscussionsCount
+        diffHeadSha
       }
     }
   }

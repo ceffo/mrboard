@@ -19,11 +19,12 @@ func buildFetchCmd() *cobra.Command {
 	var cold bool
 	var filtered bool
 	var view string
+	var verbose bool
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Fetch MRs and print as JSON, mirroring the TUI's own fetch",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts := fetchCmdOptions{cold: cold, filtered: filtered}
+			opts := fetchCmdOptions{cold: cold, filtered: filtered, verbose: verbose}
 			if cmd.Flags().Changed("reviewer-mrs") {
 				opts.reviewerMRsOverride = &reviewerMRs
 			}
@@ -46,6 +47,8 @@ func buildFetchCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&cold, "cold", false,
 		"ignore the on-disk snapshot and recompute every MR from scratch, "+
 			"bypassing incremental fetch (docs/adr/0005)")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
+		"list each MR's counted and excluded files behind its review size")
 	return cmd
 }
 
@@ -64,6 +67,9 @@ type fetchCmdOptions struct {
 	filtered bool
 	// viewOverride, when set, replaces the saved view mode and implies filtered.
 	viewOverride *domain.ViewMode
+	// verbose, when true, lists the counted and excluded files behind each MR's
+	// review size.
+	verbose bool
 }
 
 func parseViewMode(s string) (domain.ViewMode, error) {
@@ -145,13 +151,27 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 		km := domain.NewTicketKeyMatcher(c.Config.Jira.CaseInsensitiveTicketMatch)
 		mrs = mrsvc.FilterAndSort(mrs, boardFilterOptions(state, viewMode, c.Config.CurrentUser, km))
 	}
-	return printJSON(mrs, c.Config.CurrentUser)
+	rs := c.Config.ReviewSize
+	sizing := sizeOptions{
+		exclusions: domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, nil),
+		thresholds: rs.Buckets.Thresholds(),
+		verbose:    opts.verbose,
+	}
+	return printJSON(mrs, c.Config.CurrentUser, sizing)
 }
 
-func printJSON(mrs []domain.MergeRequest, currentUser string) error {
+// sizeOptions controls how fetch output reports each MR's review size
+// (docs/adr/0015, "Review size metric").
+type sizeOptions struct {
+	exclusions domain.SizeExclusions
+	thresholds domain.SizeThresholds
+	verbose    bool
+}
+
+func printJSON(mrs []domain.MergeRequest, currentUser string, sizing sizeOptions) error {
 	out := make([]mrJSON, 0, len(mrs))
 	for _, mr := range mrs {
-		out = append(out, toMRJSON(mr, currentUser))
+		out = append(out, toMRJSON(mr, currentUser, sizing))
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -173,6 +193,17 @@ type mrJSON struct {
 	// omitted when none is set.
 	Roles          []domain.Role `json:"roles,omitempty"`
 	NeedsAttention bool          `json:"needs_attention,omitempty"`
+	// ReviewSize is null when the MR's diff stats are unknown, and SizeBucket is
+	// then "?". SizeFiles is set in verbose mode for an MR of known size.
+	ReviewSize *int           `json:"review_size"`
+	SizeBucket string         `json:"size_bucket"`
+	SizeFiles  *sizeFilesJSON `json:"size_files,omitempty"`
+}
+
+// sizeFilesJSON lists the files behind an MR's review size.
+type sizeFilesJSON struct {
+	Counted  []domain.FileDiffStat `json:"counted"`
+	Excluded []domain.FileDiffStat `json:"excluded"`
 }
 
 type reviewerJSON struct {
@@ -181,7 +212,7 @@ type reviewerJSON struct {
 	IsApprover bool   `json:"is_approver,omitempty"`
 }
 
-func toMRJSON(mr domain.MergeRequest, currentUser string) mrJSON {
+func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mrJSON {
 	reviewers := make([]reviewerJSON, 0, len(mr.Reviewers))
 	approvalsRequired := 0
 	for _, r := range mr.Reviewers {
@@ -195,6 +226,19 @@ func toMRJSON(mr domain.MergeRequest, currentUser string) mrJSON {
 		})
 	}
 	now := time.Now()
+	m := mr.MeasureReviewSize(sizing.exclusions)
+	var reviewSize *int
+	var sizeFiles *sizeFilesJSON
+	if m.Size.Known {
+		lines := m.Size.Lines
+		reviewSize = &lines
+		if sizing.verbose {
+			sizeFiles = &sizeFilesJSON{
+				Counted:  append([]domain.FileDiffStat{}, m.Counted...),
+				Excluded: append([]domain.FileDiffStat{}, m.Excluded...),
+			}
+		}
+	}
 	return mrJSON{
 		ID:                mr.ID,
 		Title:             mr.Title,
@@ -208,5 +252,8 @@ func toMRJSON(mr domain.MergeRequest, currentUser string) mrJSON {
 		RoundTrips:        mr.RoundTripCount,
 		Roles:             mr.RolesOf(currentUser),
 		NeedsAttention:    mr.NeedsAttention(currentUser),
+		ReviewSize:        reviewSize,
+		SizeBucket:        string(sizing.thresholds.Bucket(m.Size)),
+		SizeFiles:         sizeFiles,
 	}
 }

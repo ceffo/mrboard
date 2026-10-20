@@ -281,16 +281,19 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 			return nil, err
 		}
 		key := mr.Key()
-		ds.mrs = append(ds.mrs, mr)
-		ds.drafts[key] = fm.Draft
+		var diff domain.MRDiff
 		if fm.Diff != nil {
-			ds.diffs[key] = buildDiff(*fm.Diff)
+			diff = buildDiff(*fm.Diff)
 		} else {
 			// Every MR needs a diff: the diff view is one keypress from any card,
 			// and a card that answers "no files changed" reads as a broken demo.
 			// Only the MRs whose diff is worth showing off spell one out.
-			ds.diffs[key] = syntheticDiff(mr)
+			diff = syntheticDiff(mr)
 		}
+		mr.HeadSHA, mr.DiffStats = diff.HeadSHA, diffStatsOf(diff)
+		ds.mrs = append(ds.mrs, mr)
+		ds.drafts[key] = fm.Draft
+		ds.diffs[key] = diff
 		if len(fm.Threads) > 0 {
 			th, err := buildThreads(fm.Threads, ago)
 			if err != nil {
@@ -483,4 +486,14 @@ func buildDiff(fd fixtureDiff) domain.MRDiff {
 		})
 	}
 	return domain.MRDiff{BaseSHA: fd.BaseSHA, HeadSHA: fd.HeadSHA, Files: files}
+}
+
+// diffStatsOf derives an MR's per-file diff stats from its fixture diff, so the
+// review size the demo reports matches the diff view.
+func diffStatsOf(diff domain.MRDiff) []domain.FileDiffStat {
+	stats := make([]domain.FileDiffStat, 0, len(diff.Files))
+	for _, f := range diff.Files {
+		stats = append(stats, domain.FileDiffStat{Path: f.NewPath, Additions: f.LinesAdded, Deletions: f.LinesRemoved})
+	}
+	return stats
 }

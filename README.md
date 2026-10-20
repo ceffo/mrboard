@@ -90,7 +90,9 @@ mrboard auto     # run mrboard's automatic write actions once, outside the TUI
 
 `fetch` mirrors exactly what the TUI fetches — same saved settings, same on-disk snapshot — and
 never writes to GitLab. `--reviewer-mrs` overrides the saved "include reviewer-sourced MRs"
-setting; `--cold` ignores the snapshot and recomputes every MR from scratch.
+setting; `--cold` ignores the snapshot and recomputes every MR from scratch. Each MR carries its
+review size (`review_size`, null when unknown, and `size_bucket`); `--verbose` adds the counted
+and excluded files behind it.
 
 `auto` runs mrboard's automatic write actions (currently: auto-assigning the team as reviewers
 on newly opened, ticket-linked MRs — see `auto_assign_reviewers` in

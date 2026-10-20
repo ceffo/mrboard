@@ -179,6 +179,19 @@ type MergeRequest struct {
 	ReviewerSource bool // true when this MR came only from a reviewer-source fetch
 
 	IssueType string // populated asynchronously; "" means not yet fetched or no linked ticket
+
+	// HeadSHA is the commit at the head of the MR's diff. A push moves it; comments,
+	// labels and approvals do not. DiffStats describe the diff at this SHA.
+	HeadSHA string
+	// DiffStats are the per-file line counts of the MR's diff at HeadSHA. Nil means
+	// unknown (never fetched, or the fetch for this HeadSHA failed); an empty non-nil
+	// slice is a known empty diff. Review size is derived from them at read time.
+	DiffStats []FileDiffStat
+}
+
+// MeasureReviewSize computes mr's review size from its diff stats under e.
+func (mr MergeRequest) MeasureReviewSize(e SizeExclusions) SizeMeasurement {
+	return e.MeasureReviewSize(mr.DiffStats)
 }
 
 // DisplayAuthor returns the human-readable author name, falling back to the username.

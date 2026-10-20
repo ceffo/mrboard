@@ -204,9 +204,12 @@ on top. The two commands stay at parity by construction.
   stubs carry `sha`). Stats are refetched only when the head SHA moves — a push. Comments, labels
   and approvals bump `updatedAt` but leave the diff, so they cost no size fetch.
 - **Query shape.** One aliased GraphQL `diffStats { path additions deletions }` query per batch
-  of 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. At ~5 complexity per alias
-  this stays under the 250 ceiling; the constant is confirmed with `queryComplexity` at
-  implementation, as `gqlDiscussionsBatchSize` was.
+  of at most 40 MRs whose SHA moved, for REST- and GraphQL-sourced MRs alike. The constant
+  (`gqlDiffStatsBatchSize`) is 30, not yet measured against a real complexity score: GitLab scores
+  each selected field 1 and a Gitaly-backed field 1 more (the discussions batch measured exactly its
+  field count, 16 per alias), so a `diffStats` alias is estimated at 7 and 30 of them at ~213,
+  leaving margin under the 250 ceiling for an error in the estimate. Each query also requests
+  `queryComplexity { score limit }`, logged at debug level; a real run's score may raise the cap.
 - **Timing.** The size stage runs concurrently with phase-2 discussions and `FetchAll` returns
   once both finish: one result, one snapshot save.
 - **The snapshot caches per-file stats**, not the computed size. Review size is derived at read
