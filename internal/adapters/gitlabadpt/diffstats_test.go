@@ -91,24 +91,60 @@ func TestFetchAll_DiffStats_NothingMovedIssuesNoRequest(t *testing.T) {
 	assert.NotNil(t, mrs[0].DiffStats, "a cached known-empty diff stays known")
 }
 
-func TestFetchAll_DiffStats_BatchedAtMostBatchSize(t *testing.T) {
-	client := newFakeFetchClient()
-	n := gqlDiffStatsBatchSize + 1
+// gqlMRsAtSHA lists n thin MRs, one per project, all at sha.
+func gqlMRsAtSHA(n int, sha string) []pkggitlab.GQLMergeRequest {
+	mrs := make([]pkggitlab.GQLMergeRequest, 0, n)
 	for i := 1; i <= n; i++ {
-		client.userMRs[testUserPriya] = append(client.userMRs[testUserPriya], gqlMRAtSHA(
-			fmt.Sprintf("gid://gitlab/Project/%d", i), "1", fmt.Sprintf("group/p%d", i), testSHANew))
+		mrs = append(mrs, gqlMRAtSHA(
+			fmt.Sprintf("gid://gitlab/Project/%d", i), "1", fmt.Sprintf("group/p%d", i), sha))
+	}
+	return mrs
+}
+
+func TestFetchAll_DiffStats_BatchSizePinnedAt30(t *testing.T) {
+	tests := []struct {
+		targets   int
+		wantCalls int
+	}{
+		{targets: 30, wantCalls: 1},
+		{targets: 31, wantCalls: 2},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%d targets", tc.targets), func(t *testing.T) {
+			client := newFakeFetchClient()
+			client.userMRs[testUserPriya] = gqlMRsAtSHA(tc.targets, testSHANew)
+
+			mrs, errs := userSourceAdapter(client).FetchAll(context.Background(), mrsvc.FetchOptions{})
+
+			assert.Empty(t, errs)
+			assert.Len(t, mrs, tc.targets)
+			assert.Equal(t, tc.wantCalls, client.diffStatsCalls)
+			assert.Len(t, client.diffStatsReqs, tc.targets)
+		})
+	}
+}
+
+// TestFetchAll_DiffStats_LegacySnapshotBatchedAtMost30 covers the first fetch
+// after upgrading: no cached MR has a head SHA, so every MR is a target, and
+// each batch must still stay within the cap.
+func TestFetchAll_DiffStats_LegacySnapshotBatchedAtMost30(t *testing.T) {
+	const n = 65
+	client := newFakeFetchClient()
+	client.userMRs[testUserPriya] = gqlMRsAtSHA(n, testSHANew)
+	previous := make([]domain.MergeRequest, 0, n)
+	for i := 1; i <= n; i++ {
+		previous = append(previous, domain.MergeRequest{ProjectID: i, IID: 1})
 	}
 
-	mrs, errs := userSourceAdapter(client).FetchAll(context.Background(), mrsvc.FetchOptions{})
+	mrs, errs := userSourceAdapter(client).FetchAll(context.Background(), mrsvc.FetchOptions{Previous: previous})
 
 	assert.Empty(t, errs)
 	assert.Len(t, mrs, n)
-	assert.Equal(t, 2, client.diffStatsCalls)
-	assert.Len(t, client.diffStatsReqs, n)
+	assert.Len(t, client.diffStatsReqs, n, "every MR of a legacy snapshot is a target")
+	assert.Equal(t, 3, client.diffStatsCalls)
 	for _, size := range client.diffStatsBatch {
-		assert.LessOrEqual(t, size, gqlDiffStatsBatchSize)
+		assert.LessOrEqual(t, size, 30)
 	}
-	assert.LessOrEqual(t, gqlDiffStatsBatchSize, 40, "docs/adr/0015 caps a diffStats batch at 40 MRs")
 }
 
 func TestFetchAll_DiffStats_FailedBatchLeavesMovedMRsUnknown(t *testing.T) {
