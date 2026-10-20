@@ -187,6 +187,15 @@ type MergeRequest struct {
 	// unknown (never fetched, or the fetch for this HeadSHA failed); an empty non-nil
 	// slice is a known empty diff. Review size is derived from them at read time.
 	DiffStats []FileDiffStat
+
+	// MergedAt is when the MR was merged; zero for an open MR. Closed-unmerged MRs are
+	// never listed, so a listed MR with a zero MergedAt is open.
+	MergedAt time.Time
+}
+
+// Merged reports whether mr has been merged.
+func (mr MergeRequest) Merged() bool {
+	return !mr.MergedAt.IsZero()
 }
 
 // MeasureReviewSize computes mr's review size from its diff stats under e.
