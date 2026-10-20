@@ -73,7 +73,7 @@ func loadOpts() mrsvc.LoadOptions {
 		SprintStart: loadSprintStart,
 		SprintKeys:  map[string]bool{ticketOD1: true, ticketOD2: true},
 		Team:        []string{userAlice, userBob, userCarol},
-		Exclusions:  domain.NewSizeExclusions(true, nil, nil),
+		Exclusions:  domain.UniformSizeExclusions(domain.NewSizeExclusions(true, nil, nil)),
 		Thresholds:  domain.DefaultSizeThresholds,
 		Sort:        mrsvc.LoadSortSize,
 	}
@@ -339,4 +339,61 @@ func TestComputeLoad_OpenAndMergedCopiesCountOnce(t *testing.T) {
 	require.Len(t, got.Groups, 1)
 	require.Len(t, got.Groups[0].Lines, 1)
 	assert.True(t, got.Groups[0].Lines[0].Merged)
+}
+
+func TestComputeLoad_SprintStartIsADayInItsLocation(t *testing.T) {
+	cest := time.FixedZone("CEST", 2*60*60)
+	merged := func(iid int, at time.Time) domain.MergeRequest {
+		m := loadMR(iid, "feat(OD-1): a", 1, 0, approver(userAlice, false))
+		m.MergedAt = at
+		return m
+	}
+	mrs := []domain.MergeRequest{
+		merged(1, time.Date(2026, 10, 4, 21, 30, 0, 0, time.UTC)), // 23:30 CEST the day before
+		merged(2, time.Date(2026, 10, 4, 22, 30, 0, 0, time.UTC)), // 00:30 CEST on the start day
+		merged(3, time.Date(2026, 10, 5, 7, 0, 0, 0, cest)),       // start day, before the start time
+	}
+	tests := []struct {
+		name  string
+		start time.Time
+		want  []string
+	}{
+		{"start in CEST counts from CEST midnight", time.Date(2026, 10, 5, 8, 0, 0, 0, cest), []string{"!2", "!3"}},
+		{"start in UTC counts from UTC midnight", time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC), []string{"!3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := loadOpts()
+			opts.SprintStart = tt.start
+			opts.Group = mrsvc.LoadByTicket
+
+			got := summarize(mrsvc.ComputeLoad(mrs, opts))
+
+			require.Len(t, got, 1)
+			assert.Equal(t, tt.want, got[0].Lines)
+		})
+	}
+}
+
+func TestComputeLoad_ExclusionsPerMR(t *testing.T) {
+	stats := []domain.FileDiffStat{{Path: "api.gen.go", Additions: 300}, {Path: "main.go", Additions: 20}}
+	a := loadMR(1, "feat(OD-1): a", 0, 0, approver(userAlice, false))
+	a.DiffStats = stats
+	b := loadMR(2, "feat(OD-1): b", 0, 0, approver(userAlice, false))
+	b.ProjectID, b.DiffStats = 2, stats
+	opts := loadOpts()
+	opts.Group = mrsvc.LoadByTicket
+	opts.Exclusions = func(mr domain.MergeRequest) domain.SizeExclusions {
+		if mr.ProjectID == 1 {
+			return domain.NewSizeExclusions(true, nil, []string{"*.gen.go"})
+		}
+		return domain.NewSizeExclusions(true, nil, nil)
+	}
+
+	got := mrsvc.ComputeLoad([]domain.MergeRequest{a, b}, opts)
+
+	require.Len(t, got.Groups, 1)
+	require.Len(t, got.Groups[0].Lines, 2) // size sort: project 2 counts the generated file
+	assert.Equal(t, domain.ReviewSize{Lines: 320, Known: true}, got.Groups[0].Lines[0].Size)
+	assert.Equal(t, domain.ReviewSize{Lines: 20, Known: true}, got.Groups[0].Lines[1].Size)
 }

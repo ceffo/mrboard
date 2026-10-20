@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/core"
 	"github.com/ceffo/mrboard/internal/domain"
 	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
@@ -153,17 +154,23 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	}
 	rs := c.Config.ReviewSize
 	sizing := sizeOptions{
-		exclusions: domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, nil),
+		exclusions: reviewSizeExclusions(rs),
 		thresholds: rs.Buckets.Thresholds(),
 		verbose:    opts.verbose,
 	}
 	return printJSON(mrs, c.Config.CurrentUser, sizing)
 }
 
+// reviewSizeExclusions is the per-MR exclusion lookup every command measures review
+// size with, so `mrboard fetch` and the review load report the same size.
+func reviewSizeExclusions(rs config.ReviewSize) domain.SizeExclusionsFor {
+	return domain.UniformSizeExclusions(domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, nil))
+}
+
 // sizeOptions controls how fetch output reports each MR's review size
 // (docs/adr/0015, "Review size metric").
 type sizeOptions struct {
-	exclusions domain.SizeExclusions
+	exclusions domain.SizeExclusionsFor
 	thresholds domain.SizeThresholds
 	verbose    bool
 }
@@ -226,7 +233,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		})
 	}
 	now := time.Now()
-	m := mr.MeasureReviewSize(sizing.exclusions)
+	m := mr.MeasureReviewSize(sizing.exclusions.Of(mr))
 	var reviewSize *int
 	var sizeFiles *sizeFilesJSON
 	if m.Size.Known {
