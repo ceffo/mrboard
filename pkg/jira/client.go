@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -39,9 +40,12 @@ type Issue struct {
 }
 
 // Sprint is a minimal representation of a JIRA Agile sprint.
+// Start and End are zero when the board does not report them.
 type Sprint struct {
-	ID   int
-	Name string
+	ID    int
+	Name  string
+	Start time.Time
+	End   time.Time
 }
 
 const defaultTimeout = 30 * time.Second
@@ -90,8 +94,10 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 	url := fmt.Sprintf("%s/rest/agile/1.0/board/%d/sprint?state=active", c.instanceURL, boardID)
 	var body struct {
 		Values []struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
+			ID        int    `json:"id"`
+			Name      string `json:"name"`
+			StartDate string `json:"startDate"`
+			EndDate   string `json:"endDate"`
 		} `json:"values"`
 	}
 	if err := c.get(ctx, url, &body); err != nil {
@@ -101,7 +107,33 @@ func (c *Client) GetActiveSprint(ctx context.Context, boardID int) (*Sprint, err
 		return nil, nil
 	}
 	s := body.Values[0]
-	return &Sprint{ID: s.ID, Name: s.Name}, nil
+	return &Sprint{
+		ID:    s.ID,
+		Name:  s.Name,
+		Start: sprintDate(s.ID, "startDate", s.StartDate),
+		End:   sprintDate(s.ID, "endDate", s.EndDate),
+	}, nil
+}
+
+// sprintDateLayouts are the timestamp forms the agile API renders: RFC 3339
+// with a colon in the offset, and the "+0000" form without one. Fractional
+// seconds are accepted by both.
+var sprintDateLayouts = []string{time.RFC3339, "2006-01-02T15:04:05Z0700"}
+
+// sprintDate reads a sprint timestamp. A missing or unreadable value yields the
+// zero time and a warning: the dates are advisory, and must never cost the
+// caller the sprint's issue keys.
+func sprintDate(sprintID int, field, raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
+	}
+	for _, layout := range sprintDateLayouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t
+		}
+	}
+	slog.Warn("jira: unreadable sprint date", "sprint_id", sprintID, "field", field, "value", raw)
+	return time.Time{}
 }
 
 const sprintIssuePageSize = 50

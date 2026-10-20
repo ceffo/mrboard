@@ -1649,8 +1649,11 @@ func makeSprintFetchCmd(base context.Context, enricher ticketsvc.TicketEnricher,
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(base, ticketFetchTimeout)
 		defer cancel()
-		keys, err := enricher.GetActiveSprintIssueKeys(ctx, boardID)
-		return SprintIssueKeysMsg{Keys: keys, Err: err}
+		sprint, err := enricher.GetActiveSprint(ctx, boardID)
+		if err != nil || sprint == nil {
+			return SprintIssueKeysMsg{Err: err}
+		}
+		return SprintIssueKeysMsg{Keys: sprint.IssueKeys}
 	}
 }
 

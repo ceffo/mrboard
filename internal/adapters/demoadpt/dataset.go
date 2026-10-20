@@ -31,6 +31,10 @@ type dataset struct {
 	members      map[int][]domain.ProjectMember
 	issueTypes   map[string]string
 	sprintKeys   []string
+	sprintName   string
+	sprintStart  time.Time
+	sprintEnd    time.Time
+	hasSprint    bool
 	settings     Settings
 
 	snapshotWrittenAt time.Time
