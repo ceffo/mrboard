@@ -148,6 +148,9 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 
 	// author · phase
 	phaseLbl := mrPhaseLabel(d.mr.Phase)
+	if d.mr.Merged() {
+		phaseLbl = "Merged " + d.mr.MergedAt.Format("2006-01-02")
+	}
 	add(d.styles.CardAuthor.Render(d.mr.DisplayAuthor()) +
 		d.styles.DetailMeta.Render("  ·  "+phaseLbl))
 
@@ -172,7 +175,7 @@ func (d detailWidget) buildLines(innerWidth int) []string {
 	for _, r := range d.detailReviewerLines() {
 		add(r)
 	}
-	if d.mr.Phase == domain.PhaseReadyToMerge &&
+	if !d.mr.Merged() && d.mr.Phase == domain.PhaseReadyToMerge &&
 		d.mr.DetailedMergeStatus != detailedMergeStatusMergeable &&
 		d.mr.DetailedMergeStatus != "" {
 		add(d.styles.ErrorMsg.Render("⚠ " + mergeBlockReason(d.mr.DetailedMergeStatus)))
