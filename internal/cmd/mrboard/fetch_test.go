@@ -56,7 +56,7 @@ const (
 
 func testSizing(verbose bool) sizeOptions {
 	return sizeOptions{
-		exclusions: domain.NewSizeExclusions(true, nil, nil),
+		exclusions: sizeExclusionsFor(true, nil),
 		thresholds: domain.DefaultSizeThresholds,
 		verbose:    verbose,
 	}
@@ -99,4 +99,21 @@ func TestToMRJSON_UnknownReviewSize(t *testing.T) {
 	data, err := json.Marshal(got)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"review_size":null`)
+}
+
+func TestToMRJSON_GeneratedRulesExcludeFiles(t *testing.T) {
+	mr := domain.MergeRequest{
+		DiffStats: []domain.FileDiffStat{
+			{Path: testPathMain, Additions: 10},
+			{Path: "gen/client.go", Additions: 900},
+		},
+		GeneratedRules: domain.ParseGeneratedRules("gen/** linguist-generated\n"),
+	}
+
+	got := toMRJSON(mr, "", testSizing(true))
+
+	require.NotNil(t, got.ReviewSize)
+	assert.Equal(t, 10, *got.ReviewSize, "files the MR's .gitattributes marks generated are not counted")
+	require.NotNil(t, got.SizeFiles)
+	assert.Equal(t, []domain.FileDiffStat{{Path: "gen/client.go", Additions: 900}}, got.SizeFiles.Excluded)
 }

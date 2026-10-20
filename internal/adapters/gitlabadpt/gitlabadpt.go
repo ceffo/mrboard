@@ -35,6 +35,9 @@ type Config struct {
 	// ClaimSettle is the pause between appending an approver claim and re-reading the
 	// ledger to see whether it won. Zero skips the pause.
 	ClaimSettle time.Duration
+	// GitAttributes caches each project's root .gitattributes per target branch. Nil
+	// reads every one on every fetch.
+	GitAttributes *GitAttributesCache
 }
 
 // gitLabClient is the set of pkg/gitlab.Client capabilities used by the adapter.
@@ -85,6 +88,17 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 		fetchedStats, statsErrs = a.diffStatsStage(ctx, statsTargets)
 	}()
 
+	// Stage 3b, concurrently with stage 4: generated-file rules — the root
+	// .gitattributes of each survivor's (project, target branch), cached on disk.
+	attrsKeys := gitAttrsKeys(toEnrichREST, toEnrichGQL)
+	var generated map[gitAttrsKey][]domain.GeneratedRule
+	var attrsErrs []error
+	attrsDone := make(chan struct{})
+	go func() {
+		defer close(attrsDone)
+		generated, attrsErrs = a.gitAttributesStage(ctx, attrsKeys, opts.Cold)
+	}()
+
 	// Stage 4: enrich — fetch discussions (REST or GraphQL, matching each MR's
 	// source) for every deduped survivor in parallel, exactly once per MR.
 	enrichStart := time.Now()
@@ -100,6 +114,10 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 		cachedStats[k] = s
 	}
 	applyDiffStats(finalMRs, cachedStats)
+
+	<-attrsDone
+	errs = append(errs, attrsErrs...)
+	applyGeneratedRules(finalMRs, attrsKeys, generated)
 
 	// Mark MRs that came exclusively from the reviewer fetch.
 	if opts.IncludeReviewerMRs {

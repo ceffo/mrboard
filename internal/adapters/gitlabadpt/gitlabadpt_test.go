@@ -34,7 +34,12 @@ type fakeFetchClient struct {
 	diffStatsBatch []int                          // size of each diff-stats call
 	diffStatsErr   error
 	// diffStats answers by "fullPath!iid"; an MR absent from it has a known empty diff.
-	diffStats map[string][]pkggitlab.GQLDiffStat
+	diffStats     map[string][]pkggitlab.GQLDiffStat
+	gitAttrsCalls int
+	gitAttrsReqs  []pkggitlab.GitAttributesRequest // every req seen across all gitattributes calls
+	gitAttrsErr   error
+	// gitAttrs answers by "fullPath@ref"; a pair absent from it has no .gitattributes.
+	gitAttrs map[string]string
 	// rendezvous, when set, makes the first discussions and diff-stats calls each
 	// wait for the other to start, proving the two stages overlap.
 	rendezvous *rendezvous
@@ -124,6 +129,24 @@ func (f *fakeFetchClient) FetchMRsDiffStatsGraphQL(
 			stats = []pkggitlab.GQLDiffStat{}
 		}
 		results[i] = pkggitlab.MRDiffStatsResult{Found: true, Stats: stats}
+	}
+	return results, nil
+}
+
+func (f *fakeFetchClient) FetchGitAttributesGraphQL(
+	_ context.Context, reqs []pkggitlab.GitAttributesRequest,
+) ([]pkggitlab.GitAttributesResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gitAttrsCalls++
+	f.gitAttrsReqs = append(f.gitAttrsReqs, reqs...)
+	if f.gitAttrsErr != nil {
+		return nil, f.gitAttrsErr
+	}
+	results := make([]pkggitlab.GitAttributesResult, len(reqs))
+	for i, r := range reqs {
+		content, ok := f.gitAttrs[r.ProjectFullPath+"@"+r.Ref]
+		results[i] = pkggitlab.GitAttributesResult{Found: true, Exists: ok, Content: content}
 	}
 	return results, nil
 }

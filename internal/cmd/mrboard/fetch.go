@@ -45,7 +45,7 @@ func buildFetchCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&reviewerMRs, "reviewer-mrs", false,
 		"include reviewer-sourced MRs (default: the TUI's saved setting)")
 	cmd.Flags().BoolVar(&cold, "cold", false,
-		"ignore the on-disk snapshot and recompute every MR from scratch, "+
+		"ignore the on-disk snapshot and .gitattributes caches and recompute every MR from scratch, "+
 			"bypassing incremental fetch (docs/adr/0005)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"list each MR's counted and excluded files behind its review size")
@@ -59,8 +59,9 @@ type fetchCmdOptions struct {
 	// reviewerMRsOverride, when set, replaces the TUI's saved IncludeReviewerMRs
 	// setting for this run.
 	reviewerMRsOverride *bool
-	// cold, when true, fetches with no Previous snapshot — every MR is
-	// recomputed from scratch instead of reusing the on-disk cache.
+	// cold, when true, fetches with no Previous snapshot and bypasses the
+	// adapter's .gitattributes cache — every MR is recomputed from scratch
+	// instead of reusing the on-disk caches.
 	cold bool
 	// filtered, when true, runs the fetched MRs through the same filter and sort
 	// the board applies, using the TUI's saved state.
@@ -136,6 +137,7 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{
 		IncludeReviewerMRs: includeReviewerMRs,
 		Previous:           previous,
+		Cold:               opts.cold,
 	})
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
@@ -153,7 +155,7 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	}
 	rs := c.Config.ReviewSize
 	sizing := sizeOptions{
-		exclusions: domain.NewSizeExclusions(rs.DefaultExcludes, rs.Exclude, nil),
+		exclusions: sizeExclusionsFor(rs.DefaultExcludes, rs.Exclude),
 		thresholds: rs.Buckets.Thresholds(),
 		verbose:    opts.verbose,
 	}
@@ -163,9 +165,19 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 // sizeOptions controls how fetch output reports each MR's review size
 // (docs/adr/0015, "Review size metric").
 type sizeOptions struct {
-	exclusions domain.SizeExclusions
+	// exclusions returns the size exclusions that apply to one MR: the configured
+	// globs plus the generated-file rules of its project's .gitattributes.
+	exclusions func(domain.MergeRequest) domain.SizeExclusions
 	thresholds domain.SizeThresholds
 	verbose    bool
+}
+
+// sizeExclusionsFor returns the size exclusions of one MR: the built-in and configured
+// globs plus the generated-file rules of its project's .gitattributes.
+func sizeExclusionsFor(useDefaults bool, configured []string) func(domain.MergeRequest) domain.SizeExclusions {
+	return func(mr domain.MergeRequest) domain.SizeExclusions {
+		return domain.NewSizeExclusions(useDefaults, configured, mr.GeneratedRules)
+	}
 }
 
 func printJSON(mrs []domain.MergeRequest, currentUser string, sizing sizeOptions) error {
@@ -226,7 +238,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		})
 	}
 	now := time.Now()
-	m := mr.MeasureReviewSize(sizing.exclusions)
+	m := mr.MeasureReviewSize(sizing.exclusions(mr))
 	var reviewSize *int
 	var sizeFiles *sizeFilesJSON
 	if m.Size.Known {

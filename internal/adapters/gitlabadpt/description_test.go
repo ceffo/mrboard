@@ -117,6 +117,12 @@ func (f *fakeDescriptionClient) FetchMRsDiffStatsGraphQL(
 	panic("not implemented")
 }
 
+func (f *fakeDescriptionClient) FetchGitAttributesGraphQL(
+	_ context.Context, _ []pkggitlab.GitAttributesRequest,
+) ([]pkggitlab.GitAttributesResult, error) {
+	panic("not implemented")
+}
+
 func (f *fakeDescriptionClient) GetRawFileContent(_ context.Context, _ int64, _, _ string) ([]byte, error) {
 	panic("not implemented")
 }
