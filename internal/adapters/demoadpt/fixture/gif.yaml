@@ -61,6 +61,12 @@ issue_types:
 # Pressing S narrows the board to just these tickets' MRs.
 sprint_ticket_keys: [DEMO-1421, DEMO-1422, DEMO-1424, OPS-12]
 
+# The active sprint's name and dates, relative to boot so it is always current.
+sprint:
+  name: Demo Sprint 42
+  started_ago: 6d0h0m
+  ends_in: 8d0h0m
+
 merge_requests:
   # ---- Draft ----
   - project_id: 101

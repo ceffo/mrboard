@@ -4,7 +4,20 @@
 // only on this package — never on a concrete vendor.
 package ticketsvc
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// Sprint is the active sprint of a board: its identity, its dates and the keys
+// of the issues it contains. Start and End are zero when the tracker does not
+// report them.
+type Sprint struct {
+	Name      string
+	Start     time.Time
+	End       time.Time
+	IssueKeys []string
+}
 
 // TicketEnricher is the driven port for fetching issue-tracker metadata.
 type TicketEnricher interface {
@@ -12,12 +25,12 @@ type TicketEnricher interface {
 	// given issue key. Returns ("", nil) when the issue is not found.
 	GetIssueType(ctx context.Context, issueKey string) (string, error)
 
-	// GetActiveSprintIssueKeys returns all issue keys belonging to the active
-	// sprint for the given board ID. Returns nil when no active sprint exists.
+	// GetActiveSprint returns the active sprint for the given board ID with its
+	// issue keys. Returns (nil, nil) when no active sprint exists.
 	// The adapter owns revalidation policy: callers ask for current data on
 	// every trigger that matters (boot, manual refresh, periodic tick) and the
 	// adapter decides whether its cache is fresh enough to skip a network call.
-	GetActiveSprintIssueKeys(ctx context.Context, boardID int) ([]string, error)
+	GetActiveSprint(ctx context.Context, boardID int) (*Sprint, error)
 }
 
 // TicketLinker is the driven port for writing remote issue links.

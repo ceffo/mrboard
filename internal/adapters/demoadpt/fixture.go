@@ -74,7 +74,17 @@ type fixtureFile struct {
 	Projects           []fixtureProject  `yaml:"projects"`
 	IssueTypes         map[string]string `yaml:"issue_types"`
 	SprintTicketKeys   []string          `yaml:"sprint_ticket_keys"`
+	Sprint             *fixtureSprint    `yaml:"sprint"`
 	MergeRequests      []fixtureMR       `yaml:"merge_requests"`
+}
+
+// fixtureSprint dates the demo's active sprint relative to boot, like the
+// fixture's other timestamps, so the sprint is always current. A fixture that
+// omits it still loads and serves a sprint with zero dates.
+type fixtureSprint struct {
+	Name       string `yaml:"name"`
+	StartedAgo string `yaml:"started_ago"`
+	EndsIn     string `yaml:"ends_in"`
 }
 
 type fixturePerson struct {
@@ -247,6 +257,20 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 		}
 	}
 
+	if f.Sprint != nil {
+		ds.hasSprint = true
+		ds.sprintName = f.Sprint.Name
+		if ds.sprintStart, err = ago(f.Sprint.StartedAgo); err != nil {
+			return nil, fmt.Errorf("demoadpt: sprint started_ago: %w", err)
+		}
+		d, err := parseOffset(f.Sprint.EndsIn)
+		if err != nil {
+			return nil, fmt.Errorf("demoadpt: sprint ends_in: %w", err)
+		}
+		if d != 0 {
+			ds.sprintEnd = bootAt.Add(d)
+		}
+	}
 	if ds.snapshotWrittenAt, err = ago(f.SnapshotWrittenAgo); err != nil {
 		return nil, err
 	}

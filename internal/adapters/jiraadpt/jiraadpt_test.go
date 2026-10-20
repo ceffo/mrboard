@@ -18,6 +18,7 @@ import (
 const (
 	issueKeyOD10 = "OD-10"
 	issueKeyOD11 = "OD-11"
+	sprintName1  = "Sprint 1"
 )
 
 // fakeClient is a trivial in-memory implementation of jiraClient for tests.
@@ -138,26 +139,85 @@ func TestGetIssueType_CaseSensitive_KeepsKeyAsIs(t *testing.T) {
 	assert.Equal(t, 2, fc.calls, "differently-cased lookups must not share a cache entry when case-sensitive")
 }
 
-func TestGetActiveSprintIssueKeys_LiveAndCached(t *testing.T) {
-	fc := &fakeClient{
-		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
-		sprintKeys: []string{issueKeyOD10, issueKeyOD11},
+var (
+	sprintStart = time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	sprintEnd   = time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
+)
+
+func TestGetActiveSprint(t *testing.T) {
+	tests := []struct {
+		name      string
+		sprint    *pkgjira.Sprint
+		ttl       time.Duration
+		wantNil   bool
+		wantCalls []int // cumulative client calls after each ask
+	}{
+		{
+			name:      "cached within the sprint TTL",
+			sprint:    &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
+			ttl:       time.Hour,
+			wantCalls: []int{2, 2},
+		},
+		{
+			name:      "expired TTL revalidates every ask",
+			sprint:    &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
+			ttl:       -time.Second,
+			wantCalls: []int{2, 4},
+		},
+		{
+			name:      "no active sprint is nil without error and is not cached",
+			sprint:    nil,
+			ttl:       time.Hour,
+			wantNil:   true,
+			wantCalls: []int{1, 2},
+		},
 	}
-	a := newTestAdapter(t, fc, time.Hour)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &fakeClient{sprint: tc.sprint, sprintKeys: []string{issueKeyOD10, issueKeyOD11}}
+			a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, SprintCacheTTL: tc.ttl})
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
-	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys)
-	assert.Equal(t, 2, fc.calls) // GetActiveSprint + GetSprintIssueKeys
-
-	// second call must hit cache
-	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
-	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys2)
-	assert.Equal(t, 2, fc.calls, "expected cache hit")
+			for i, wantCalls := range tc.wantCalls {
+				got, err := a.GetActiveSprint(context.Background(), 7)
+				require.NoError(t, err)
+				if tc.wantNil {
+					assert.Nil(t, got)
+				} else {
+					require.NotNil(t, got)
+					assert.Equal(t, sprintName1, got.Name)
+					assert.True(t, sprintStart.Equal(got.Start), "start %v", got.Start)
+					assert.True(t, sprintEnd.Equal(got.End), "end %v", got.End)
+					assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, got.IssueKeys)
+				}
+				assert.Equal(t, wantCalls, fc.calls, "client calls after ask %d", i+1)
+			}
+		})
+	}
 }
 
-func TestGetActiveSprintIssueKeys_CaseInsensitiveMatch_UppercasesKeys(t *testing.T) {
+func TestGetActiveSprint_ExpiredCacheObservesRollover(t *testing.T) {
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1},
+		sprintKeys: []string{issueKeyOD10},
+	}
+	// A long general TTL alongside an already-expired SprintCacheTTL: the sprint
+	// cache is never trusted, without the caller passing a forceRefresh flag.
+	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, SprintCacheTTL: -time.Second})
+
+	got, err := a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, []string{issueKeyOD10}, got.IssueKeys)
+
+	fc.sprint = &pkgjira.Sprint{ID: 43, Name: "Sprint 2"}
+	fc.sprintKeys = []string{issueKeyOD11}
+
+	got, err = a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, "Sprint 2", got.Name)
+	assert.Equal(t, []string{issueKeyOD11}, got.IssueKeys)
+}
+
+func TestGetActiveSprint_CaseInsensitiveMatch_UppercasesKeys(t *testing.T) {
 	fc := &fakeClient{
 		sprint:     &pkgjira.Sprint{ID: 42, Name: "Active Sprint"},
 		sprintKeys: []string{"od-10", "Od-11"},
@@ -166,45 +226,11 @@ func TestGetActiveSprintIssueKeys_CaseInsensitiveMatch_UppercasesKeys(t *testing
 		TTL: time.Hour, SprintCacheTTL: time.Hour, KeyMatcher: domain.NewTicketKeyMatcher(true),
 	})
 
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
+	got, err := a.GetActiveSprint(context.Background(), 7)
 	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, keys,
+	require.NotNil(t, got)
+	assert.Equal(t, []string{issueKeyOD10, issueKeyOD11}, got.IssueKeys,
 		"sprint issue keys should be uppercased to match the shared TicketKeyMatcher's canonical output")
-}
-
-func TestGetActiveSprintIssueKeys_NoActiveSprint(t *testing.T) {
-	fc := &fakeClient{sprint: nil}
-	a := newTestAdapter(t, fc, time.Hour)
-
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 9)
-	require.NoError(t, err)
-	assert.Nil(t, keys)
-}
-
-func TestGetActiveSprintIssueKeys_RevalidatesIndependentlyOfGeneralTTL(t *testing.T) {
-	fc := &fakeClient{
-		sprint:     &pkgjira.Sprint{ID: 42, Name: "Sprint 1"},
-		sprintKeys: []string{issueKeyOD10},
-	}
-	// A long general TTL (issue-type, remote-link) alongside a SprintCacheTTL
-	// that is already expired: every ask must still revalidate the sprint
-	// cache, without the caller ever passing a forceRefresh flag.
-	a := newTestAdapterWithConfig(t, fc, Config{TTL: time.Hour, SprintCacheTTL: -time.Second})
-
-	keys, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
-	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD10}, keys)
-	assert.Equal(t, 2, fc.calls)
-
-	// simulate the upstream sprint rolling over between calls
-	fc.sprintKeys = []string{issueKeyOD11}
-
-	// a plain ask must observe the new sprint's keys — SprintCacheTTL<=0 means
-	// the sprint cache is never trusted, independent of the hour-long TTL
-	keys2, err := a.GetActiveSprintIssueKeys(context.Background(), 7)
-	require.NoError(t, err)
-	assert.Equal(t, []string{issueKeyOD11}, keys2)
-	assert.Equal(t, 4, fc.calls, "expired SprintCacheTTL should hit the live client, not the cache")
 }
 
 func TestNew_BadCacheDir(t *testing.T) {
@@ -314,4 +340,26 @@ func TestUpsertRemoteLink_PostError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, fc.calls)
 	assert.Equal(t, 1, fc.createRemoteCalls)
+}
+
+func TestGetActiveSprint_IgnoresLegacyCacheEntry(t *testing.T) {
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
+		sprintKeys: []string{issueKeyOD10},
+	}
+	a := newTestAdapter(t, fc, time.Hour)
+
+	// The pre-dates cache stored a bare key list under the unversioned key.
+	require.NoError(t, a.cache.Set(context.Background(), "sprint_board_7", []string{"OLD-1"}))
+
+	got, err := a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{issueKeyOD10}, got.IssueKeys, "the legacy entry must not be served")
+	assert.Equal(t, 2, fc.calls, "first call must fetch live")
+
+	got, err = a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, sprintName1, got.Name)
+	assert.Equal(t, 2, fc.calls, "the v2 entry must have been written")
 }
