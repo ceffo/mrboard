@@ -195,7 +195,7 @@ opposite, so it is not a `fetch` mode.
 | `--remaining` | bool | off | Only what is left to approve |
 | `--json` | bool | off | Emit the computed rows as JSON instead of the tree |
 | `--color` | `auto`, `always`, `never` | `auto` | `auto` colours only on a TTY with `NO_COLOR` unset |
-| `--no-filters` | bool | off | Ignore the TUI's saved header filters |
+| `--no-filters` | bool | off | Ignore the TUI's saved header filters and view scope (a `--view` still applies) |
 | `--view` | `mine`, `all` | saved | Override the saved view scope, as in `fetch` |
 | `--reviewer-mrs` | bool | saved | Override the saved reviewer-MRs setting, as in `fetch` |
 | `--cold` | bool | off | Bypass the snapshot cache, as in `fetch` |
@@ -203,6 +203,21 @@ opposite, so it is not a `fetch` mode.
 The TUI's saved header filters apply by default — every one except sprint, per "Load population".
 `--group`, `--sort` and `--remaining` are flags only and never persisted: the same command gives
 the same output.
+
+**Edge rules.** A sprint the load cannot be scoped to is an error, not a report: no ticket board, an
+active sprint that is missing, has no issue keys (every ticketed MR would drop out silently) or has
+no start date, or a failed sprint read, each exit non-zero with the reason. The sprint start passed
+to `ComputeLoad` and to the merged listing is midnight of the start date in the start's own
+location: the calendar day the tracker reports, at the offset it reports it in (typically UTC). There
+is no team-timezone setting, and converting to the machine's zone could move the start to another
+day. `--no-filters` also drops the
+saved view scope unless `--view` is given. The header counts "MRs in scope" (and "of N in the
+sprint" when filters narrowed it); person grouping adds a footnote when person loads exceed the team
+total and when counted MRs sit on no person line. The `--filtered` path of `mrboard fetch` narrows
+open MRs only by phase, like the load.
+
+A fetch that returns MRs alongside errors still prints the report, then exits non-zero; `--json`
+carries `"partial": true`. MRs may be missing from such a load, so it is never reported as complete.
 
 **One fetch path.** `mrboard load` calls the same core fetch as `mrboard fetch` — snapshot cache,
 saved reviewer-MRs setting — and adds the sprint population (sprint dates, merged-since listing)

@@ -182,12 +182,7 @@ func boardFilterOptions(
 func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 
-	const defaultTimeout = 30 * time.Second
-	timeout := c.Config.GitLab.Timeout
-	if timeout == 0 {
-		timeout = defaultTimeout
-	}
-	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout(c))
 	defer cancel()
 
 	state, err := c.StateStore.Load()

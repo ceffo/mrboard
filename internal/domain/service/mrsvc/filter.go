@@ -13,7 +13,8 @@ type FilterOptions struct {
 	CurrentUser string
 	SortField   string // "repo_iid" | "author" | "age"
 	SortDesc    bool
-	// Phases restricts visible MRs to those whose Phase is true in the map.
+	// Phases restricts visible open MRs to those whose Phase is true in the map.
+	// A merged MR has no phase and is never narrowed by it.
 	// nil or empty map means all phases are shown.
 	Phases map[domain.MRPhase]bool
 	// ExcludedAssignees hides MRs whose assignee is in the set.
@@ -71,7 +72,7 @@ func filterByPhases(mrs []domain.MergeRequest, opts FilterOptions) []domain.Merg
 	}
 	filtered := make([]domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
-		if opts.Phases[mr.Phase] {
+		if mr.Merged() || opts.Phases[mr.Phase] {
 			filtered = append(filtered, mr)
 		}
 	}

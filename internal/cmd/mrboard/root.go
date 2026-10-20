@@ -138,6 +138,12 @@ func buildRootCmd() *cobra.Command {
 	}
 	root.AddCommand(fetchCmd)
 
+	loadCmd := buildLoadCmd()
+	loadCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		return bootCore(cmd)
+	}
+	root.AddCommand(loadCmd)
+
 	autoCmd := buildAutoCmd()
 	autoCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
 		return bootCore(cmd)

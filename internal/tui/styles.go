@@ -79,6 +79,18 @@ type Styles struct {
 	DiffFileSelected            lip.Style
 	DiffFileItem                lip.Style
 	DiffSeparator               lip.Style
+	LoadHeading                 lip.Style // load tree group heading
+	LoadTotal                   lip.Style // load tree group total
+	LoadMeta                    lip.Style // load tree supporting text: co-approvers, titles, header
+	LoadNote                    lip.Style // load tree footnotes and the empty-state line
+	LoadBucketS                 lip.Style
+	LoadBucketM                 lip.Style
+	LoadBucketL                 lip.Style
+	LoadBucketXL                lip.Style
+	LoadBucketUnknown           lip.Style
+	LoadDraft                   lip.Style
+	LoadMerged                  lip.Style
+	LoadApproved                lip.Style
 	LifetimeWarn                time.Duration // open-duration warning threshold
 	LifetimeError               time.Duration // open-duration error threshold
 }
@@ -194,6 +206,18 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 		DiffFileSelected:    lip.NewStyle().Foreground(c(FgHigh)).Background(c(BgElevated)).Bold(true),
 		DiffFileItem:        lip.NewStyle().Foreground(c(FgMedium)),
 		DiffSeparator:       lip.NewStyle().Foreground(c(Border)),
+		LoadHeading:         lip.NewStyle().Bold(true).Foreground(c(FgHigh)),
+		LoadTotal:           lip.NewStyle().Bold(true).Foreground(c(Accent)),
+		LoadMeta:            lip.NewStyle().Foreground(c(FgMedium)),
+		LoadNote:            lip.NewStyle().Foreground(c(FgLow)).Italic(true),
+		LoadBucketS:         lip.NewStyle().Foreground(c(Success)),
+		LoadBucketM:         lip.NewStyle().Foreground(c(FgMedium)),
+		LoadBucketL:         lip.NewStyle().Foreground(c(Warning)),
+		LoadBucketXL:        lip.NewStyle().Foreground(c(Danger)).Bold(true),
+		LoadBucketUnknown:   lip.NewStyle().Foreground(c(FgLow)),
+		LoadDraft:           lip.NewStyle().Foreground(c(Warning)),
+		LoadMerged:          lip.NewStyle().Foreground(c(Accent)),
+		LoadApproved:        lip.NewStyle().Foreground(c(Success)),
 		LifetimeWarn:        3 * 24 * time.Hour,
 		LifetimeError:       5 * 24 * time.Hour,
 	}

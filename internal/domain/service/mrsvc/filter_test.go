@@ -428,3 +428,18 @@ func TestFilterAndSort_DoesNotMutateInput(t *testing.T) {
 	mrsvc.FilterAndSort(mrs, mrsvc.FilterOptions{SortField: sortAssignee})
 	assert.Equal(t, original, mrs, "input slice was mutated")
 }
+
+func TestFilterAndSort_PhasesNarrowOpenMRsOnly(t *testing.T) {
+	open := domain.MergeRequest{IID: 1, Phase: domain.PhaseDraft}
+	openKept := domain.MergeRequest{IID: 2, Phase: domain.PhaseReadyToMerge}
+	merged := domain.MergeRequest{IID: 3, Phase: domain.PhaseDraft, MergedAt: time.Now()}
+
+	got := mrsvc.FilterAndSort([]domain.MergeRequest{open, openKept, merged}, mrsvc.FilterOptions{
+		Phases:    map[domain.MRPhase]bool{domain.PhaseReadyToMerge: true},
+		SortField: sortRepoID,
+	})
+
+	require.Len(t, got, 2)
+	assert.Equal(t, 2, got[0].IID)
+	assert.Equal(t, 3, got[1].IID, "a merged MR has no phase, so the phase filter keeps it")
+}
