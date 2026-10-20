@@ -139,18 +139,21 @@ type fixtureDiff struct {
 }
 
 type fixtureMR struct {
-	ProjectID      int               `yaml:"project_id"`
-	IID            int               `yaml:"iid"`
-	ID             int               `yaml:"id"`
-	Title          string            `yaml:"title"`
-	Author         string            `yaml:"author"`
-	Assignee       string            `yaml:"assignee"`
-	Draft          bool              `yaml:"draft"`
-	MergeStatus    string            `yaml:"merge_status"`
-	SourceBranch   string            `yaml:"source_branch"`
-	TargetBranch   string            `yaml:"target_branch"`
-	CreatedAgo     string            `yaml:"created_ago"`
-	UpdatedAgo     string            `yaml:"updated_ago"`
+	ProjectID    int    `yaml:"project_id"`
+	IID          int    `yaml:"iid"`
+	ID           int    `yaml:"id"`
+	Title        string `yaml:"title"`
+	Author       string `yaml:"author"`
+	Assignee     string `yaml:"assignee"`
+	Draft        bool   `yaml:"draft"`
+	MergeStatus  string `yaml:"merge_status"`
+	SourceBranch string `yaml:"source_branch"`
+	TargetBranch string `yaml:"target_branch"`
+	CreatedAgo   string `yaml:"created_ago"`
+	UpdatedAgo   string `yaml:"updated_ago"`
+	// MergedAgo, when set, makes the MR merged that long before boot: it is
+	// listed only by a fetch whose MergedSince it reaches.
+	MergedAgo      string            `yaml:"merged_ago"`
 	OpenThreads    int               `yaml:"open_threads"`
 	RoundTrips     int               `yaml:"round_trips"`
 	ReviewerSource bool              `yaml:"reviewer_source"`
@@ -356,6 +359,10 @@ func buildMR(
 	if err != nil {
 		return domain.MergeRequest{}, err
 	}
+	mergedAt, err := ago(fm.MergedAgo)
+	if err != nil {
+		return domain.MergeRequest{}, err
+	}
 
 	assignee, assigneeName := fm.Author, author.Name
 	if fm.Assignee != "" {
@@ -380,7 +387,7 @@ func buildMR(
 		DetailedMergeStatus: fm.MergeStatus,
 		SourceBranch:        fm.SourceBranch, TargetBranch: target,
 		Reviewers: reviewers, Approvers: fm.Approvers,
-		CreatedAt: createdAt, UpdatedAt: updatedAt,
+		CreatedAt: createdAt, UpdatedAt: updatedAt, MergedAt: mergedAt,
 		OpenThreads: fm.OpenThreads, RoundTripCount: fm.RoundTrips,
 		ReviewerSource: fm.ReviewerSource,
 	}

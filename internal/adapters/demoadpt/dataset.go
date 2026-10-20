@@ -46,6 +46,10 @@ type dataset struct {
 	savedSnapshot    []domain.MergeRequest
 	snapshotSavedAt  time.Time
 	hasSavedSnapshot bool
+
+	// savedMerged and savedMergedSince back the merged snapshot port.
+	savedMerged      []domain.MergeRequest
+	savedMergedSince time.Time
 }
 
 // cloneMR returns a copy safe to hand across the port boundary.

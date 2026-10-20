@@ -110,6 +110,10 @@ func (a *Adapter) StateStore() domain.StateStore { return &stateStore{a: a} }
 // user's real cache directory.
 func (a *Adapter) SnapshotStore() domain.SnapshotStore { return &snapshotStore{a: a} }
 
+// MergedSnapshotStore returns the in-memory merged snapshot port. It never
+// touches the user's real cache directory.
+func (a *Adapter) MergedSnapshotStore() domain.MergedSnapshotStore { return &mergedSnapshotStore{a: a} }
+
 // Notifier returns a notifier that accepts and discards.
 func (a *Adapter) Notifier() domain.Notifier { return &notifier{a: a} }
 

@@ -64,7 +64,42 @@ type StateStore interface {
 // against — a cold cache, not an error — including when the adapter discards
 // a snapshot written by an older, incompatible schema version. The returned
 // time is when the snapshot was written, for the header's age indicator.
+// The snapshot holds open MRs only: Save drops merged ones, which belong to the
+// MergedSnapshotStore.
 type SnapshotStore interface {
 	Load() ([]MergeRequest, time.Time, error)
 	Save([]MergeRequest) error
+}
+
+// MergedSnapshotStore is the driven port for persisting the merged MRs listed
+// since a date (the active sprint's start), separately from the board snapshot,
+// so a merged MR's diff stats are fetched once per sprint (docs/adr/0015,
+// "Fetch placement and caching"). The snapshot is tagged with the date it was
+// listed for: Load with any other date finds nothing and drops the stored one.
+// As with SnapshotStore, nothing usable is a cold cache, not an error.
+type MergedSnapshotStore interface {
+	Load(since time.Time) ([]MergeRequest, error)
+	Save(since time.Time, mrs []MergeRequest) error
+}
+
+// OpenMRs returns the MRs of mrs that are not merged, in order.
+func OpenMRs(mrs []MergeRequest) []MergeRequest {
+	out := make([]MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if !mr.Merged() {
+			out = append(out, mr)
+		}
+	}
+	return out
+}
+
+// MergedMRs returns the merged MRs of mrs, in order.
+func MergedMRs(mrs []MergeRequest) []MergeRequest {
+	out := make([]MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if mr.Merged() {
+			out = append(out, mr)
+		}
+	}
+	return out
 }

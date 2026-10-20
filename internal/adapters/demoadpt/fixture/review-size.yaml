@@ -9,6 +9,9 @@
 #         go.sum (30) excluded by the built-in globs        — review size 20
 #   !602  web-console: gen/client.go (50) counted: no .gitattributes there
 #                                                            — review size 50
+#   !603  platform-api, merged 2 days ago: listed only by a fetch with
+#         --merged-since reaching it; gen/server.go (90) excluded as generated,
+#         api.go (15) counted                               — review size 15
 #
 # SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes, and
 # every MR whose title carries a ticket key ends its description with the
@@ -40,6 +43,7 @@ projects:
 issue_types:
   SIZE-1: Story
   SIZE-2: Story
+  SIZE-3: Story
 
 merge_requests:
   - project_id: 101
@@ -88,3 +92,28 @@ merge_requests:
       head_sha: 6022222222222222222222222222222222222222
       files:
         - {new_path: gen/client.go, new_file: true, added: 50, removed: 0, diff: ""}
+
+  - project_id: 101
+    iid: 603
+    id: 9603
+    title: "feat(SIZE-3): serve the regenerated API"
+    author: grace
+    merge_status: mergeable
+    source_branch: serve-regenerated-api
+    created_ago: 4d
+    updated_ago: 2d
+    merged_ago: 2d
+    reviewers:
+      - {username: ada, approver: true, state: approved, waiting_ago: 4d, approved_ago: 2d1h}
+    approvers: [ada]
+    description: |-
+      Server side of the regenerated client.
+
+      ---
+      🎫 [SIZE-3](https://tickets.demo.invalid/browse/SIZE-3) <!-- mrboard -->
+    diff:
+      base_sha: 6030000000000000000000000000000000000000
+      head_sha: 6033333333333333333333333333333333333333
+      files:
+        - {old_path: api.go, new_path: api.go, added: 12, removed: 3, diff: ""}
+        - {new_path: gen/server.go, new_file: true, added: 90, removed: 0, diff: ""}

@@ -43,7 +43,10 @@ type Core struct {
 	MRSource      mrsvc.MergeRequestSource
 	StateStore    domain.StateStore
 	SnapshotStore domain.SnapshotStore
-	Notifier      domain.Notifier
+	// MergedSnapshotStore holds the merged MRs listed since the active sprint's
+	// start, apart from the board snapshot (docs/adr/0015).
+	MergedSnapshotStore domain.MergedSnapshotStore
+	Notifier            domain.Notifier
 	// ApproverClaims is non-nil only when approver announcements are enabled and a notifier is wired.
 	ApproverClaims mrsvc.ApproverClaims
 	TicketEnricher ticketsvc.TicketEnricher // nil when the issue tracker is not configured
@@ -109,6 +112,11 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 
 	// 4b. Snapshot store (incremental-fetch cache, see docs/adr/0005)
 	snapStore, err := snapshotstore.New(snapshotstore.Config{Dir: config.XDGCacheDir()})
+	if err != nil {
+		closer.Close()
+		return nil, err
+	}
+	mergedStore, err := snapshotstore.NewMerged(snapshotstore.Config{Dir: config.XDGCacheDir()})
 	if err != nil {
 		closer.Close()
 		return nil, err
@@ -181,17 +189,18 @@ func New(_ context.Context, cfg *config.AppConfig) (*Core, error) {
 	}
 
 	return &Core{
-		MRSource:       adapter,
-		ApproverClaims: approverClaims,
-		StateStore:     store,
-		SnapshotStore:  snapStore,
-		Notifier:       notifier,
-		TicketEnricher: ticketEnricher,
-		TicketLinker:   ticketLinker,
-		UpdateChecker:  updateChecker,
-		Config:         cfg,
-		Logger:         logger,
-		logCloser:      closer,
+		MRSource:            adapter,
+		ApproverClaims:      approverClaims,
+		StateStore:          store,
+		SnapshotStore:       snapStore,
+		MergedSnapshotStore: mergedStore,
+		Notifier:            notifier,
+		TicketEnricher:      ticketEnricher,
+		TicketLinker:        ticketLinker,
+		UpdateChecker:       updateChecker,
+		Config:              cfg,
+		Logger:              logger,
+		logCloser:           closer,
 	}, nil
 }
 

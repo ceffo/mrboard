@@ -19,6 +19,7 @@ packages:
       filename: "mock_{{.InterfaceName}}.go"
       structname: "Mock{{.InterfaceName}}"
     interfaces:
+      MergedSnapshotStore:
       Notifier:
       SnapshotStore:
   github.com/ceffo/mrboard/internal/domain/service/mrsvc:

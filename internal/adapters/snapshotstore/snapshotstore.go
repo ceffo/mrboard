@@ -63,9 +63,10 @@ func (s *JSONStore) Load() ([]domain.MergeRequest, time.Time, error) {
 	return f.MRs, f.WrittenAt, nil
 }
 
-// Save writes the snapshot to disk with mode 0600, stamped with the current time.
+// Save writes the open MRs of mrs to disk with mode 0600, stamped with the
+// current time. Merged MRs belong to the merged snapshot and are dropped.
 func (s *JSONStore) Save(mrs []domain.MergeRequest) error {
-	f := fileFormat{Version: currentVersion, WrittenAt: time.Now(), MRs: mrs}
+	f := fileFormat{Version: currentVersion, WrittenAt: time.Now(), MRs: domain.OpenMRs(mrs)}
 	data, err := json.Marshal(f)
 	if err != nil {
 		return fmt.Errorf("snapshotstore: marshal: %w", err)
