@@ -181,6 +181,45 @@ Defined in `internal/domain/attention.go` (see `docs/adr/0013-my-view-visibility
 
 Visibility and attention are independent: an MR can concern a user without needing them.
 
+## Review size and review load
+
+Defined in `internal/domain/reviewsize.go` and `internal/domain/service/mrsvc/load.go` (see
+`docs/adr/0015-review-load-view.md`). Neither term claims to measure review *time*.
+
+**Review size** is an MR's number of counted changed lines: additions plus deletions summed over
+its **counted files**, so a modified line counts twice.
+
+```go
+type ReviewSize struct {
+    Lines int
+    Known bool // false: stats not fetched or diff overflow — never read as zero
+}
+```
+
+- Counted files are every file in the MR diff except those matching a built-in glob (lock files,
+  `vendor/`, minified assets, generated code, ...), a `review_size.exclude` glob, or a path the
+  project's root `.gitattributes` marks `gitlab-generated` or `linguist-generated`.
+  `SizeExclusions.MeasureReviewSize` applies them to per-file `FileDiffStat`s; `SizeExclusionsFor`
+  is the per-MR lookup shared by `mrboard fetch` and the load.
+- A **size bucket** (`SizeBucket`: S ≤ 100, M ≤ 400, L ≤ 1000, XL above, `?` unknown; thresholds
+  configurable) is a label only. Sorting and every total use the raw line count.
+- An unknown size shows `?`; a `LoadTotal` sums the known sizes and is `Partial` (`1240+`).
+
+**Review load** is an approver's sum of the review sizes of the MRs they are responsible to
+approve: assigned reviewers with `IsApprover`, in any reviewer state, on open MRs and on MRs
+merged since the sprint start.
+
+- Every assigned approver is credited the MR's **full** size. Person loads can therefore exceed the
+  team total; a per-ticket total and the team total count each MR once.
+- Re-review rounds add nothing, and approving does not remove load: an approved MR stays at full
+  size, marked approved. Only the "remaining only" option hides it.
+- The population is the active sprint: MRs whose ticket key is in the sprint's issue keys, open or
+  merged on or after the sprint start, plus unticketed MRs in a "no ticket" group. Closed unmerged
+  MRs are excluded. An MR is merged when `MergedAt` is set.
+- Roster members each get a person group; approvers outside the roster collapse into one "others"
+  group. An MR with no approver carries no person load but counts in its ticket group and the team
+  total.
+
 ## Time helpers
 
 `FormatDuration(d time.Duration) string` lives in `internal/domain/mr.go`:

@@ -79,6 +79,56 @@ Each landed fetch also drives, in order: ticket enrichment and the JIRA descript
 `auto_assign_reviewers.enabled` (`docs/adr/0009-auto-assign-reviewers.md`). `mrboard auto` runs
 the same auto-assign step as a standalone command, outside the TUI.
 
+### Review size stage
+
+`FetchAll` ends with an always-on **size stage** (`gitlabadpt/diffstats.go`), running concurrently
+with phase-2 discussions; the result is one fetch and one snapshot save. The thin phase-1 query
+carries each MR's diff head SHA. Only MRs whose SHA moved get per-file `diffStats`, in aliased
+GraphQL batches (`gqlDiffStatsBatchSize`, 30); a failed batch leaves its MRs with an unknown size
+and joins `FetchAll`'s partial-result errors. The snapshot stores per-file stats, not the computed
+size: `domain.SizeExclusions.MeasureReviewSize` derives it at read time from the built-in globs,
+`review_size.exclude` and the `.gitattributes` rules riding on each MR. `.gitattributes` is read
+per (project, target branch) in one aliased `repository.blobs` query and cached on disk for 24h
+beside the ticket cache. See `docs/adr/0015-review-load-view.md` ("Fetch placement and caching").
+
+### Review load: merged listing, `mrboard load`, load view
+
+`mrsvc.FetchOptions.MergedSince` (zero = skip) adds a merged-after listing over the board's
+sources to the list stage, through the same dedup and exclusions. Merged MRs take the thin query
+and the size stage but skip phase-2 discussions, and persist in a separate
+`domain.MergedSnapshotStore` (`snapshotstore`, tagged with the sprint start, dropped when it
+changes). The board passes zero, so a board-only fetch is unchanged and merged MRs never join the
+board's MR set or its snapshot.
+
+`mrsvc.ComputeLoad` (`mrsvc/load.go`) is the pure computation shared by the CLI and the TUI: it
+takes the fetched MRs plus the active sprint's start and issue keys (from `ticketsvc`), the team
+roster, the header filters and the size exclusions/thresholds, and returns a `mrsvc.Load` of
+groups (per person or per ticket), lines and totals.
+
+```mermaid
+graph TD
+    S["ticketsvc: active sprint<br>start date + issue keys"] --> F
+    F["MergeRequestSource.FetchAll<br>MergedSince = sprint start"] --> M["open MRs + merged MRs<br>(merged snapshot) with review size"]
+    M --> L["mrsvc.ComputeLoad<br>population, crediting, totals, sort"]
+    S --> L
+    L --> C["mrboard load<br>tree or --json"]
+    L --> T["TUI load view (L)<br>loadViewWidget"]
+    C --> R["tui.RenderLoad<br>plain function, no Bubble Tea model"]
+    T --> R
+```
+
+`mrboard load` (`internal/cmd/mrboard/load.go`) calls the same core fetch as `mrboard fetch`
+(snapshot cache, saved reviewer-MRs setting) with `MergedSince` set to the sprint start, then
+`ComputeLoad` and `tui.RenderLoad`, or serialises the rows with `--json`. It errors when no sprint
+can be scoped. Its `--group`, `--sort` and `--remaining` flags are never persisted. `mrboard fetch
+--merged-since` drives the same merged listing without the ticket port.
+
+In the TUI, `L` opens the load view (`internal/tui/load_view.go`, `load_mode.go`), a full-screen
+widget over the same rows and renderer. Opening it renders the cached merged snapshot and starts a
+fetch with `MergedSince`; refreshes keep passing it until the view closes. Group, sort and
+remaining-only persist in `state.yaml` (`load_group`, `load_sort`, `load_remaining`); the CLI
+ignores them.
+
 Detail panel (`↵`) calls `MergeRequestSource.GetDetail(ctx, projectID, mrIID)`.
 
 Diff view (`d`) calls `MergeRequestSource.GetDiff(ctx, projectID, mrIID)`, then lazily calls
@@ -112,6 +162,7 @@ mrboard/
       root.go              # Cobra root command wrapped by fang; boots core, launches the board by default
       board.go             # execBoard — launches the TUI
       fetch.go             # `mrboard fetch` — one-shot JSON dump, mirrors the TUI's read path
+      load.go              # `mrboard load` — review load report for the active sprint (adr/0015)
       auto.go              # `mrboard auto` — one-shot auto-assign-reviewers write (adr/0009)
       update.go            # `mrboard --update` — check and install a newer release (adr/0010)
       version.go           # `mrboard version` subcommand
@@ -125,10 +176,13 @@ mrboard/
       selfupdate.go        # The fixed brew command that upgrades this binary (adr/0010)
     domain/
       mr.go                # All domain types (see domain-model.md)
+      reviewsize.go        # ReviewSize, SizeExclusions, size buckets (see domain-model.md)
+      gitattributes.go     # .gitattributes generated-file rules
       state.go             # StateStore + SnapshotStore interfaces
       service/mrsvc/
         mrsvc.go           # MergeRequestSource port + SourceType, Source, Config
         filter.go          # MR filtering helpers
+        load.go            # ComputeLoad — review load population, crediting, totals (adr/0015)
         auto_assign.go     # AutoAssignReviewers eligibility + write (adr/0009)
         reviewer_writes.go # ApplyReviewerChanges — shared reviewer/approver write path
         mocks/             # mockery-generated doubles
@@ -143,6 +197,8 @@ mrboard/
         gitlabadpt.go      # MergeRequestSource implementation (REST + GQL)
         mapper.go          # Maps pkg/gitlab types → domain.MergeRequest
         dedup.go           # Cross-source deduplication
+        diffstats.go       # SHA-keyed review-size stage (batched diffStats)
+        gitattributes.go   # per-project .gitattributes read, 24h disk cache
       jiraadpt/
         jiraadpt.go        # ticketsvc.TicketEnricher + TicketLinker via pkg/jira, disk-cached
       teamsnotify/
@@ -167,6 +223,9 @@ mrboard/
       board.go             # Board widget — column layout, cross-column focus
       column.go            # Column widget — one per MRPhase
       card.go              # MR card widget — one per domain.MergeRequest
+      load_view.go         # Review load view widget (press L)
+      load_mode.go         # Load mode wiring: open/close, merged fetch, header
+      loadtree.go          # RenderLoad — the load tree renderer shared with `mrboard load`
       detail.go            # Detail panel widget — description + discussion threads
       diff_view.go         # Full-screen diff view widget (press d)
       approver_editor.go   # Approver editor overlay (press a)
