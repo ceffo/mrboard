@@ -41,5 +41,5 @@ func TestReviewSizeFixture_GeneratedRules(t *testing.T) {
 		sizes[mr.IID] = m.Size.Lines
 	}
 
-	assert.Equal(t, map[int]int{601: 20, 602: 50}, sizes)
+	assert.Equal(t, map[int]int{601: 20, 602: 50, 603: 15}, sizes)
 }

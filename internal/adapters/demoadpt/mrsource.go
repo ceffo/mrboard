@@ -15,7 +15,8 @@ import (
 type mrSource struct{ a *Adapter }
 
 // FetchAll returns the whole dataset. Options are honoured only where they are
-// observable: ReviewerSource MRs are filtered out unless asked for. There is no
+// observable: ReviewerSource MRs are filtered out unless asked for, and merged
+// MRs are listed only when merged at or after MergedSince. There is no
 // two-phase diffing to do, since every read is already local.
 func (s *mrSource) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) ([]domain.MergeRequest, []error) {
 	if err := s.sleep(ctx); err != nil {
@@ -27,9 +28,13 @@ func (s *mrSource) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) ([]dom
 		if mr.ReviewerSource && !opts.IncludeReviewerMRs {
 			continue
 		}
+		if mr.Merged() && (opts.MergedSince.IsZero() || mr.MergedAt.Before(opts.MergedSince)) {
+			continue
+		}
 		out = append(out, mr)
 	}
-	s.a.logger.Info("demo: fetch done", "mrs", len(out), "include_reviewer_mrs", opts.IncludeReviewerMRs)
+	s.a.logger.Info("demo: fetch done", "mrs", len(out), "include_reviewer_mrs", opts.IncludeReviewerMRs,
+		"merged_since", opts.MergedSince)
 	return out, nil
 }
 

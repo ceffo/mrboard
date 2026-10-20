@@ -5,6 +5,7 @@ package mrsvc
 
 import (
 	"context"
+	"time"
 
 	"github.com/ceffo/mrboard/internal/domain"
 )
@@ -30,6 +31,14 @@ type FetchOptions struct {
 	// project's .gitattributes) for this fetch; fresh results still replace the
 	// cached ones. It does not touch Previous: pass nil to bypass the snapshot too.
 	Cold bool
+
+	// MergedSince, when set, also lists the MRs merged at or after it over the
+	// same sources, through the same dedup and exclusions. Merged MRs carry
+	// MergedAt, get the review-size stage and skip phase-2 discussions: the thin
+	// listing holds everything the review load reads. Zero lists open MRs only.
+	// Previous may hold merged MRs too; their cached diff stats are reused while
+	// the head SHA matches.
+	MergedSince time.Time
 }
 
 // MergeRequestSource is the driven port for fetching MR data.

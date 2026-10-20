@@ -46,11 +46,11 @@ func (s *snapshotStore) Load() ([]domain.MergeRequest, time.Time, error) {
 		return saved, savedAt, nil
 	}
 	all := s.a.ds.all()
-	// The pre-seeded board omits reviewer-source MRs, matching what a fetch with
-	// the default settings would have persisted.
+	// The pre-seeded board omits reviewer-source and merged MRs, matching what a
+	// fetch with the default settings would have persisted.
 	out := make([]domain.MergeRequest, 0, len(all))
 	for _, mr := range all {
-		if !mr.ReviewerSource {
+		if !mr.ReviewerSource && !mr.Merged() {
 			out = append(out, mr)
 		}
 	}
@@ -60,9 +60,30 @@ func (s *snapshotStore) Load() ([]domain.MergeRequest, time.Time, error) {
 func (s *snapshotStore) Save(mrs []domain.MergeRequest) error {
 	s.a.ds.mu.Lock()
 	defer s.a.ds.mu.Unlock()
-	s.a.ds.savedSnapshot = slices.Clone(mrs)
+	s.a.ds.savedSnapshot = domain.OpenMRs(mrs)
 	s.a.ds.snapshotSavedAt = time.Now()
 	s.a.ds.hasSavedSnapshot = true
+	return nil
+}
+
+// mergedSnapshotStore is the in-memory stand-in for the on-disk merged snapshot.
+// It starts empty: the first fetch with MergedSince lists the merged MRs.
+type mergedSnapshotStore struct{ a *Adapter }
+
+func (s *mergedSnapshotStore) Load(since time.Time) ([]domain.MergeRequest, error) {
+	s.a.ds.mu.Lock()
+	defer s.a.ds.mu.Unlock()
+	if !s.a.ds.savedMergedSince.Equal(since) {
+		s.a.ds.savedMerged, s.a.ds.savedMergedSince = nil, time.Time{}
+		return nil, nil
+	}
+	return slices.Clone(s.a.ds.savedMerged), nil
+}
+
+func (s *mergedSnapshotStore) Save(since time.Time, mrs []domain.MergeRequest) error {
+	s.a.ds.mu.Lock()
+	defer s.a.ds.mu.Unlock()
+	s.a.ds.savedMerged, s.a.ds.savedMergedSince = domain.MergedMRs(mrs), since
 	return nil
 }
 

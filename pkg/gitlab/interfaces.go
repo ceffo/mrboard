@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"context"
+	"time"
 
 	gl "gitlab.com/gitlab-org/api/client-go"
 )
@@ -19,6 +20,14 @@ type MRLister interface {
 	// queries: same fields as their fat counterparts minus discussions.
 	FetchUserMRsThinGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
 	FetchReviewerMRsThinGraphQL(ctx context.Context, username string) ([]GQLMergeRequest, error)
+	// FetchUserMergedMRsGraphQL, FetchReviewerMergedMRsGraphQL and
+	// FetchGroupMergedMRsGraphQL list MRs merged at or after mergedAfter with the
+	// thin fields plus mergedAt (docs/adr/0015, "Fetch placement and caching").
+	FetchUserMergedMRsGraphQL(ctx context.Context, username string, mergedAfter time.Time) ([]GQLMergeRequest, error)
+	FetchReviewerMergedMRsGraphQL(
+		ctx context.Context, username string, mergedAfter time.Time,
+	) ([]GQLMergeRequest, error)
+	FetchGroupMergedMRsGraphQL(ctx context.Context, groupID string, mergedAfter time.Time) ([]GQLMergeRequest, error)
 }
 
 // MREnricher covers enrichment: fetching full details for a single MR.

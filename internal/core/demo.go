@@ -53,15 +53,16 @@ func NewDemo(_ context.Context, cfg *config.AppConfig, fixture string) (*Core, e
 	// One instance serves both ticket ports, as in New.
 	ticketAdpt := adpt.Tickets()
 	return &Core{
-		MRSource:       adpt.MRSource(),
-		StateStore:     adpt.StateStore(),
-		SnapshotStore:  adpt.SnapshotStore(),
-		Notifier:       adpt.Notifier(),
-		TicketEnricher: ticketAdpt,
-		TicketLinker:   ticketAdpt,
-		UpdateChecker:  adpt.UpdateChecker(),
-		Config:         cfg,
-		Logger:         logger,
-		logCloser:      closer,
+		MRSource:            adpt.MRSource(),
+		StateStore:          adpt.StateStore(),
+		SnapshotStore:       adpt.SnapshotStore(),
+		MergedSnapshotStore: adpt.MergedSnapshotStore(),
+		Notifier:            adpt.Notifier(),
+		TicketEnricher:      ticketAdpt,
+		TicketLinker:        ticketAdpt,
+		UpdateChecker:       adpt.UpdateChecker(),
+		Config:              cfg,
+		Logger:              logger,
+		logCloser:           closer,
 	}, nil
 }

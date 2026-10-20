@@ -136,12 +136,14 @@ type GQLDiscussion struct {
 
 // GQLMergeRequest is a merge request as returned by the GraphQL API.
 type GQLMergeRequest struct {
-	ID                  string  `json:"id"`  // "gid://gitlab/MergeRequest/456"
-	IID                 string  `json:"iid"` // "42"
-	Title               string  `json:"title"`
-	Draft               bool    `json:"draft"`
-	CreatedAt           string  `json:"createdAt"`
-	UpdatedAt           string  `json:"updatedAt"`
+	ID        string `json:"id"`  // "gid://gitlab/MergeRequest/456"
+	IID       string `json:"iid"` // "42"
+	Title     string `json:"title"`
+	Draft     bool   `json:"draft"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	// MergedAt is requested by the merged-since listings only; empty for an open MR.
+	MergedAt            string  `json:"mergedAt"`
 	WebURL              string  `json:"webUrl"`
 	DetailedMergeStatus string  `json:"detailedMergeStatus"`
 	SourceBranch        string  `json:"sourceBranch"`

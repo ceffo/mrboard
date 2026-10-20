@@ -21,11 +21,19 @@ func buildFetchCmd() *cobra.Command {
 	var filtered bool
 	var view string
 	var verbose bool
+	var mergedSince string
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Fetch MRs and print as JSON, mirroring the TUI's own fetch",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := fetchCmdOptions{cold: cold, filtered: filtered, verbose: verbose}
+			if mergedSince != "" {
+				since, err := parseMergedSince(mergedSince)
+				if err != nil {
+					return err
+				}
+				opts.mergedSince = since
+			}
 			if cmd.Flags().Changed("reviewer-mrs") {
 				opts.reviewerMRsOverride = &reviewerMRs
 			}
@@ -46,8 +54,11 @@ func buildFetchCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&reviewerMRs, "reviewer-mrs", false,
 		"include reviewer-sourced MRs (default: the TUI's saved setting)")
 	cmd.Flags().BoolVar(&cold, "cold", false,
-		"ignore the on-disk snapshot and .gitattributes caches and recompute every MR from scratch, "+
-			"bypassing incremental fetch (docs/adr/0005)")
+		"ignore the on-disk snapshot, merged snapshot and .gitattributes caches and recompute every MR "+
+			"from scratch, bypassing incremental fetch (docs/adr/0005)")
+	cmd.Flags().StringVar(&mergedSince, "merged-since", "",
+		"also list MRs merged on or after this date (YYYY-MM-DD, local time), "+
+			"caching them in the merged snapshot tagged with that date")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"list each MR's counted and excluded files behind its review size")
 	return cmd
@@ -72,6 +83,67 @@ type fetchCmdOptions struct {
 	// verbose, when true, lists the counted and excluded files behind each MR's
 	// review size.
 	verbose bool
+	// mergedSince, when set, also lists the MRs merged on or after it.
+	mergedSince time.Time
+}
+
+// parseMergedSince reads a YYYY-MM-DD date as midnight local time: an MR counts
+// from the start of that day wherever it is run.
+func parseMergedSince(s string) (time.Time, error) {
+	t, err := time.ParseInLocation(time.DateOnly, s, time.Local)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("mrboard: --merged-since must be a YYYY-MM-DD date, got %q", s)
+	}
+	return t, nil
+}
+
+// fetchRequest is what one CLI fetch asks of the MR source.
+type fetchRequest struct {
+	includeReviewerMRs bool
+	// cold bypasses every cache: no previous snapshot is diffed against, and the
+	// adapter re-reads its own on-disk caches.
+	cold bool
+	// mergedSince, when set, also lists the MRs merged on or after it.
+	mergedSince time.Time
+}
+
+// fetchMRs is the fetch every CLI command shares. It diffs against the board
+// snapshot and, with mergedSince set, the merged snapshot listed for that date;
+// it then replaces the merged snapshot with the merged MRs it listed, unless the
+// fetch failed with none. The board snapshot is read only: the TUI owns it.
+// Partial-result errors come back alongside the MRs.
+func fetchMRs(ctx context.Context, c *core.Core, req fetchRequest) ([]domain.MergeRequest, []error, error) {
+	var previous []domain.MergeRequest
+	if !req.cold {
+		board, _, err := c.SnapshotStore.Load()
+		if err != nil {
+			return nil, nil, fmt.Errorf("mrboard: loading snapshot: %w", err)
+		}
+		previous = board
+		if !req.mergedSince.IsZero() {
+			merged, err := c.MergedSnapshotStore.Load(req.mergedSince)
+			if err != nil {
+				return nil, nil, fmt.Errorf("mrboard: loading merged snapshot: %w", err)
+			}
+			previous = append(previous, merged...)
+		}
+	}
+
+	mrs, errs := c.MRSource.FetchAll(ctx, mrsvc.FetchOptions{
+		IncludeReviewerMRs: req.includeReviewerMRs,
+		Previous:           previous,
+		Cold:               req.cold,
+		MergedSince:        req.mergedSince,
+	})
+	if !req.mergedSince.IsZero() {
+		merged := domain.MergedMRs(mrs)
+		if len(merged) > 0 || len(errs) == 0 {
+			if err := c.MergedSnapshotStore.Save(req.mergedSince, merged); err != nil {
+				errs = append(errs, fmt.Errorf("saving merged snapshot: %w", err))
+			}
+		}
+	}
+	return mrs, errs, nil
 }
 
 func parseViewMode(s string) (domain.ViewMode, error) {
@@ -127,19 +199,14 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 		includeReviewerMRs = *opts.reviewerMRsOverride
 	}
 
-	var previous []domain.MergeRequest
-	if !opts.cold {
-		previous, _, err = c.SnapshotStore.Load()
-		if err != nil {
-			return fmt.Errorf("mrboard: loading snapshot: %w", err)
-		}
-	}
-
-	mrs, errs := c.MRSource.FetchAll(fetchCtx, mrsvc.FetchOptions{
-		IncludeReviewerMRs: includeReviewerMRs,
-		Previous:           previous,
-		Cold:               opts.cold,
+	mrs, errs, err := fetchMRs(fetchCtx, c, fetchRequest{
+		includeReviewerMRs: includeReviewerMRs,
+		cold:               opts.cold,
+		mergedSince:        opts.mergedSince,
 	})
+	if err != nil {
+		return err
+	}
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
 	}
@@ -199,7 +266,9 @@ type mrJSON struct {
 	ApprovalsRequired int            `json:"approvals_required,omitempty"`
 	TimeInPhase       string         `json:"time_in_phase"`
 	TimeOpen          string         `json:"time_open"`
-	RoundTrips        int            `json:"round_trips"`
+	// MergedAt is set for a merged MR only (--merged-since), RFC 3339.
+	MergedAt   string `json:"merged_at,omitempty"`
+	RoundTrips int    `json:"round_trips"`
 	// Roles and NeedsAttention are relative to the configured current_user and
 	// omitted when none is set.
 	Roles          []domain.Role `json:"roles,omitempty"`
@@ -221,6 +290,13 @@ type reviewerJSON struct {
 	Username   string `json:"username"`
 	State      string `json:"state"`
 	IsApprover bool   `json:"is_approver,omitempty"`
+}
+
+func mergedAtJSON(mr domain.MergeRequest) string {
+	if !mr.Merged() {
+		return ""
+	}
+	return mr.MergedAt.Format(time.RFC3339)
 }
 
 func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mrJSON {
@@ -260,6 +336,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		ApprovalsRequired: approvalsRequired,
 		TimeInPhase:       domain.FormatDuration(now.Sub(mr.WaitingSince)),
 		TimeOpen:          domain.FormatDuration(now.Sub(mr.CreatedAt)),
+		MergedAt:          mergedAtJSON(mr),
 		RoundTrips:        mr.RoundTripCount,
 		Roles:             mr.RolesOf(currentUser),
 		NeedsAttention:    mr.NeedsAttention(currentUser),

@@ -65,19 +65,35 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger := ilog.FromContext(ctx)
 	fetchStart := time.Now()
 	logger.Info("gitlab: fetch start", "sources", len(a.cfg.Sources), "excluded_authors", a.cfg.ExcludedAuthors,
-		"include_reviewer_mrs", opts.IncludeReviewerMRs)
+		"include_reviewer_mrs", opts.IncludeReviewerMRs, "merged_since", opts.MergedSince)
 
 	// Stage 1: list — fetch all sources via the thin (no-discussions) query, return
-	// raw REST stubs, raw thin GraphQL MRs, and primary-source keys.
+	// raw REST stubs, raw thin GraphQL MRs, and primary-source keys. With
+	// MergedSince set, the merged-since listings run alongside.
+	var mergedRaw []pkggitlab.GQLMergeRequest
+	var mergedPrimary map[mrKey]bool
+	var mergedErrs []error
+	mergedDone := make(chan struct{})
+	go func() {
+		defer close(mergedDone)
+		mergedRaw, mergedPrimary, mergedErrs = a.listMergedStage(ctx, opts)
+	}()
 	rawMRs, gqlRawMRs, primaryKeys, errs := a.listStage(ctx, opts)
+	<-mergedDone
+	errs = append(errs, mergedErrs...)
+	for k := range mergedPrimary {
+		primaryKeys[k] = true
+	}
 
 	// Stage 2: dedup — combine, apply exclusions, split survivors back into
-	// REST stubs and GraphQL-thin stubs, each still needing discussions.
-	toEnrichREST, toEnrichGQL := dedupStage(rawMRs, gqlRawMRs, a.cfg.ExcludedAuthors, logger)
+	// REST stubs and GraphQL-thin stubs, each still needing discussions, and
+	// merged stubs, which need none.
+	toEnrichREST, toEnrichGQL, mergedGQL := dedupStage(rawMRs, gqlRawMRs, mergedRaw, a.cfg.ExcludedAuthors, logger)
+	sizedGQL := append(append([]pkggitlab.GQLMergeRequest(nil), toEnrichGQL...), mergedGQL...)
 
 	// Stage 3, concurrently with stage 4: diff stats — fetch per-file line counts
 	// for every survivor whose head SHA moved since the previous snapshot.
-	cachedStats, statsTargets, unaddressable := planDiffStats(liveDiffHeads(toEnrichREST, toEnrichGQL), opts.Previous)
+	cachedStats, statsTargets, unaddressable := planDiffStats(liveDiffHeads(toEnrichREST, sizedGQL), opts.Previous)
 	logger.Info("gitlab: diff stats plan",
 		"cached", len(cachedStats), "to_fetch", len(statsTargets), "unaddressable", unaddressable)
 	var fetchedStats map[mrKey][]domain.FileDiffStat
@@ -90,7 +106,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 
 	// Stage 3b, concurrently with stage 4: generated-file rules — the root
 	// .gitattributes of each survivor's (project, target branch), cached on disk.
-	attrsKeys := gitAttrsKeys(toEnrichREST, toEnrichGQL)
+	attrsKeys := gitAttrsKeys(toEnrichREST, sizedGQL)
 	var generated map[gitAttrsKey][]domain.GeneratedRule
 	var attrsErrs []error
 	attrsDone := make(chan struct{})
@@ -107,6 +123,7 @@ func (a *GitLabAdapter) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) (
 	logger.Info("gitlab: enrichment done",
 		"enriched", len(finalMRs), "enrich_errors", len(enrichErrs),
 		"duration", ilog.FmtDur(time.Since(enrichStart)))
+	finalMRs = append(finalMRs, mapMergedMRs(mergedGQL)...)
 
 	<-statsDone
 	errs = append(errs, statsErrs...)
@@ -177,22 +194,33 @@ func (a *GitLabAdapter) listStage(
 	return rawMRs, gqlRawMRs, primaryKeys, errs
 }
 
-// dedupStage builds a combined slice (GraphQL-thin stubs first so they win on
-// collision, matching the previous mapped-wins precedence), runs the
-// dedup+exclusion pass, then splits survivors back into REST stubs and
-// GraphQL-thin stubs — both still need discussions, fetched in enrichStage.
+// dedupStage builds a combined slice (merged stubs first, so an MR listed both
+// open and merged counts once, as merged; then GraphQL-thin stubs, so they win
+// over REST on collision, matching the previous mapped-wins precedence), runs
+// the dedup+exclusion pass, then splits survivors back into REST stubs and
+// GraphQL-thin stubs — both still need discussions, fetched in enrichStage —
+// and merged stubs, which need none.
 func dedupStage(
 	rawMRs []*gl.BasicMergeRequest,
 	gqlRawMRs []pkggitlab.GQLMergeRequest,
+	mergedRaw []pkggitlab.GQLMergeRequest,
 	excludedAuthors []string,
 	logger *slog.Logger,
-) (toEnrichREST []*gl.BasicMergeRequest, toEnrichGQL []pkggitlab.GQLMergeRequest) {
+) (toEnrichREST []*gl.BasicMergeRequest, toEnrichGQL, merged []pkggitlab.GQLMergeRequest) {
 	deduper := MRDeduplicator{ExcludedAuthors: excludedAuthors}
 
 	restByKey := make(map[mrKey]*gl.BasicMergeRequest, len(rawMRs))
 	gqlByKey := make(map[mrKey]pkggitlab.GQLMergeRequest, len(gqlRawMRs))
-	combined := make([]domain.MergeRequest, 0, len(gqlRawMRs)+len(rawMRs))
+	mergedByKey := make(map[mrKey]pkggitlab.GQLMergeRequest, len(mergedRaw))
+	combined := make([]domain.MergeRequest, 0, len(mergedRaw)+len(gqlRawMRs)+len(rawMRs))
 
+	for _, mr := range mergedRaw {
+		k := gqlMRKey(mr)
+		if _, ok := mergedByKey[k]; !ok {
+			mergedByKey[k] = mr
+		}
+		combined = append(combined, domain.MergeRequest{ProjectID: k.ProjectID, IID: k.IID, Author: mr.Author.Username})
+	}
 	for _, mr := range gqlRawMRs {
 		k := mrKey{ProjectID: parseGIDNumericSafe(mr.Project.ID), IID: parseIIDSafe(mr.IID)}
 		gqlByKey[k] = mr
@@ -213,16 +241,18 @@ func dedupStage(
 
 	for _, mr := range deduped {
 		k := mrKey{ProjectID: mr.ProjectID, IID: mr.IID}
-		if g, ok := gqlByKey[k]; ok {
+		if m, ok := mergedByKey[k]; ok {
+			merged = append(merged, m)
+		} else if g, ok := gqlByKey[k]; ok {
 			toEnrichGQL = append(toEnrichGQL, g)
 		} else if raw, ok := restByKey[k]; ok {
 			toEnrichREST = append(toEnrichREST, raw)
 		}
 	}
 	logger.Info("gitlab: dedup summary",
-		"raw", len(rawMRs), "gql_raw", len(gqlRawMRs),
-		"to_enrich_rest", len(toEnrichREST), "to_enrich_gql", len(toEnrichGQL))
-	return toEnrichREST, toEnrichGQL
+		"raw", len(rawMRs), "gql_raw", len(gqlRawMRs), "merged_raw", len(mergedRaw),
+		"to_enrich_rest", len(toEnrichREST), "to_enrich_gql", len(toEnrichGQL), "merged", len(merged))
+	return toEnrichREST, toEnrichGQL, merged
 }
 
 // enrichStage completes every deduped survivor into a domain.MergeRequest.

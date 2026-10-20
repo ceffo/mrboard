@@ -400,6 +400,9 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}
+	if mr.MergedAt != "" {
+		domainMR.MergedAt, _ = time.Parse(time.RFC3339, mr.MergedAt) //nolint:errcheck
+	}
 	if len(mr.Assignees.Nodes) > 0 {
 		domainMR.Assignee = mr.Assignees.Nodes[0].Username
 		domainMR.AssigneeName = mr.Assignees.Nodes[0].Name
