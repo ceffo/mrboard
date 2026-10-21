@@ -174,8 +174,8 @@ the board for them makes it flash away and back for nothing.
    starts the process in its own session (`Setsid` on unix, a new process group on Windows) so a
    terminal SIGINT/hangup aimed at mrboard never reaches it. stdin and stdout are the null device.
    stderr goes to a temp file rather than a pipe: a pipe would break when mrboard exits and kill a
-   still-running child with SIGPIPE on its next write. The file is removed after the exit is
-   observed (it is left behind only if mrboard quit first). mrboard never signals a detached
+   still-running child with SIGPIPE on its next write. The file is removed once the wait completes, on success or failure; it leaks only when
+   mrboard quits while the command is still running. mrboard never signals a detached
    process, and quitting leaves it running.
 3. **Messages.** Two outcomes, one handler each: `CommandStartedMsg` (process started) yields the
    `<name> launched` info toast and returns the Cmd that waits on the process off the UI goroutine;

@@ -32,6 +32,8 @@ func TestStartDetached(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("TMPDIR", tmp)
 			msg := startDetached("job", tt.binary, tt.argv)()
 
 			result := msg
@@ -46,6 +48,9 @@ func TestStartDetached(t *testing.T) {
 			assert.Equal(t, "job", res.CommandName)
 			assert.Equal(t, tt.wantErr, res.Err != nil)
 			assert.Equal(t, tt.wantStderr, res.Stderr)
+			leftovers, err := os.ReadDir(tmp)
+			require.NoError(t, err)
+			assert.Empty(t, leftovers, "the stderr temp file must be removed once the outcome is known")
 		})
 	}
 }

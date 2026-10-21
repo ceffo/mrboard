@@ -54,6 +54,7 @@ func (m Model) detachedCommandCmd(mr domain.MergeRequest, cmd config.Command) te
 // process is never tied to mrboard's lifetime or terminal.
 func startDetached(name, binary string, argv []string) tea.Cmd {
 	return func() tea.Msg {
+		//nolint:gosec // G204/G702: binary is an admin-configured mrboard.yaml entry; no shell is involved.
 		proc := exec.Command(binary, argv...)
 		detachProcess(proc)
 
