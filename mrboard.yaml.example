@@ -50,6 +50,15 @@ commands:
     binary: ./scripts/testdata/fixture-command.sh  # checked-in test fixture
     args: ["{{.ProjectPath}}", "{{.SourceBranch}}", "{{.TargetBranch}}"]
 
+  # `detach: true` starts the command in the background: the board is never suspended,
+  # a "<name> launched" toast appears, and a failure raises an error toast with the end
+  # of its stderr. Quitting mrboard leaves it running. Default false.
+  # - name: review in a new tab
+  #   key: A
+  #   binary: my-launcher
+  #   args: ["{{.WebURL}}"]
+  #   detach: true
+
   # Example wiring a real review tool (not installed by default):
   #
   # tuicr must run from inside a local git checkout of the MR's project, since it diffs

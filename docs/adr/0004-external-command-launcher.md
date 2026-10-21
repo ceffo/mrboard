@@ -161,6 +161,31 @@ Resolution:
    execution ticket calls `exec.Command(cmd.Binary, argv...)` directly rather than re-splitting a
    combined slice.
 
+### Detached commands (resolved 2026-10-21)
+
+Some commands only *start* something elsewhere (a new terminal tab, a background job); suspending
+the board for them makes it flash away and back for nothing.
+
+1. **Per-command opt-in.** `config.Command.Detach` (`detach: true`, default false) selects the
+   mode. A bool on the existing entry, not a second list or a separate `detached_commands` key:
+   the argv template, key, validation and help-modal wiring are identical, and an existing config
+   loads and behaves unchanged. mrboard names no tool; the capability is generic.
+2. **Process model.** `Model.detachedCommandCmd` builds argv with the same `BuildCommandArgv`, then
+   starts the process in its own session (`Setsid` on unix, a new process group on Windows) so a
+   terminal SIGINT/hangup aimed at mrboard never reaches it. stdin and stdout are the null device.
+   stderr goes to a temp file rather than a pipe: a pipe would break when mrboard exits and kill a
+   still-running child with SIGPIPE on its next write. The file is removed after the exit is
+   observed (it is left behind only if mrboard quit first). mrboard never signals a detached
+   process, and quitting leaves it running.
+3. **Messages.** Two outcomes, one handler each: `CommandStartedMsg` (process started) yields the
+   `<name> launched` info toast and returns the Cmd that waits on the process off the UI goroutine;
+   `CommandResultMsg` (extended with `Stderr`) is the exit outcome. A missing binary or argv error
+   arrives directly as a `CommandResultMsg` with no launched toast. Non-zero exit or start failure
+   shows the existing error toast, now with the tail of stderr (last 3 non-empty lines, read from
+   at most the last 2 KiB, each line capped at 160 runes). A clean exit shows nothing.
+4. **Out of scope.** No output display, PID tracking or cancel from mrboard. Foreground commands
+   keep the `tea.ExecProcess` path unchanged.
+
 ## Consequences
 
 - `internal/tui/keymap.go` gains a second Context-construction path (slice-based, alongside the
