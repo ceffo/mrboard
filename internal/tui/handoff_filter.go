@@ -15,6 +15,8 @@ type altScreenFilter struct {
 }
 
 // maxPendingSeq bounds how much of an unterminated sequence is held back.
+const esc = 0x1b
+
 const maxPendingSeq = 64
 
 var csiPrivatePrefix = []byte("\x1b[?")
@@ -34,8 +36,8 @@ func (f *altScreenFilter) filter(in []byte) []byte {
 	}
 	out := make([]byte, 0, len(data))
 	for i := 0; i < len(data); {
-		if data[i] != 0x1b {
-			next := bytes.IndexByte(data[i:], 0x1b)
+		if data[i] != esc {
+			next := bytes.IndexByte(data[i:], esc)
 			if next < 0 {
 				out = append(out, data[i:]...)
 				break
@@ -50,7 +52,7 @@ func (f *altScreenFilter) filter(in []byte) []byte {
 			f.pending = append([]byte(nil), rest...)
 			return out
 		case seqOther:
-			out = append(out, 0x1b)
+			out = append(out, esc)
 			i++
 		default:
 			end := csiEnd(rest)

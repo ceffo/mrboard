@@ -39,7 +39,7 @@ func (h *handoffCommand) SetStderr(w io.Writer) { h.stderr = w }
 // stdout are both terminals, or directly on the terminal otherwise.
 func (h *handoffCommand) Run() error {
 	if h.stdout != nil {
-		_, _ = io.WriteString(h.stdout, enterAltScreen)
+		_, _ = io.WriteString(h.stdout, enterAltScreen) //nolint:errcheck // best effort: a dead terminal fails the run anyway
 	}
 	in, inOK := h.stdin.(*os.File)
 	out, outOK := h.stdout.(*os.File)

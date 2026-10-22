@@ -70,7 +70,7 @@ func TestHandoffCommand_ExitStatus(t *testing.T) {
 func TestHandoffCommand_MissingBinary(t *testing.T) {
 	ptmx, tty, err := pty.Open()
 	require.NoError(t, err)
-	defer ptmx.Close() //nolint:errcheck
+	defer ptmx.Close()
 	h := &handoffCommand{cmd: exec.Command("mrboard-definitely-does-not-exist-xyz")}
 	h.SetStdin(tty)
 	h.SetStdout(tty)

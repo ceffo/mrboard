@@ -15,6 +15,9 @@ import (
 	"github.com/muesli/cancelreader"
 )
 
+// copyBufSize is the read size for the child output copy.
+const copyBufSize = 32 * 1024
+
 // ptyDrainGrace bounds how long Run waits for the child's last output once the
 // child has exited. A descendant that keeps the PTY open must not hold the
 // board hostage.
@@ -49,14 +52,14 @@ func runOnPTY(cmd *exec.Cmd, in, out *os.File) (ran bool, err error) {
 		_ = ptmx.Close()
 		return true, startErr
 	}
-	defer ptmx.Close() //nolint:errcheck
+	defer ptmx.Close()
 
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
 	go func() {
 		for range winch {
-			_ = pty.InheritSize(out, ptmx)
+			_ = pty.InheritSize(out, ptmx) //nolint:errcheck // a failed resize leaves the old size
 		}
 	}()
 
@@ -70,7 +73,7 @@ func runOnPTY(cmd *exec.Cmd, in, out *os.File) (ran bool, err error) {
 		reader = r
 		go func() {
 			defer close(inputDone)
-			_, _ = io.Copy(ptmx, reader)
+			_, _ = io.Copy(ptmx, reader) //nolint:errcheck // ends when the child exits or input is cancelled
 		}()
 	} else {
 		close(inputDone)
@@ -100,17 +103,17 @@ func runOnPTY(cmd *exec.Cmd, in, out *os.File) (ran bool, err error) {
 // ends (the child closed the PTY).
 func copyFiltered(dst io.Writer, src io.Reader) {
 	var f altScreenFilter
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, copyBufSize)
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
 			if b := f.filter(buf[:n]); len(b) > 0 {
-				_, _ = dst.Write(b)
+				_, _ = dst.Write(b) //nolint:errcheck // a dead terminal ends the child's output read too
 			}
 		}
 		if err != nil {
 			if b := f.flush(); len(b) > 0 {
-				_, _ = dst.Write(b)
+				_, _ = dst.Write(b) //nolint:errcheck // as above
 			}
 			return
 		}
