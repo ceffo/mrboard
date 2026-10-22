@@ -1307,7 +1307,7 @@ func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cm
 	// no shell is involved, so there is no injection surface beyond running the configured binary itself.
 	execCmd := exec.Command(cmd.Binary, argv...)
 	return execForeground(execCmd, func(err error) tea.Msg {
-		return CommandResultMsg{CommandName: cmd.Name, Err: err}
+		return CommandResultMsg{CommandName: cmd.Name, Err: err, Stderr: outputTail(err)}
 	})
 }
 

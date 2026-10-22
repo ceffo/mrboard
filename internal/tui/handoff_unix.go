@@ -79,10 +79,11 @@ func runOnPTY(cmd *exec.Cmd, in, out *os.File) (ran bool, err error) {
 		close(inputDone)
 	}
 
+	tail := &tailBuffer{}
 	outputDone := make(chan struct{})
 	go func() {
 		defer close(outputDone)
-		copyFiltered(out, ptmx)
+		copyFiltered(io.MultiWriter(out, tail), ptmx)
 	}()
 
 	waitErr := cmd.Wait()
@@ -95,6 +96,9 @@ func runOnPTY(cmd *exec.Cmd, in, out *os.File) (ran bool, err error) {
 		reader.Cancel()
 		<-inputDone
 		_ = reader.Close()
+	}
+	if waitErr != nil {
+		waitErr = &outputError{err: waitErr, tail: lastLines(stripEscapes(tail.bytes()), stderrTailMaxLines)}
 	}
 	return true, waitErr
 }

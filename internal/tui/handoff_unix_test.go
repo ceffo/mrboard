@@ -109,3 +109,56 @@ func TestHandoffCommand_ReceivesKeysAndSize(t *testing.T) {
 	assert.Contains(t, captured.String(), "30 100")
 	assert.Contains(t, captured.String(), "got:k")
 }
+
+func TestHandoffCommand_FailureCarriesOutputTail(t *testing.T) {
+	_, err := runHandoff(t, `printf '\033[?1049h\033[31m'; echo 'fatal: could not read from remote' >&2; exit 128`)
+
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 128, exitErr.ExitCode())
+	assert.Equal(t, "fatal: could not read from remote", outputTail(err))
+}
+
+func TestHandoffCommand_SuccessHasNoTail(t *testing.T) {
+	_, err := runHandoff(t, `echo fine`)
+
+	require.NoError(t, err)
+	assert.Empty(t, outputTail(err))
+}
+
+// The launcher-chain fixture clones, fetches and adds a worktree from a local
+// origin behind a /dev/tty prompt, then execs a full-screen child.
+func TestHandoffCommand_LauncherChainFixture(t *testing.T) {
+	root := t.TempDir()
+	ptmx, tty, err := pty.Open()
+	require.NoError(t, err)
+	require.NoError(t, pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}))
+	var captured bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = io.Copy(&captured, ptmx)
+	}()
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = ptmx.Write([]byte("y\n"))
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = ptmx.Write([]byte("x"))
+	}()
+
+	h := &handoffCommand{cmd: exec.Command("../../scripts/testdata/fixture-handoff-chain.sh", root)}
+	h.SetStdin(tty)
+	h.SetStdout(tty)
+	h.SetStderr(tty)
+	runErr := h.Run()
+	require.NoError(t, tty.Close())
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+	}
+	_ = ptmx.Close()
+
+	require.NoError(t, runErr)
+	assert.Contains(t, captured.String(), "clone it?")
+	assert.Contains(t, captured.String(), "mrboard alt-screen fixture")
+}

@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -64,4 +68,60 @@ func (h *handoffCommand) attachDirect() {
 	if h.cmd.Stderr == nil {
 		h.cmd.Stderr = h.stderr
 	}
+}
+
+// outputError is a foreground child's failure plus the tail of what it printed.
+// On a PTY the child's stderr is mixed into the terminal stream and the board
+// redraw wipes it, so the tail is the only record of why the child failed.
+type outputError struct {
+	err  error
+	tail string
+}
+
+func (e *outputError) Error() string { return e.err.Error() }
+func (e *outputError) Unwrap() error { return e.err }
+
+// outputTail returns the output tail carried by err, or "".
+func outputTail(err error) string {
+	var oe *outputError
+	if errors.As(err, &oe) {
+		return oe.tail
+	}
+	return ""
+}
+
+// escapeRe matches CSI and OSC terminal escape sequences.
+var escapeRe = regexp.MustCompile(
+	`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>78]`,
+)
+
+// tailKeepFactor is how many times stderrTailMaxBytes a tailBuffer retains, so
+// escape-heavy output still leaves a few readable lines.
+const tailKeepFactor = 4
+
+// stripEscapes removes terminal escape sequences and carriage returns.
+func stripEscapes(b []byte) []byte {
+	return bytes.ReplaceAll(escapeRe.ReplaceAll(b, nil), []byte("\r"), nil)
+}
+
+// tailBuffer keeps the last stderrTailMaxBytes*4 bytes written to it.
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if limit := stderrTailMaxBytes * tailKeepFactor; len(t.buf) > limit {
+		t.buf = append([]byte(nil), t.buf[len(t.buf)-limit:]...)
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) bytes() []byte {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]byte(nil), t.buf...)
 }
