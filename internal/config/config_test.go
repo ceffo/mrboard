@@ -435,3 +435,29 @@ func TestLoadReviewSizeInvalid(t *testing.T) {
 		assert.Error(t, err, name)
 	}
 }
+
+func TestLoadCommandsDetach(t *testing.T) {
+	path := writeTemp(t, `
+gitlab:
+  url: https://gitlab.example.com
+  token: glpat-abc
+
+sources:
+  - type: group
+    ids: [my-team]
+
+commands:
+  - name: background
+    key: b
+    binary: tool
+    detach: true
+  - name: foreground
+    key: f
+    binary: tool
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Commands, 2)
+	assert.True(t, cfg.Commands[0].Detach, "detach: true must load")
+	assert.False(t, cfg.Commands[1].Detach, "detach defaults to false")
+}

@@ -136,6 +136,7 @@ type Command struct {
 	Key    string   `mapstructure:"key"`    // keybinding, e.g. "d"
 	Binary string   `mapstructure:"binary"` // executable name or path, resolved via exec.LookPath
 	Args   []string `mapstructure:"args"`   // argv template, no shell interpretation
+	Detach bool     `mapstructure:"detach"` // start in the background; the board is never suspended
 }
 
 // AppConfig is the top-level application configuration.

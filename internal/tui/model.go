@@ -195,6 +195,7 @@ type NotifyResultMsg struct {
 type CommandResultMsg struct {
 	CommandName string
 	Err         error
+	Stderr      string // tail of a detached command's stderr; "" for foreground commands
 }
 
 // TicketIssueTypeMsg carries the result of a background issue-type fetch.
@@ -780,8 +781,8 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NotifyResultMsg, approverAnnounceResultMsg:
 		return m.handleNotificationResult(msg)
 
-	case CommandResultMsg:
-		return m.handleCommandResult(msg)
+	case CommandResultMsg, CommandStartedMsg:
+		return m.handleCommandMsg(msg)
 
 	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg,
 		selfUpdateSucceededMsg, dismissOverlayMsg, toastMsg, loadSettingsChangedMsg:
@@ -1012,6 +1013,9 @@ func (m Model) handleKeyBoard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// match here takes priority over the static board bindings below.
 	if cmd, ok := m.customCommands.Resolve(msg); ok {
 		return m.requireFocusedMR(cmd.Name, func(mr *domain.MergeRequest) (tea.Model, tea.Cmd) {
+			if cmd.Detach {
+				return m, m.detachedCommandCmd(*mr, cmd)
+			}
 			return m, m.execCommandCmd(*mr, cmd)
 		})
 	}
@@ -1331,13 +1335,34 @@ func (m Model) handleWidgetMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleCommandResult reports a configured command's outcome. Success shows no
-// toast — the resumed, redrawn board is itself the success signal.
+// toast — for a foreground command the resumed, redrawn board is itself the
+// success signal; a detached one already toasted "launched".
 func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		m.logger.Error("tui: command failed", "command", msg.CommandName, "err", msg.Err)
-		return m, m.toast(toast.ErrorAlert, fmt.Sprintf("%s failed: %s", msg.CommandName, msg.Err))
+		m.logger.Error("tui: command failed", "command", msg.CommandName, "err", msg.Err, "stderr", msg.Stderr)
+		text := fmt.Sprintf("%s failed: %s", msg.CommandName, msg.Err)
+		if msg.Stderr != "" {
+			text += ": " + msg.Stderr
+		}
+		return m, m.toast(toast.ErrorAlert, text)
 	}
 	return m, nil
+}
+
+// handleCommandMsg routes the two outcomes of a configured command run.
+func (m Model) handleCommandMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if started, ok := msg.(CommandStartedMsg); ok {
+		return m.handleCommandStarted(started)
+	}
+	result, _ := msg.(CommandResultMsg)
+	return m.handleCommandResult(result)
+}
+
+// handleCommandStarted toasts that a detached command is running and starts
+// waiting for its exit off the UI goroutine.
+func (m Model) handleCommandStarted(msg CommandStartedMsg) (tea.Model, tea.Cmd) {
+	m.logger.Info("tui: detached command launched", "command", msg.CommandName)
+	return m, tea.Batch(m.toast(toast.InfoAlert, msg.CommandName+" launched"), msg.wait)
 }
 
 // updateTicketKey enables or disables the ticket key based on whether the
