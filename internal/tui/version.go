@@ -190,7 +190,7 @@ func (w *versionWidget) applyCheckResult(msg updateCheckResultMsg) {
 // tea.ExecProcess, mirroring execCommandCmd's shape.
 func (w *versionWidget) selfUpdateCmd() tea.Cmd {
 	w.logger.Info("tui: running self-update", "from", w.version, "to", w.latest)
-	return tea.ExecProcess(selfupdate.ExecCmd(), func(err error) tea.Msg {
+	return execForeground(selfupdate.ExecCmd(), func(err error) tea.Msg {
 		return selfUpdateResultMsg{err: err}
 	})
 }

@@ -36,7 +36,7 @@ log:
 
 # External command launcher (docs/adr/0004-external-command-launcher.md).
 # Each entry binds a key on the board to an external program, launched with
-# mrboard's terminal suspended (tea.ExecProcess) and resumed on exit — useful
+# mrboard's terminal suspended (a PTY handoff that keeps the alternate screen) and resumed on exit — useful
 # for handing the selected MR off to a dedicated review tool that wants full
 # control of the terminal (e.g. tuicr, hunk), rather than a captured-output
 # filter like the built-in diff view (`d`).
@@ -49,6 +49,10 @@ commands:
     key: x                     # keybinding on the board
     binary: ./scripts/testdata/fixture-command.sh  # checked-in test fixture
     args: ["{{.ProjectPath}}", "{{.SourceBranch}}", "{{.TargetBranch}}"]
+
+  - name: alt-screen fixture   # a child that owns the alternate screen, like a review tool
+    key: y
+    binary: ./scripts/testdata/fixture-altscreen-command.sh
 
   # `detach: true` starts the command in the background: the board is never suspended,
   # a "<name> launched" toast appears, and a failure raises an error toast with the end

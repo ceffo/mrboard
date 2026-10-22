@@ -322,7 +322,7 @@ The spinner gives the user confidence the app is working and prevents spurious k
 
 **Exception — external command launcher.** A configured command (`commands:` in
 `mrboard.yaml`, see [keybindings.md](keybindings.md#configured-commands-external-launcher))
-suspends the whole TUI via `tea.ExecProcess` instead of showing a spinner: the
+suspends the whole TUI via `execForeground` (`tea.Exec` over a PTY that keeps the alt screen, ADR-0004 "Terminal handoff") instead of showing a spinner: the
 child process takes over the terminal entirely until it exits, at which point
 mrboard redraws. There is nothing to spin — the terminal isn't mrboard's to
 render into for the duration of the call.
