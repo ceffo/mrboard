@@ -198,3 +198,76 @@ the board for them makes it flash away and back for nothing.
   separate, explicitly-named contract layered on top, not a reflection of the domain type.
 - A missing configured-command binary is discoverable at startup (log warning) but never fatal;
   failures are only ever reported after the fact, once control returns to mrboard.
+
+## Terminal handoff
+
+**Status: Proposed** (spike, GH-79; nothing here is implemented). Applies to every non-detached
+configured command and to the self-update exec, which share `tea.ExecProcess`.
+
+### Problem
+
+`tea.ExecProcess` calls `Program.releaseTerminal`, whose `stopRenderer` → `cursedRenderer.close`
+**leaves the alternate screen**. The child therefore starts on the primary screen, and `RestoreTerminal`
+re-enters the alt screen only after the child has exited. Two primary-screen exposures result:
+
+- **Outbound**: from mrboard's `?1049l` until the child draws (or enters its own alt screen), the
+  user's pre-mrboard shell content is visible.
+- **Return**: when an alt-screen child exits it emits `?1049l`, exposing the primary screen until
+  mrboard re-enters the alt screen and repaints.
+
+### Evidence
+
+Headless: a throwaway bubbletea v2.0.7 program that execs a fixture through `tea.Exec`, run on a
+PTY (Python `pty`, 80x24) with the output captured byte for byte; one alt-screen child
+(`ESC[?1049h … ESC[?1049l`) and one plain child (prints a line, never touches the alt screen).
+Sequence order of the screen-mode escapes and markers (`1049h/l` = alt screen on/off):
+
+| Variant | Alt-screen child | Plain child |
+|---|---|---|
+| Baseline (today) | `h` BOARD `l` · **gap** · `h` CHILD `l` · **gap** · `h` BOARD `l` | `h` BOARD `l` · child runs **on primary** · `h` BOARD `l` |
+| A. Re-enter alt before spawn | `h` BOARD `l` `h` `h` CHILD `l` · **gap** · `h` BOARD `l` | `h` BOARD `l` `h` child on alt `h` BOARD `l` (no gap) |
+| B. Pre-paint board on primary | frame on primary, child, `l`, frame on primary, `h` BOARD | frame, child output **over** the frame, frame, `h` BOARD |
+| C. PTY proxy, drop child's `?1049l` | `h` BOARD `l` `h` `h` CHILD `h` BOARD `l` (**no gap**) | same as A: no gap |
+
+"Gap" = bytes between a screen-off and the next screen-on during which the terminal shows the
+primary screen. Raw captures are not committed (they are terminal-emulator noise); the harness is
+~100 lines and is rebuilt from the table above when the implementation item lands.
+
+Inside tmux 3.7 (detached server, 80x12, sampled mid-child with a plain child): baseline shows the
+pre-mrboard shell history on the primary screen (`alternate_on=0`); variant C shows only the child
+output on the alternate screen (`alternate_on=1`). tmux honours `?1049` like a bare terminal, so the
+byte-level behaviour above carries over.
+
+**Not tested** (no headless way, and the rules forbid opening a window on the user's desktop):
+Ghostty, iTerm2, Terminal.app and herdr's own terminal. Whether the remaining gap is a visible flash
+(it is the child's exit-to-repaint latency, tens of milliseconds) depends on their renderers and can
+only be judged by eye.
+
+### Options
+
+| | Fixes | Cost | Risk |
+|---|---|---|---|
+| **A. Re-enter the alt screen before spawning** (a small `tea.ExecCommand` wrapper that writes `ESC[?1049h` + clear, then runs the child) | Outbound for all children. Both directions for children that never use the alt screen | ~30 lines in `internal/tui`; no dependency | Nested `?1049h` is a no-op on xterm-compatible terminals, so an alt-screen child's own exit still exposes the primary screen (return gap remains). Terminals without alt screen: sequence is ignored. Gap between bubbletea's `?1049l` and our `?1049h` is two writes microseconds apart (not provably invisible) |
+| **B. Pre-paint the last board frame on the primary screen** | Hides the shell, shows a stale board | Needs the last rendered frame plus cursor/clear handling | Overwrites the user's primary-screen content and pushes the board into scrollback; plain children draw over the frame; stale data. Rejected |
+| **C. PTY proxy**: run the child on a PTY, forward I/O, strip the child's `?1049l` (and `?47l`/`?1047l`), after re-entering the alt screen as in A | Both directions, for every child | ~120–150 lines (PTY start, raw-mode stdin copy, SIGWINCH forwarding, exit status, split-sequence-safe filter) plus `github.com/creack/pty` as a new direct dependency (no Windows support) | Child sees a PTY, not the real tty: terminal queries (OSC 11, DA, kitty keyboard, image protocols) must round-trip through the proxy; mode state the child left on (mouse, kitty keyboard) is not reset by a skipped screen switch; the filter must handle sequences split across reads and combined private modes (`ESC[?1049;1l`); a proxy bug breaks every tool, not just the cosmetics |
+| **D. Upstream bubbletea option** to keep the alt screen across `ExecProcess` | Same as A (outbound and plain children); return gap stays | Upstream PR and a bubbletea bump; not prototyped | Timeline outside our control; renderer-internal change |
+
+A swallow-the-exit wrapper **without** a PTY is not possible: the child writes straight to the
+controlling tty, so only a PTY gives mrboard a place to filter its output.
+
+### Recommendation
+
+Implement **A** first and **C** on top of it, as two commits in one item:
+
+1. A fixes the outbound flash for every tool and both directions for plain tools, at almost no cost.
+2. The driving case (`tuicr-mr`) is an alt-screen tool, so only C removes its return flash. C is
+   the only option with real risk, so it lands behind its own commit and can be dropped (keeping A)
+   if the user judges A's residual gap acceptable or C's query round-tripping unreliable on their
+   terminals.
+
+D is worth a courtesy upstream issue but is not on the critical path. B is rejected.
+
+Follow-up implementation item to file: **"feat(tui): hide the shell between the board and a
+foreground command"**, covering the shared wrapper for `execCommandCmd` and the self-update exec,
+`mrboard fetch` unaffected (no TUI), with agent-tui verification of both an alt-screen and a plain
+fixture (`scripts/testdata/fixture-command.sh` is plain; add an alt-screen fixture).
