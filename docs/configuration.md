@@ -172,6 +172,21 @@ commands:
 `{{.ProjectPath}}`, `{{.IID}}`, `{{.SourceBranch}}`, `{{.TargetBranch}}`, `{{.WebURL}}`,
 `{{.Title}}`, `{{.Author}}`.
 
+Add `detach: true` to start the command in the background instead: the board stays on
+screen, shows a `<name> launched` toast, and the command runs with stdin and stdout on
+`/dev/null`. A command that cannot start, or exits non-zero, raises an error toast with the
+command name and the last lines of its stderr; a clean exit shows nothing more. Quitting
+mrboard never stops a detached command. `detach` is optional and defaults to `false`.
+
+```yaml
+commands:
+  - name: review in a new tab
+    key: A
+    binary: my-launcher       # starts something elsewhere and returns
+    args: ["{{.WebURL}}"]
+    detach: true
+```
+
 See [adr/0004-external-command-launcher.md](adr/0004-external-command-launcher.md) for the
 design and its non-goals.
 
