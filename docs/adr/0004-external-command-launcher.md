@@ -1,6 +1,6 @@
 # ADR-0004: External Command Launcher for MR Cards
 
-**Status**: Accepted — all wayfinder decisions resolved; execution work not yet started
+**Status**: Accepted
 
 ## Context
 
@@ -201,8 +201,8 @@ the board for them makes it flash away and back for nothing.
 
 ## Terminal handoff
 
-**Status: Proposed** (spike, GH-79; nothing here is implemented). Applies to every non-detached
-configured command and to the self-update exec, which share `tea.ExecProcess`.
+**Status: Accepted** (spike GH-79, built in GH-82 as A + C; see "As built"). Applies to every
+non-detached configured command and to the self-update exec, which share `execForeground`.
 
 ### Problem
 
@@ -271,3 +271,34 @@ Follow-up implementation item to file: **"feat(tui): hide the shell between the 
 foreground command"**, covering the shared wrapper for `execCommandCmd` and the self-update exec,
 `mrboard fetch` unaffected (no TUI), with agent-tui verification of both an alt-screen and a plain
 fixture (`scripts/testdata/fixture-command.sh` is plain; add an alt-screen fixture).
+
+### As built (GH-82)
+
+A and C landed together, as the ADR proposed, in `internal/tui/handoff*.go`:
+
+- `execForeground` replaces `tea.ExecProcess` for configured commands and the self-update exec. It
+  hands `tea.Exec` a `handoffCommand`. Detached commands never reach it.
+- `Run` first writes `ESC[?1049h ESC[2J ESC[H` (option A) to the terminal bubbletea gave it.
+- When stdin and stdout are both terminals (and not Windows), the child then runs on a PTY opened with
+  `creack/pty` (option C): sized from the real terminal, SIGWINCH re-applied to the PTY, the real
+  terminal in raw mode, keystrokes copied in through a `cancelreader` so the copy stops cleanly when
+  the child exits, and output copied out through `altScreenFilter`. The filter removes modes 47, 1047
+  and 1049 from `l` sequences (keeping any other mode in a combined sequence) and holds back sequences
+  split across reads. The exit status and the missing-binary error reach the callback unchanged.
+- No PTY (not a terminal, Windows, PTY allocation fails): option A only, child runs directly.
+- After the child exits, Run waits at most 250 ms for its last output, so a descendant that keeps the
+  PTY open cannot block the board.
+- Deviation from the sketch: the PTY is opened with `pty.Open` and the child started with `Setsid` +
+  `Setctty` rather than `pty.Start`, so a failure to allocate a PTY (fall back) is distinct from a
+  failure to start the child (reported as the command's error).
+
+Verification (headless): byte captures of board -> child -> board reproduce the baseline rows of the
+table before the change and the variant A/C rows after it (no `?1049l` between a screen-on and the
+board repaint, for an alt-screen and a plain child); agent-tui runs against `fixture-command.sh`
+(plain) and `fixture-altscreen-command.sh` (alt screen) confirm keys, resize, exit status, the error
+toast and the board redraw. Unit tests cover the filter, and the proxy against a throwaway PTY.
+
+Not verified headless, for the user's eye: Ghostty, iTerm2, Terminal.app, herdr's terminal and tmux
+(tmux was only sampled in the spike). Terminal queries a child issues (OSC 11, DA, kitty keyboard) are
+forwarded byte for byte but were not exercised with a tool that issues them. Mode state a child leaves
+on (mouse, kitty keyboard) is still the child's to reset.

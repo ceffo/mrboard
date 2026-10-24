@@ -1306,8 +1306,8 @@ func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cm
 	//nolint:gosec // G204: cmd.Binary is an admin-configured mrboard.toml entry, not attacker input;
 	// no shell is involved, so there is no injection surface beyond running the configured binary itself.
 	execCmd := exec.Command(cmd.Binary, argv...)
-	return tea.ExecProcess(execCmd, func(err error) tea.Msg {
-		return CommandResultMsg{CommandName: cmd.Name, Err: err}
+	return execForeground(execCmd, func(err error) tea.Msg {
+		return CommandResultMsg{CommandName: cmd.Name, Err: err, Stderr: outputTail(err)}
 	})
 }
 
