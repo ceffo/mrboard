@@ -133,6 +133,11 @@ small PR. The process is never done.
 
 ## Filing items: the scoper
 
+**The tracker holds only work on this repo's code.** Work in another repo (the user's dotfiles, their
+scripts, a tool's config) gets no tracker item, ever: it goes straight to a PR in that repo, tracked in
+your ledger. (A supervisor filed dotfiles script bugs in the project tracker; the user: "NEVER file an
+issue that is not related to code in the repo".)
+
 When the user says they need to file work (a request, a bug, an idea, an epic), or you discover work
 while running (a bug a developer or reviewer found, a follow-up), **don't ask a developer to write the item**: spawn a
 `scoper`, except for small follow-ups, which you file yourself once the user agrees (see "Token
@@ -258,6 +263,13 @@ When the developer reports the full verification passed on HEAD:
   a browser that looks like the user's (real scrollbars, not headless metrics alone, at 1920x1080
   and 2560x1440), LOOKS at its screenshots, and adds an automated check; a UI-heavy item may also get
   a `code-reviewer` in visual review mode on those screenshots. Never ask the user to check a screen.
+- **Test every piece yourself before the user tests anything.** A change that spans pieces (the app,
+  the user's scripts, their config, a remote) is proven piece by piece, then end to end, by the fleet:
+  each script against a real-shaped setup (the real remote read-only, into a scratch dir via the
+  script's env overrides, never the user's own data dirs), then the app driving the real command
+  headless (agent-tui with the user's config). Ask the user to try something only when the fleet
+  truly can't run it, and say why. (Failure seen: the user was asked to try a branch build twice;
+  both failures were a script bug the fleet could have hit headless.)
 - Pushing and opening PRs publishes work: do it when the user has asked for the flow (dispatching an
   item through you counts as that request for its branch). Push: `git -C <worktree> push -u origin
   <branch>` (plain push; `--force-with-lease` only to publish a restacked branch).

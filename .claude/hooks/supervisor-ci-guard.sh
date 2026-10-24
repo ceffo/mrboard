@@ -25,9 +25,10 @@ elif [ $rc = 10 ] && [ $alive = no ]; then
 $state
 Start .claude/scripts/ci-watch.sh with run_in_background (it replaces any previous watcher) before ending the turn."
 fi
-# Live agents (anything but sup-*) need the fleet watcher: an agent that finished and waits on the
+# Live agents (anything but sup-*) in this supervisor's herdr workspace need the fleet watcher: an agent that finished and waits on the
 # supervisor must wake it, whatever it wrote where.
-agents=$(herdr agent list 2>/dev/null | jq -r '[.result.agents[]|select(.name|startswith("sup-")|not)|.name]|join(" ")')
+agents=$(herdr agent list 2>/dev/null | jq -r --arg ws "${HERDR_WORKSPACE_ID:-}" \
+  '[.result.agents[]|select($ws == "" or .workspace_id == $ws)|select(.name|startswith("sup-")|not)|.name]|join(" ")')
 fpid=$(cat "$W/fleet-watch.pid" 2>/dev/null)
 if [ -n "$agents" ] && ! { [ -n "$fpid" ] && kill -0 "$fpid" 2>/dev/null; }; then
   reason="${reason:+$reason
