@@ -533,3 +533,50 @@ func TestLoadView_OlderStateFileGainsOnlyTheLoadKeys(t *testing.T) {
 	assert.Subset(t, []string{"load_group", "load_sort", "load_remaining"}, added)
 	assert.Contains(t, added, "load_group")
 }
+
+// loadFrame is what a refresh must leave alone when nothing changed: the
+// rendered view, the header count, the selection and the scroll position.
+type loadFrame struct {
+	view     string
+	count    int
+	selected string
+	offset   int
+}
+
+func frameOf(h *loadHarness) loadFrame {
+	load, _ := h.m.loadView.Load()
+	return loadFrame{
+		view: ansi.Strip(h.m.loadView.render()), count: load.MRCount,
+		selected: selectedRef(h), offset: h.m.loadView.offset,
+	}
+}
+
+func TestLoadView_NoChangeRefreshIsInvisible(t *testing.T) {
+	triggers := map[string]func(h *loadHarness) tea.Cmd{
+		"manual refresh": func(h *loadHarness) tea.Cmd { return h.press("r") },
+		"refresh tick":   func(h *loadHarness) tea.Cmd { return h.send(refreshTickMsg{gen: h.m.refreshGen}) },
+	}
+	for name, trigger := range triggers {
+		t.Run(name, func(t *testing.T) {
+			h := openedLoad(t, domain.DefaultAppState())
+			h.send(tea.WindowSizeMsg{Width: 160, Height: 8})
+			for range 3 {
+				h.press("down")
+			}
+			before := frameOf(h)
+			require.Equal(t, 3, before.count)
+			require.Positive(t, before.offset, "the view is scrolled")
+
+			cmd := trigger(h)
+			require.True(t, h.m.isRefreshing)
+			assert.Equal(t, before, frameOf(h), "once the refresh starts")
+
+			h.send(h.m.sprintFetchCmd()())
+			assert.Equal(t, before, frameOf(h), "after the sprint re-read lands mid-refresh")
+
+			h.land(t, cmd)
+			assert.False(t, h.m.isRefreshing)
+			assert.Equal(t, before, frameOf(h), "after the fetch lands")
+		})
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/ticketsvc"
 	pkgjira "github.com/ceffo/mrboard/pkg/jira"
 )
 
@@ -342,6 +343,53 @@ func TestUpsertRemoteLink_PostError(t *testing.T) {
 	assert.Equal(t, 1, fc.createRemoteCalls)
 }
 
+// A cache hit must give the same start day as the live read it caches: the
+// review load bounds merged MRs and keys the merged snapshot by that day, so a
+// day that moves with the read path empties the load view's merged MRs on
+// every refresh that crosses a cache write. +05:45 is no machine's zone.
+func TestGetActiveSprint_CacheHitKeepsTheReportedOffset(t *testing.T) {
+	reported := time.FixedZone("", 5*3600+45*60)
+	start := time.Date(2026, 10, 5, 0, 30, 0, 0, reported)
+	end := time.Date(2026, 10, 19, 0, 30, 0, 0, reported)
+	fc := &fakeClient{
+		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: start, End: end},
+		sprintKeys: []string{issueKeyOD10},
+	}
+	a := newTestAdapter(t, fc, time.Hour)
+
+	live, err := a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	require.NotNil(t, live)
+	cached, err := a.GetActiveSprint(context.Background(), 7)
+	require.NoError(t, err)
+	require.NotNil(t, cached)
+	require.Equal(t, 2, fc.calls, "the second read must be a cache hit")
+
+	for name, got := range map[string]*ticketsvc.Sprint{"live": live, "cached": cached} {
+		assert.True(t, start.Equal(got.Start), "%s start %v", name, got.Start)
+		assert.True(t, end.Equal(got.End), "%s end %v", name, got.End)
+		_, offset := got.Start.Zone()
+		assert.Equal(t, 5*3600+45*60, offset, "%s start keeps the reported offset", name)
+		assert.Equal(t, "2026-10-05T00:00:00+05:45", got.StartDay().Format(time.RFC3339), name)
+	}
+	assert.True(t, live.StartDay().Equal(cached.StartDay()), "live %v, cached %v", live.StartDay(), cached.StartDay())
+}
+
+// A sprint without dates caches and reads back without them.
+func TestGetActiveSprint_CacheHitKeepsMissingDatesZero(t *testing.T) {
+	fc := &fakeClient{sprint: &pkgjira.Sprint{ID: 42, Name: sprintName1}, sprintKeys: []string{issueKeyOD10}}
+	a := newTestAdapter(t, fc, time.Hour)
+
+	for range 2 {
+		got, err := a.GetActiveSprint(context.Background(), 7)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.True(t, got.Start.IsZero(), "start %v", got.Start)
+		assert.True(t, got.End.IsZero(), "end %v", got.End)
+	}
+	assert.Equal(t, 2, fc.calls, "the second read must be a cache hit")
+}
+
 func TestGetActiveSprint_IgnoresLegacyCacheEntry(t *testing.T) {
 	fc := &fakeClient{
 		sprint:     &pkgjira.Sprint{ID: 42, Name: sprintName1, Start: sprintStart, End: sprintEnd},
@@ -349,8 +397,11 @@ func TestGetActiveSprint_IgnoresLegacyCacheEntry(t *testing.T) {
 	}
 	a := newTestAdapter(t, fc, time.Hour)
 
-	// The pre-dates cache stored a bare key list under the unversioned key.
+	// The pre-dates cache stored a bare key list under the unversioned key; v2
+	// stored dates that came back in the machine's zone.
 	require.NoError(t, a.cache.Set(context.Background(), "sprint_board_7", []string{"OLD-1"}))
+	require.NoError(t, a.cache.Set(context.Background(), "sprint_v2_board_7",
+		ticketsvc.Sprint{Name: "Old", Start: sprintStart, IssueKeys: []string{"OLD-1"}}))
 
 	got, err := a.GetActiveSprint(context.Background(), 7)
 	require.NoError(t, err)
@@ -361,5 +412,5 @@ func TestGetActiveSprint_IgnoresLegacyCacheEntry(t *testing.T) {
 	got, err = a.GetActiveSprint(context.Background(), 7)
 	require.NoError(t, err)
 	assert.Equal(t, sprintName1, got.Name)
-	assert.Equal(t, 2, fc.calls, "the v2 entry must have been written")
+	assert.Equal(t, 2, fc.calls, "the v3 entry must have been written")
 }
