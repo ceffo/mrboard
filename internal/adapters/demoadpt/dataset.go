@@ -50,6 +50,28 @@ type dataset struct {
 	// savedMerged and savedMergedSince back the merged snapshot port.
 	savedMerged      []domain.MergeRequest
 	savedMergedSince time.Time
+
+	// faults are the fixture's injected failures, keyed by the 1-based number
+	// of the call they hit; fetches and sprintReads count the calls made.
+	failedFetches      map[int]bool
+	missingSprintReads map[int]bool
+	fetches            int
+	sprintReads        int
+}
+
+// nextFetchFails counts a fetch and reports whether the fixture fails it.
+func (d *dataset) nextFetchFails() (int, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fetches++
+	return d.fetches, d.failedFetches[d.fetches]
+}
+
+// nextSprintReadMisses counts a sprint read and reports whether the fixture
+// answers it with no active sprint. The caller holds the lock.
+func (d *dataset) nextSprintReadMisses() bool {
+	d.sprintReads++
+	return d.missingSprintReads[d.sprintReads]
 }
 
 // cloneMR returns a copy safe to hand across the port boundary.

@@ -76,6 +76,25 @@ type fixtureFile struct {
 	SprintTicketKeys   []string          `yaml:"sprint_ticket_keys"`
 	Sprint             *fixtureSprint    `yaml:"sprint"`
 	MergeRequests      []fixtureMR       `yaml:"merge_requests"`
+	Faults             fixtureFaults     `yaml:"faults"`
+}
+
+// fixtureFaults injects failures into a demo session, so a scenario can show
+// how the board rides out a failed refresh. Each list holds the 1-based
+// numbers of the calls that fail, counted from boot.
+type fixtureFaults struct {
+	// FailedFetches are the MR fetches that list nothing and report an error.
+	FailedFetches []int `yaml:"failed_fetches"`
+	// MissingSprintReads are the active-sprint reads that report no sprint.
+	MissingSprintReads []int `yaml:"missing_sprint_reads"`
+}
+
+func callSet(calls []int) map[int]bool {
+	set := make(map[int]bool, len(calls))
+	for _, n := range calls {
+		set[n] = true
+	}
+	return set
 }
 
 // fixtureSprint dates the demo's active sprint relative to boot, like the
@@ -246,6 +265,9 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 		threads: make(map[domain.MRKey][]domain.Thread),
 		diffs:   make(map[domain.MRKey]domain.MRDiff),
 		drafts:  make(map[domain.MRKey]bool),
+
+		failedFetches:      callSet(f.Faults.FailedFetches),
+		missingSprintReads: callSet(f.Faults.MissingSprintReads),
 	}
 	for _, p := range f.People {
 		ds.people[p.Username] = p
