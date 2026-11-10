@@ -108,8 +108,8 @@ type fetchRequest struct {
 
 // fetchMRs is the fetch every CLI command shares. It diffs against the board
 // snapshot and, with mergedSince set, the merged snapshot listed for that date;
-// it then replaces the merged snapshot with the merged MRs it listed, unless the
-// fetch failed with none. The board snapshot is read only: the TUI owns it.
+// it then replaces the merged snapshot with the merged MRs it listed, only when
+// the fetch returned no errors (a clean fetch with none saves an empty list). The board snapshot is read only: the TUI owns it.
 // Partial-result errors come back alongside the MRs.
 func fetchMRs(ctx context.Context, c *core.Core, req fetchRequest) ([]domain.MergeRequest, []error, error) {
 	var previous []domain.MergeRequest
@@ -134,12 +134,9 @@ func fetchMRs(ctx context.Context, c *core.Core, req fetchRequest) ([]domain.Mer
 		Cold:               req.cold,
 		MergedSince:        req.mergedSince,
 	})
-	if !req.mergedSince.IsZero() {
-		merged := domain.MergedMRs(mrs)
-		if len(merged) > 0 || len(errs) == 0 {
-			if err := c.MergedSnapshotStore.Save(req.mergedSince, merged); err != nil {
-				errs = append(errs, fmt.Errorf("saving merged snapshot: %w", err))
-			}
+	if !req.mergedSince.IsZero() && len(errs) == 0 {
+		if err := c.MergedSnapshotStore.Save(req.mergedSince, domain.MergedMRs(mrs)); err != nil {
+			errs = append(errs, fmt.Errorf("saving merged snapshot: %w", err))
 		}
 	}
 	return mrs, errs, nil

@@ -94,6 +94,33 @@ func TestFetchMRs_FailedFetchWithNoMergedKeepsMergedSnapshot(t *testing.T) {
 	assert.Len(t, errs, 1)
 }
 
+func TestFetchMRs_PartialFetchKeepsMergedSnapshot(t *testing.T) {
+	m := newFetchMocks(t)
+	m.board.EXPECT().Load().Return(nil, time.Time{}, nil)
+	m.merged.EXPECT().Load(testSince).Return(nil, nil)
+	m.src.EXPECT().FetchAll(mock.Anything, mock.Anything).
+		Return([]domain.MergeRequest{testMergedMR}, []error{errors.New("one project down")})
+
+	mrs, errs, err := fetchMRs(context.Background(), m.core, fetchRequest{mergedSince: testSince})
+
+	require.NoError(t, err)
+	assert.Len(t, mrs, 1)
+	assert.Len(t, errs, 1)
+}
+
+func TestFetchMRs_CleanFetchWithNoMergedSavesEmptySnapshot(t *testing.T) {
+	m := newFetchMocks(t)
+	m.board.EXPECT().Load().Return(nil, time.Time{}, nil)
+	m.merged.EXPECT().Load(testSince).Return([]domain.MergeRequest{testMergedMR}, nil)
+	m.src.EXPECT().FetchAll(mock.Anything, mock.Anything).Return([]domain.MergeRequest{testOpenMR}, nil)
+	m.merged.EXPECT().Save(testSince, []domain.MergeRequest{}).Return(nil)
+
+	_, errs, err := fetchMRs(context.Background(), m.core, fetchRequest{mergedSince: testSince})
+
+	require.NoError(t, err)
+	assert.Empty(t, errs)
+}
+
 func TestParseMergedSince(t *testing.T) {
 	got, err := parseMergedSince("2026-10-12")
 	require.NoError(t, err)
