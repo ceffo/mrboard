@@ -50,7 +50,8 @@ func makeModelWithSnapshotStore(t *testing.T, snap *recordingSnapshotStore) Mode
 
 // TestModel_TotalFetchFailureDoesNotOverwriteSnapshot is the regression test for
 // the observed cache poisoning: an all-errors fetch wrote {"mrs":null} over the
-// last-known-good snapshot that the next launch boots from.
+// last-known-good snapshot that the next launch boots from. The board keeps
+// showing the previous open MRs until a fetch succeeds.
 func TestModel_TotalFetchFailureDoesNotOverwriteSnapshot(t *testing.T) {
 	snap := &recordingSnapshotStore{}
 	m := makeModelWithSnapshotStore(t, snap)
@@ -62,7 +63,33 @@ func TestModel_TotalFetchFailureDoesNotOverwriteSnapshot(t *testing.T) {
 	assert.Zero(t, snap.saves, "a wholly failed fetch must not overwrite the cache")
 	assert.Equal(t, StateBoard, m2.State(), "the board must still be shown, with the errors surfaced")
 	assert.Len(t, m2.Errors(), 1, "the fetch errors must reach a user-visible surface")
-	assert.NotEqual(t, before, m2.AllMRs(), "the failed result still replaces the in-memory board")
+	assert.Equal(t, before, m2.AllMRs(), "the previous open MRs stay on the board")
+
+	next, _ = m2.Update(FetchResultMsg{MRs: someMRs()[:1]})
+	m3 := next.(Model)
+	assert.Len(t, m3.AllMRs(), 1, "the next good fetch replaces them")
+	assert.Empty(t, m3.Errors())
+	assert.Equal(t, 1, snap.saves)
+}
+
+// A wholly failed fetch confirms no local write: the dirty set survives it, and
+// the board waits for the next scheduled fetch instead of retrying at once.
+func TestModel_TotalFetchFailureKeepsTheDirtySet(t *testing.T) {
+	snap := &recordingSnapshotStore{}
+	m := makeModelWithSnapshotStore(t, snap)
+	key := m.AllMRs()[0].Key()
+	m.dirty.Mark(key, time.Now().Add(-time.Minute))
+	seq := m.fetchSeq
+
+	next, _ := m.Update(FetchResultMsg{
+		MRs: nil, Errors: []error{errors.New("context deadline exceeded")}, FetchStartedAt: time.Now(),
+	})
+	m2 := next.(Model)
+
+	assert.Contains(t, m2.dirty.Keys(), key, "an unconfirmed write stays dirty")
+	assert.Equal(t, seq, m2.fetchSeq, "no immediate refetch")
+	assert.False(t, m2.IsRefreshing())
+	assert.Zero(t, snap.saves)
 }
 
 // TestModel_PartialFetchFailureDoesNotOverwriteSnapshot covers the quieter half:

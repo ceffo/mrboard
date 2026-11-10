@@ -649,3 +649,38 @@ func TestLoadView_CleanFetchWithFewerMergedMRsReplacesThem(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, saved, 2, "!702 and !704")
 }
+
+func TestLoadView_TotalFetchFailureKeepsTheRows(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	before := frameOf(h)
+	require.Contains(t, before.view, "platform-api!701")
+
+	msg := findMsg[FetchResultMsg](h.press("r"))
+	require.NotNil(t, msg)
+	msg.MRs = nil
+	msg.Errors = []error{errors.New("context deadline exceeded")}
+	h.send(*msg)
+
+	assert.Equal(t, before, frameOf(h), "neither the open nor the merged rows are dropped")
+	assert.Len(t, h.m.Errors(), 1, "the error is still surfaced")
+
+	h.land(t, h.press("r"))
+	assert.Empty(t, h.m.Errors(), "the next good fetch lands")
+	assert.Equal(t, before, frameOf(h))
+}
+
+func TestLoadView_MissingSprintKeepsTheRows(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	before := frameOf(h)
+	require.Equal(t, 3, before.count)
+	seq := h.m.fetchSeq
+
+	cmd := h.send(SprintIssueKeysMsg{})
+
+	assert.Equal(t, before, frameOf(h), "the last known sprint's rows stay")
+	assert.NotNil(t, cmd, "the missing sprint is reported")
+	assert.Equal(t, seq, h.m.fetchSeq, "no refetch")
+
+	h.send(h.m.sprintFetchCmd()())
+	assert.Equal(t, before, frameOf(h), "the next good read changes nothing")
+}

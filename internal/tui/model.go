@@ -623,12 +623,19 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.state = stateBoard
 	m.isRefreshing = false
-	m.allMRs = m.dirty.Resolve(m.allMRs, domain.OpenMRs(msg.MRs), msg.FetchStartedAt)
+	open := domain.OpenMRs(msg.MRs)
+	// A fetch that lists no open MR and reports errors failed as a whole: it
+	// says nothing about the board, so the previous open MRs stay on screen and
+	// no dirty entry counts as confirmed by it.
+	totalFailure := len(open) == 0 && len(msg.Errors) > 0
+	if !totalFailure {
+		m.allMRs = m.dirty.Resolve(m.allMRs, open, msg.FetchStartedAt)
+	}
 	m.errors = msg.Errors
 	m.landMerged(msg)
 	m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
-	// Only a wholly clean fetch may overwrite the cache. A partial or total
-	// failure yields a truncated or empty board, and persisting that would
+	// Only a wholly clean fetch may overwrite the cache. A partial failure
+	// yields a truncated board (a total one an empty listing), and persisting it would
 	// destroy the last-known-good snapshot the next launch boots from
 	// (docs/adr/0005, "Non-blocking refresh"). snapshotWrittenAt is left
 	// untouched too, so the header keeps reporting the real cache age.
@@ -646,10 +653,11 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 		m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds(),
 		m.makeAutoAssignReviewersCmds(), m.makeApproverAnnounceCmds(),
 	}
-	if len(m.dirty) > 0 {
+	if len(m.dirty) > 0 && !totalFailure {
 		// Landing snapshot was stale relative to one or more local writes;
 		// issue an immediate targeted refetch instead of waiting for the
-		// next refresh tick (docs/adr/0005).
+		// next refresh tick (docs/adr/0005). After a total failure the next
+		// tick retries instead, so a lasting outage does not refetch in a loop.
 		m.isRefreshing = true
 		cmds = append(cmds, m.startFetch())
 	}
@@ -1610,6 +1618,12 @@ func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd
 		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
 		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
+	}
+	if msg.Sprint == nil && m.sprint != nil {
+		// A read that finds no sprint while one is shown keeps the last known
+		// sprint, so the load view keeps its rows until a read reports one.
+		m.logger.Warn("tui: sprint read returned no active sprint, keeping the last known one")
+		return m, m.toast(toast.WarnAlert, "No active sprint found, showing last known sprint")
 	}
 	m.sprint = sameSprintDates(m.sprint, msg.Sprint)
 	loadCmd := m.syncLoadSprint()
