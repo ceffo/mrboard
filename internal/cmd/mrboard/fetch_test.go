@@ -31,18 +31,18 @@ func TestBoardFilterOptions_CarriesSavedState(t *testing.T) {
 		SortField: "age",
 		SortDesc:  true,
 		Filter: domain.FilterCriteria{
-			ExcludedAssignees: []string{"bob"},
+			ExcludedAssignees: []string{userBob},
 			ExcludeTicketless: true,
 		},
 	}
 
-	got := boardFilterOptions(state, domain.ViewMine, "alice", domain.NewTicketKeyMatcher(false))
+	got := boardFilterOptions(state, domain.ViewMine, userAlice, domain.NewTicketKeyMatcher(false))
 
 	assert.True(t, got.MyView)
-	assert.Equal(t, "alice", got.CurrentUser)
+	assert.Equal(t, userAlice, got.CurrentUser)
 	assert.Equal(t, "age", got.SortField)
 	assert.True(t, got.SortDesc)
-	assert.Equal(t, []string{"bob"}, got.ExcludedAssignees)
+	assert.Equal(t, []string{userBob}, got.ExcludedAssignees)
 	assert.True(t, got.ExcludeTicketless)
 }
 
@@ -203,7 +203,7 @@ func TestToMRJSON_NewFieldsCarryMRValues(t *testing.T) {
 }
 
 func TestToMRJSON_OpenMRNoReviewersNoUser(t *testing.T) {
-	obj := encodeMR(t, domain.MergeRequest{Author: "alice"}, "")
+	obj := encodeMR(t, domain.MergeRequest{Author: userAlice}, "")
 
 	requireContractKeys(t, obj)
 	assert.JSONEq(t, `[]`, string(obj["reviewer_states"]))
@@ -222,7 +222,7 @@ func TestToMRJSON_MergedMR(t *testing.T) {
 }
 
 func TestToMRJSON_AuthoredByCurrentUser(t *testing.T) {
-	obj := encodeMR(t, domain.MergeRequest{Author: "alice"}, "alice")
+	obj := encodeMR(t, domain.MergeRequest{Author: userAlice}, userAlice)
 
 	requireContractKeys(t, obj)
 	assert.JSONEq(t, `["author"]`, string(obj["roles"]))
@@ -230,14 +230,14 @@ func TestToMRJSON_AuthoredByCurrentUser(t *testing.T) {
 
 func TestToMRJSON_NonApproverReviewerOnApproverMR(t *testing.T) {
 	mr := domain.MergeRequest{
-		Author: "alice",
+		Author: userAlice,
 		Reviewers: []domain.ReviewerInfo{
-			{Username: "bob", IsApprover: false},
+			{Username: userBob, IsApprover: false},
 			{Username: "carol", IsApprover: true},
 		},
 	}
 
-	obj := encodeMR(t, mr, "bob")
+	obj := encodeMR(t, mr, userBob)
 
 	requireContractKeys(t, obj)
 	assert.JSONEq(t, `[]`, string(obj["roles"]))
