@@ -118,10 +118,13 @@ func (a *JiraAdapter) GetIssueType(ctx context.Context, issueKey string) (string
 func (a *JiraAdapter) GetActiveSprint(ctx context.Context, boardID int) (*ticketsvc.Sprint, error) {
 	key := sprintCacheKey(boardID)
 
-	var cached ticketsvc.Sprint
+	var cached cachedSprint
 	if a.getCacheTTL(ctx, a.cfg.SprintCacheTTL, key, &cached) {
-		a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(cached.IssueKeys))
-		return &cached, nil
+		if s, ok := cached.sprint(); ok {
+			a.logger.Debug("jiraadpt: cache hit", "board_id", boardID, "count", len(s.IssueKeys))
+			return s, nil
+		}
+		a.logger.Warn("jiraadpt: unreadable sprint cache entry, reading live", "board_id", boardID)
 	}
 
 	sprint, err := a.client.GetActiveSprint(ctx, boardID)
@@ -140,9 +143,58 @@ func (a *JiraAdapter) GetActiveSprint(ctx context.Context, boardID int) (*ticket
 		keys[i] = a.cfg.KeyMatcher.Normalize(k)
 	}
 
-	result := &ticketsvc.Sprint{Name: sprint.Name, Start: sprint.Start, End: sprint.End, IssueKeys: keys}
-	a.setCacheTTL(ctx, a.cfg.SprintCacheTTL, key, result)
+	result := &ticketsvc.Sprint{
+		Name: sprint.Name, Start: atReportedOffset(sprint.Start), End: atReportedOffset(sprint.End), IssueKeys: keys,
+	}
+	a.setCacheTTL(ctx, a.cfg.SprintCacheTTL, key, newCachedSprint(result))
 	return result, nil
+}
+
+// cachedSprint is the sprint cache entry. Its dates are RFC 3339 text, so a
+// cache hit returns them at the offset the tracker reported, exactly as a live
+// read does: the review load's start day is midnight at that offset
+// (ticketsvc.Sprint.StartDay), and the merged snapshot is tagged with it.
+type cachedSprint struct {
+	Name      string
+	Start     string
+	End       string
+	IssueKeys []string
+}
+
+func newCachedSprint(s *ticketsvc.Sprint) cachedSprint {
+	return cachedSprint{
+		Name:      s.Name,
+		Start:     s.Start.Format(time.RFC3339Nano),
+		End:       s.End.Format(time.RFC3339Nano),
+		IssueKeys: s.IssueKeys,
+	}
+}
+
+// sprint decodes the entry; false when a date does not parse.
+func (c cachedSprint) sprint() (*ticketsvc.Sprint, bool) {
+	start, err := time.Parse(time.RFC3339Nano, c.Start)
+	if err != nil {
+		return nil, false
+	}
+	end, err := time.Parse(time.RFC3339Nano, c.End)
+	if err != nil {
+		return nil, false
+	}
+	return &ticketsvc.Sprint{
+		Name: c.Name, Start: atReportedOffset(start), End: atReportedOffset(end), IssueKeys: c.IssueKeys,
+	}, true
+}
+
+// atReportedOffset pins t to a fixed zone at its own offset. time.Parse yields
+// time.Local when the offset happens to match the machine's, and midnight in
+// time.Local can sit at another offset on a DST-change day, so the same
+// reported date would give two start days. The zero time stays zero.
+func atReportedOffset(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	_, offset := t.Zone()
+	return t.In(time.FixedZone("", offset))
 }
 
 // UpsertRemoteLink implements ticketsvc.TicketLinker.
@@ -262,6 +314,6 @@ func (a *JiraAdapter) setCacheTTL(ctx context.Context, ttl time.Duration, key st
 
 func issueTypeCacheKey(issueKey string) string { return "issue_" + issueKey }
 
-func sprintCacheKey(boardID int) string { return fmt.Sprintf("sprint_v2_board_%d", boardID) }
+func sprintCacheKey(boardID int) string { return fmt.Sprintf("sprint_v3_board_%d", boardID) }
 
 func remoteLinkCacheKey(globalID string) string { return "remotelink_" + globalID }

@@ -1584,6 +1584,24 @@ func (m Model) handleTicketIssueType(msg TicketIssueTypeMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
+// sameSprintDates returns next with the dates of prev wherever they are the
+// same instant: an instant read back at another offset is the same sprint,
+// and must not move the load view's start day (ticketsvc.Sprint.StartDay is
+// midnight in the start's own location). next is copied, never mutated.
+func sameSprintDates(prev, next *ticketsvc.Sprint) *ticketsvc.Sprint {
+	if prev == nil || next == nil {
+		return next
+	}
+	s := *next
+	if s.Start.Equal(prev.Start) {
+		s.Start = prev.Start
+	}
+	if s.End.Equal(prev.End) {
+		s.End = prev.End
+	}
+	return &s
+}
+
 // handleSprintIssueKeys stores the active sprint key set and re-applies the filter.
 func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
 	m.sprintRead = true
@@ -1593,7 +1611,7 @@ func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd
 		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
 	}
-	m.sprint = msg.Sprint
+	m.sprint = sameSprintDates(m.sprint, msg.Sprint)
 	loadCmd := m.syncLoadSprint()
 	if len(msg.Keys) == 0 {
 		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.

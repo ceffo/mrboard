@@ -118,19 +118,23 @@ func (m *Model) restoreMerged(since time.Time) {
 	m.mergedMRs = mrs
 }
 
-// landMerged keeps the merged MRs a fetch listed and persists them, unless the
-// fetch failed with none: an empty failed listing would wipe the sprint's
-// cached merged MRs.
+// landMerged keeps the merged MRs a fetch listed and persists them. A fetch
+// with errors may have listed only part of them, so it neither replaces the
+// merged MRs already held for the same date nor persists its listing.
 func (m *Model) landMerged(msg FetchResultMsg) {
 	if msg.MergedSince.IsZero() {
 		return
 	}
-	merged := domain.MergedMRs(msg.MRs)
-	if len(merged) == 0 && len(msg.Errors) > 0 {
+	failed := len(msg.Errors) > 0
+	if failed && msg.MergedSince.Equal(m.mergedSince) {
 		return
 	}
+	merged := domain.MergedMRs(msg.MRs)
 	m.mergedMRs = merged
 	m.mergedSince = msg.MergedSince
+	if failed {
+		return
+	}
 	if m.mergedStore == nil {
 		return
 	}

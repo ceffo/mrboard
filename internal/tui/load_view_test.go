@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -532,4 +533,119 @@ func TestLoadView_OlderStateFileGainsOnlyTheLoadKeys(t *testing.T) {
 	assert.Empty(t, kept, "no earlier line changes")
 	assert.Subset(t, []string{"load_group", "load_sort", "load_remaining"}, added)
 	assert.Contains(t, added, "load_group")
+}
+
+// loadFrame is what a refresh must leave alone when nothing changed: the
+// rendered view, the header count, the selection and the scroll position.
+type loadFrame struct {
+	view     string
+	count    int
+	selected string
+	offset   int
+}
+
+func frameOf(h *loadHarness) loadFrame {
+	load, _ := h.m.loadView.Load()
+	return loadFrame{
+		view: ansi.Strip(h.m.loadView.render()), count: load.MRCount,
+		selected: selectedRef(h), offset: h.m.loadView.offset,
+	}
+}
+
+func TestLoadView_NoChangeRefreshIsInvisible(t *testing.T) {
+	triggers := map[string]func(h *loadHarness) tea.Cmd{
+		"manual refresh": func(h *loadHarness) tea.Cmd { return h.press("r") },
+		"refresh tick":   func(h *loadHarness) tea.Cmd { return h.send(refreshTickMsg{gen: h.m.refreshGen}) },
+	}
+	for name, trigger := range triggers {
+		t.Run(name, func(t *testing.T) {
+			h := openedLoad(t, domain.DefaultAppState())
+			h.send(tea.WindowSizeMsg{Width: 160, Height: 8})
+			for range 3 {
+				h.press("down")
+			}
+			before := frameOf(h)
+			require.Equal(t, 3, before.count)
+			require.Positive(t, before.offset, "the view is scrolled")
+
+			cmd := trigger(h)
+			require.True(t, h.m.isRefreshing)
+			assert.Equal(t, before, frameOf(h), "once the refresh starts")
+
+			h.send(h.m.sprintFetchCmd()())
+			assert.Equal(t, before, frameOf(h), "after the sprint re-read lands mid-refresh")
+
+			h.land(t, cmd)
+			assert.False(t, h.m.isRefreshing)
+			assert.Equal(t, before, frameOf(h), "after the fetch lands")
+		})
+	}
+}
+
+// A sprint read that reports the same start instant at another offset (a
+// cache hit decoded in another zone than the live read) is the same sprint:
+// the load view neither reloads its merged MRs nor refetches them.
+func TestLoadView_SprintReadAtAnotherOffsetChangesNothing(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	before := frameOf(h)
+	require.Equal(t, 3, before.count)
+	seq, since := h.m.fetchSeq, h.m.mergedSince
+
+	s := *h.m.sprint
+	s.Start = s.Start.In(time.FixedZone("", 5*3600+45*60)) // no machine's zone
+	s.End = s.End.In(time.FixedZone("", 5*3600+45*60))
+	require.True(t, s.Start.Equal(h.m.sprint.Start))
+	require.False(t, s.StartDay().Equal(h.m.sprint.StartDay()), "the other offset moves the start day")
+	h.send(SprintIssueKeysMsg{Keys: s.IssueKeys, Sprint: &s})
+
+	assert.Equal(t, seq, h.m.fetchSeq, "no refetch")
+	assert.False(t, h.m.isRefreshing)
+	assert.True(t, since.Equal(h.m.mergedSince), "the merged MRs were not reloaded")
+	assert.Equal(t, before, frameOf(h))
+}
+
+// refreshResult starts a refresh of the open view and returns its result
+// with merged MR !705 missing from the listing.
+func refreshResultWithout705(t *testing.T, h *loadHarness) FetchResultMsg {
+	t.Helper()
+	msg := findMsg[FetchResultMsg](h.press("r"))
+	require.NotNil(t, msg)
+	require.False(t, msg.MergedSince.IsZero())
+	var mrs []domain.MergeRequest
+	for _, mr := range msg.MRs {
+		if mr.IID != 705 {
+			mrs = append(mrs, mr)
+		}
+	}
+	require.Len(t, mrs, len(msg.MRs)-1)
+	msg.MRs = mrs
+	return *msg
+}
+
+func TestLoadView_FailedFetchKeepsTheMergedMRs(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	before := frameOf(h)
+	require.Contains(t, before.view, "platform-api!705")
+
+	msg := refreshResultWithout705(t, h)
+	msg.Errors = []error{errors.New("source user=\"grace\": timeout")}
+	h.send(msg)
+
+	assert.Equal(t, before, frameOf(h), "a truncated listing with errors replaces no rows")
+	saved, err := h.merged.Load(msg.MergedSince)
+	require.NoError(t, err)
+	assert.Len(t, saved, 3, "nor is it persisted: !702, !704 and !705 stay")
+}
+
+func TestLoadView_CleanFetchWithFewerMergedMRsReplacesThem(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	require.Contains(t, h.screen(), "platform-api!705")
+
+	msg := refreshResultWithout705(t, h)
+	h.send(msg)
+
+	assert.NotContains(t, h.screen(), "platform-api!705")
+	saved, err := h.merged.Load(msg.MergedSince)
+	require.NoError(t, err)
+	assert.Len(t, saved, 2, "!702 and !704")
 }
