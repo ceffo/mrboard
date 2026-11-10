@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -50,7 +51,8 @@ func makeModelWithSnapshotStore(t *testing.T, snap *recordingSnapshotStore) Mode
 
 // TestModel_TotalFetchFailureDoesNotOverwriteSnapshot is the regression test for
 // the observed cache poisoning: an all-errors fetch wrote {"mrs":null} over the
-// last-known-good snapshot that the next launch boots from.
+// last-known-good snapshot that the next launch boots from. The board keeps
+// showing the previous open MRs until a fetch succeeds.
 func TestModel_TotalFetchFailureDoesNotOverwriteSnapshot(t *testing.T) {
 	snap := &recordingSnapshotStore{}
 	m := makeModelWithSnapshotStore(t, snap)
@@ -62,7 +64,33 @@ func TestModel_TotalFetchFailureDoesNotOverwriteSnapshot(t *testing.T) {
 	assert.Zero(t, snap.saves, "a wholly failed fetch must not overwrite the cache")
 	assert.Equal(t, StateBoard, m2.State(), "the board must still be shown, with the errors surfaced")
 	assert.Len(t, m2.Errors(), 1, "the fetch errors must reach a user-visible surface")
-	assert.NotEqual(t, before, m2.AllMRs(), "the failed result still replaces the in-memory board")
+	assert.Equal(t, before, m2.AllMRs(), "the previous open MRs stay on the board")
+
+	next, _ = m2.Update(FetchResultMsg{MRs: someMRs()[:1]})
+	m3 := next.(Model)
+	assert.Len(t, m3.AllMRs(), 1, "the next good fetch replaces them")
+	assert.Empty(t, m3.Errors())
+	assert.Equal(t, 1, snap.saves)
+}
+
+// A wholly failed fetch confirms no local write: the dirty set survives it, and
+// the board waits for the next scheduled fetch instead of retrying at once.
+func TestModel_TotalFetchFailureKeepsTheDirtySet(t *testing.T) {
+	snap := &recordingSnapshotStore{}
+	m := makeModelWithSnapshotStore(t, snap)
+	key := m.AllMRs()[0].Key()
+	m.dirty.Mark(key, time.Now().Add(-time.Minute))
+	seq := m.fetchSeq
+
+	next, _ := m.Update(FetchResultMsg{
+		MRs: nil, Errors: []error{errors.New("context deadline exceeded")}, FetchStartedAt: time.Now(),
+	})
+	m2 := next.(Model)
+
+	assert.Contains(t, m2.dirty.Keys(), key, "an unconfirmed write stays dirty")
+	assert.Equal(t, seq, m2.fetchSeq, "no immediate refetch")
+	assert.False(t, m2.IsRefreshing())
+	assert.Zero(t, snap.saves)
 }
 
 // TestModel_PartialFetchFailureDoesNotOverwriteSnapshot covers the quieter half:
@@ -159,4 +187,52 @@ func TestModel_ManualRefreshWhenIdleStartsFetch(t *testing.T) {
 	assert.Equal(t, seqBefore+1, m2.fetchSeq, "an idle manual refresh must dispatch a fetch")
 	assert.True(t, m2.IsRefreshing())
 	assert.NotNil(t, cmd)
+}
+
+// A write made while fetches fail stays dirty: a good fetch that started
+// before it does not revert it, and the first one started after it confirms it.
+func TestModel_WriteDuringOutageIsConfirmedOnce(t *testing.T) {
+	snap := &recordingSnapshotStore{}
+	m := makeModelWithSnapshotStore(t, snap)
+	written := m.AllMRs()[0]
+	written.Title = "local write"
+	m.allMRs[0] = written
+	writeAt := time.Now()
+	m.dirty.Mark(written.Key(), writeAt)
+
+	next, _ := m.Update(FetchResultMsg{
+		Errors: []error{errors.New("context deadline exceeded")}, FetchStartedAt: writeAt.Add(time.Second),
+	})
+	m = next.(Model)
+	require.Contains(t, m.dirty.Keys(), written.Key())
+
+	next, _ = m.Update(FetchResultMsg{MRs: someMRs(), FetchStartedAt: writeAt.Add(-time.Second)})
+	m = next.(Model)
+	assert.Equal(t, "local write", m.AllMRs()[0].Title, "a fetch older than the write does not revert it")
+	assert.Contains(t, m.dirty.Keys(), written.Key())
+	assert.True(t, m.IsRefreshing(), "the stale landing refetches the written MR at once")
+
+	confirmed := someMRs()
+	confirmed[0].Title = "local write"
+	next, _ = m.Update(FetchResultMsg{
+		MRs: confirmed, FetchStartedAt: writeAt.Add(2 * time.Second), Seq: m.fetchSeq,
+	})
+	m = next.(Model)
+	assert.Equal(t, "local write", m.AllMRs()[0].Title)
+	assert.Empty(t, m.dirty.Keys(), "the write is confirmed")
+}
+
+func TestModel_TotalFetchFailureOnColdBootShowsTheErrors(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t)
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, &recordingSnapshotStore{},
+		nil, nil, nil, nil, "dev", Options{})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	next, _ = next.(Model).Update(FetchResultMsg{Errors: []error{errors.New("context deadline exceeded")}})
+	m2 := next.(Model)
+
+	assert.Equal(t, StateBoard, m2.State())
+	assert.Empty(t, m2.AllMRs())
+	assert.Len(t, m2.Errors(), 1)
+	assert.Contains(t, m2.renderContent(), "context deadline exceeded")
 }

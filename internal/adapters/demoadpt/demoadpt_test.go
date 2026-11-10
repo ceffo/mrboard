@@ -195,7 +195,7 @@ func TestEveryFixtureIsSelfConsistent(t *testing.T) {
 
 func TestFixtures_ListsEveryEmbeddedDataset(t *testing.T) {
 	assert.Contains(t, Fixtures(), DefaultFixture, "the default fixture must be embedded")
-	assert.Equal(t, []string{"auto-assign", "gif", "load", "review-size", "reviewers"}, Fixtures())
+	assert.Equal(t, []string{"auto-assign", "gif", "load", "refresh-failure", "review-size", "reviewers"}, Fixtures())
 }
 
 func TestNew_UnknownFixtureNamesTheAvailableOnes(t *testing.T) {
@@ -464,4 +464,38 @@ func TestGetActiveSprint_FixtureWithoutSprintData(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, sprint)
 	})
+}
+
+func TestFaults_FailTheNamedCallsOnly(t *testing.T) {
+	a := newTestAdapterFor(t, "refresh-failure")
+	ctx := context.Background()
+
+	var fetched []int
+	for range 4 {
+		mrs, errs := a.MRSource().FetchAll(ctx, mrsvc.FetchOptions{})
+		if len(errs) > 0 {
+			assert.Empty(t, mrs, "a failed fetch lists nothing")
+			continue
+		}
+		fetched = append(fetched, len(mrs))
+	}
+	assert.Equal(t, []int{1, 1, 1}, fetched, "only fetch 3 fails; !701 is the one open MR")
+
+	var found []bool
+	for range 3 {
+		sprint, err := a.Tickets().GetActiveSprint(ctx, 1)
+		require.NoError(t, err)
+		found = append(found, sprint != nil)
+	}
+	assert.Equal(t, []bool{true, false, true}, found, "only sprint read 2 finds no sprint")
+}
+
+func TestFaults_RejectCallNumbersBelowOne(t *testing.T) {
+	for _, calls := range [][]int{{0}, {2, -1}} {
+		_, err := callSet("failed_fetches", calls)
+		assert.ErrorContains(t, err, "failed_fetches", "calls %v", calls)
+	}
+	set, err := callSet("failed_fetches", []int{1, 3})
+	require.NoError(t, err)
+	assert.Equal(t, map[int]bool{1: true, 3: true}, set)
 }

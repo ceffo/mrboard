@@ -149,6 +149,12 @@ behaves as it always did. Settings live in the fixture because they are part of 
 rewrites reviewers by itself before anyone can edit them. Two datasets is the answer, not a branch
 in Go.
 
+A fixture may also carry a `faults:` block (amended 2026-11-10, #87) to show how the board rides
+out failures: `failed_fetches` lists the MR fetches that list nothing and report an error,
+`missing_sprint_reads` the sprint reads that find no active sprint, each by its 1-based call
+number counted from boot (a number below 1 fails the load). `refresh-failure` is the `load`
+scenario with a failing refresh.
+
 `--demo` is unchanged. A hidden `--demo-fixture <name>` selects another (it errors without
 `--demo`, and an unknown name lists the embedded ones), and `scripts/demo-tui.sh [name]` passes it
 through. It is hidden because it is for development: the recording and a user's `--demo` never

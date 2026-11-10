@@ -346,6 +346,7 @@ type Model struct {
 	sprint             *ticketsvc.Sprint                // last active sprint read; nil when none
 	sprintRead         bool                             // a sprint read has answered at least once
 	sprintErr          error                            // the last sprint read's error
+	sprintMissing      bool                             // the last read found no sprint; m.sprint is kept
 }
 
 // ExitMessage returns the message to print after the terminal is restored,
@@ -623,12 +624,19 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.state = stateBoard
 	m.isRefreshing = false
-	m.allMRs = m.dirty.Resolve(m.allMRs, domain.OpenMRs(msg.MRs), msg.FetchStartedAt)
+	// A fetch that lists no MR at all, open or merged, and reports errors
+	// failed as a whole: it says nothing about the board, so the previous open
+	// MRs stay on screen and no dirty entry counts as confirmed by it. A
+	// listing that returned any MR worked, and lands as usual.
+	totalFailure := len(msg.MRs) == 0 && len(msg.Errors) > 0
+	if !totalFailure {
+		m.allMRs = m.dirty.Resolve(m.allMRs, domain.OpenMRs(msg.MRs), msg.FetchStartedAt)
+	}
 	m.errors = msg.Errors
 	m.landMerged(msg)
 	m.reviewerMRsInStore = hasReviewerSourceMR(m.allMRs)
-	// Only a wholly clean fetch may overwrite the cache. A partial or total
-	// failure yields a truncated or empty board, and persisting that would
+	// Only a wholly clean fetch may overwrite the cache. A partial failure
+	// yields a truncated board (a total one an empty listing), and persisting it would
 	// destroy the last-known-good snapshot the next launch boots from
 	// (docs/adr/0005, "Non-blocking refresh"). snapshotWrittenAt is left
 	// untouched too, so the header keeps reporting the real cache age.
@@ -646,10 +654,11 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 		m.makeTicketEnrichCmds(), m.makeTicketLinkCmds(), m.makeTicketDescriptionLinkCmds(),
 		m.makeAutoAssignReviewersCmds(), m.makeApproverAnnounceCmds(),
 	}
-	if len(m.dirty) > 0 {
+	if len(m.dirty) > 0 && !totalFailure {
 		// Landing snapshot was stale relative to one or more local writes;
 		// issue an immediate targeted refetch instead of waiting for the
-		// next refresh tick (docs/adr/0005).
+		// next refresh tick (docs/adr/0005). After a total failure the next
+		// tick retries instead, so a lasting outage does not refetch in a loop.
 		m.isRefreshing = true
 		cmds = append(cmds, m.startFetch())
 	}
@@ -1606,15 +1615,27 @@ func sameSprintDates(prev, next *ticketsvc.Sprint) *ticketsvc.Sprint {
 func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
 	m.sprintRead = true
 	m.sprintErr = msg.Err
+	m.sprintMissing = false
 	if msg.Err != nil {
 		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
 		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
 	}
+	if msg.Sprint == nil && m.sprint != nil && m.sprint.End.After(time.Now()) {
+		// A read that finds no sprint while one is shown and not yet over keeps
+		// it, so the load view keeps its rows and notes the miss; a sprint past
+		// its end gives way to the read.
+		m.logger.Warn("tui: sprint read returned no active sprint, keeping the last known one")
+		m.sprintMissing = true
+		m.refreshLoad()
+		return m, m.toast(toast.WarnAlert, "No active sprint found, showing last known sprint")
+	}
 	m.sprint = sameSprintDates(m.sprint, msg.Sprint)
 	loadCmd := m.syncLoadSprint()
 	if len(msg.Keys) == 0 {
-		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.
+		// No active sprint; sprintIssueKeys is nil so the filter stays inert.
+		m.sprintIssueKeys = nil
+		m.applyMRFilter()
 		m.refreshLoad()
 		return m, loadCmd
 	}

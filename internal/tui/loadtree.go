@@ -15,6 +15,8 @@ import (
 type LoadSprint struct {
 	Name       string
 	Start, End time.Time // End is zero when the tracker does not report it
+	// Note names a problem with the sprint read, shown at the end of the header.
+	Note string
 }
 
 // NewLoadStyles builds the style set for rendering a load outside the board. An
@@ -97,6 +99,9 @@ func loadHeader(load mrsvc.Load, sprint LoadSprint, st Styles) string {
 		scope = "remaining only"
 	}
 	parts = append(parts, st.LoadMeta.Render(scope))
+	if sprint.Note != "" {
+		parts = append(parts, st.LoadNote.Render("⚠ "+sprint.Note))
+	}
 	return strings.Join(parts, st.LoadMeta.Render(" · "))
 }
 

@@ -22,6 +22,10 @@ func (s *mrSource) FetchAll(ctx context.Context, opts mrsvc.FetchOptions) ([]dom
 	if err := s.sleep(ctx); err != nil {
 		return nil, []error{err}
 	}
+	if n, fails := s.a.ds.nextFetchFails(); fails {
+		s.a.logger.Warn("demo: injected fetch failure", "fetch", n)
+		return nil, []error{fmt.Errorf("demo: injected failure of fetch %d", n)}
+	}
 	all := s.a.ds.all()
 	out := make([]domain.MergeRequest, 0, len(all))
 	for _, mr := range all {

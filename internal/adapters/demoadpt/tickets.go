@@ -26,14 +26,15 @@ func (t *tickets) GetIssueType(ctx context.Context, issueKey string) (string, er
 
 // GetActiveSprint returns the fixture's sprint regardless of board ID; the demo
 // config only ever names one board. The fixture has no cache to revalidate. A
-// fixture with neither a sprint block nor sprint keys has no active sprint.
+// fixture with neither a sprint block nor sprint keys has no active sprint, and
+// neither has a read the fixture's faults name.
 func (t *tickets) GetActiveSprint(ctx context.Context, _ int) (*ticketsvc.Sprint, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	t.a.ds.mu.RLock()
-	defer t.a.ds.mu.RUnlock()
-	if !t.a.ds.hasSprint && len(t.a.ds.sprintKeys) == 0 {
+	t.a.ds.mu.Lock()
+	defer t.a.ds.mu.Unlock()
+	if t.a.ds.nextSprintReadMisses() || (!t.a.ds.hasSprint && len(t.a.ds.sprintKeys) == 0) {
 		return nil, nil
 	}
 	return &ticketsvc.Sprint{
