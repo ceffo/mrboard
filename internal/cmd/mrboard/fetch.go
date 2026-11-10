@@ -22,11 +22,14 @@ func buildFetchCmd() *cobra.Command {
 	var view string
 	var verbose bool
 	var mergedSince string
+	var needsMyReview bool
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Fetch MRs and print as JSON, mirroring the TUI's own fetch",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts := fetchCmdOptions{cold: cold, filtered: filtered, verbose: verbose}
+			opts := fetchCmdOptions{
+				cold: cold, filtered: filtered, verbose: verbose, needsMyReview: needsMyReview,
+			}
 			if mergedSince != "" {
 				since, err := parseMergedSince(mergedSince)
 				if err != nil {
@@ -61,6 +64,9 @@ func buildFetchCmd() *cobra.Command {
 			"caching them in the merged snapshot tagged with that date")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"list each MR's counted and excluded files behind its review size")
+	cmd.Flags().BoolVar(&needsMyReview, "needs-my-review", false,
+		"keep only the MRs whose needs_my_review is true (requires current_user); "+
+			"applied after --filtered and --view")
 	return cmd
 }
 
@@ -85,7 +91,14 @@ type fetchCmdOptions struct {
 	verbose bool
 	// mergedSince, when set, also lists the MRs merged on or after it.
 	mergedSince time.Time
+	// needsMyReview, when true, keeps only the MRs the current user is expected
+	// to review (domain.MergeRequest.NeedsReviewBy), after any board filtering.
+	needsMyReview bool
 }
+
+// errNoCurrentUser is returned by --needs-my-review when no current_user is
+// configured: without it the predicate is false for every MR.
+var errNoCurrentUser = errors.New("mrboard: --needs-my-review requires current_user to be set in the config")
 
 // parseMergedSince reads a YYYY-MM-DD date as midnight local time: an MR counts
 // from the start of that day wherever it is run.
@@ -183,6 +196,9 @@ var errFetchFailed = errors.New("mrboard: fetch failed")
 
 func execFetch(ctx context.Context, opts fetchCmdOptions, stdout, stderr io.Writer) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
+	if opts.needsMyReview && c.Config.CurrentUser == "" {
+		return errNoCurrentUser
+	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout(c))
 	defer cancel()
@@ -218,6 +234,9 @@ func execFetch(ctx context.Context, opts fetchCmdOptions, stdout, stderr io.Writ
 		km := domain.NewTicketKeyMatcher(c.Config.Jira.CaseInsensitiveTicketMatch)
 		mrs = mrsvc.FilterAndSort(mrs, boardFilterOptions(state, viewMode, c.Config.CurrentUser, km))
 	}
+	if opts.needsMyReview {
+		mrs = needingReviewBy(mrs, c.Config.CurrentUser)
+	}
 	rs := c.Config.ReviewSize
 	sizing := sizeOptions{
 		exclusions: rs.ExclusionsFor(),
@@ -225,6 +244,17 @@ func execFetch(ctx context.Context, opts fetchCmdOptions, stdout, stderr io.Writ
 		verbose:    opts.verbose,
 	}
 	return printJSON(stdout, mrs, c.Config.CurrentUser, sizing)
+}
+
+// needingReviewBy keeps, in order, the MRs username is expected to review.
+func needingReviewBy(mrs []domain.MergeRequest, username string) []domain.MergeRequest {
+	kept := make([]domain.MergeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		if mr.NeedsReviewBy(username) {
+			kept = append(kept, mr)
+		}
+	}
+	return kept
 }
 
 // sizeOptions controls how fetch output reports each MR's review size
@@ -262,10 +292,11 @@ type mrJSON struct {
 	// MergedAt is null for an open MR; RFC 3339 for a merged one (--merged-since).
 	MergedAt   *string `json:"merged_at"`
 	RoundTrips int     `json:"round_trips"`
-	// Roles and NeedsAttention are relative to the configured current_user; with
-	// none set Roles is [] and NeedsAttention false.
+	// Roles, NeedsAttention and NeedsMyReview are relative to the configured
+	// current_user; with none set Roles is [] and both booleans false.
 	Roles          []domain.Role `json:"roles"`
 	NeedsAttention bool          `json:"needs_attention"`
+	NeedsMyReview  bool          `json:"needs_my_review"`
 	// ReviewSize is null when the MR's diff stats are unknown, and SizeBucket is
 	// then "?". SizeFiles is set in verbose mode for an MR of known size.
 	ReviewSize *int           `json:"review_size"`
@@ -339,6 +370,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		RoundTrips:        mr.RoundTripCount,
 		Roles:             roles,
 		NeedsAttention:    mr.NeedsAttention(currentUser),
+		NeedsMyReview:     mr.NeedsReviewBy(currentUser),
 		ReviewSize:        reviewSize,
 		SizeBucket:        string(sizing.thresholds.Bucket(m.Size)),
 		SizeFiles:         sizeFiles,

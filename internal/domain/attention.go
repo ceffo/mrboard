@@ -87,3 +87,25 @@ func (mr MergeRequest) hasApprovers() bool {
 	}
 	return false
 }
+
+// NeedsReviewBy reports whether username is expected to review the MR: it is
+// not a draft and username has a reviewer entry on it that is an approver (in
+// any state, approved included), or whose state is Commented or
+// ReReviewRequested. Only the MR's reviewer list counts: an approval-rule
+// approver who is not a reviewer on the MR is not asked to review it.
+//
+// Unlike NeedsAttention, this rule counts a reviewer who has commented, counts
+// a reviewer who has not started only when they are an approver, and ignores
+// the approver gate of RolesOf. An empty username never needs to review.
+func (mr MergeRequest) NeedsReviewBy(username string) bool {
+	if username == "" || mr.Phase == PhaseDraft {
+		return false
+	}
+	for _, r := range mr.Reviewers {
+		if r.Username != username {
+			continue
+		}
+		return r.IsApprover || r.State == ReviewerCommented || r.State == ReviewerReReviewRequested
+	}
+	return false
+}
