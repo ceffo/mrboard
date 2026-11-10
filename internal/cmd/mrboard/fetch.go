@@ -109,8 +109,9 @@ type fetchRequest struct {
 // fetchMRs is the fetch every CLI command shares. It diffs against the board
 // snapshot and, with mergedSince set, the merged snapshot listed for that date;
 // it then replaces the merged snapshot with the merged MRs it listed, only when
-// the fetch returned no errors (a clean fetch with none saves an empty list). The board snapshot is read only: the TUI owns it.
-// Partial-result errors come back alongside the MRs.
+// the fetch returned no errors (a clean fetch with none saves an empty list).
+// The board snapshot is read only: the TUI owns it. Partial-result errors come
+// back alongside the MRs.
 func fetchMRs(ctx context.Context, c *core.Core, req fetchRequest) ([]domain.MergeRequest, []error, error) {
 	var previous []domain.MergeRequest
 	if !req.cold {
