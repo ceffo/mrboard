@@ -79,8 +79,8 @@ approvers, every listed reviewer counts.
 
 It is always `false` for a `draft`.
 
-`needs_my_review` is `true` when the MR is not a `draft` and the user's own `reviewer_states`
-entry has:
+`needs_my_review` is `true` when the MR is open (`merged_at` is `null`), not a `draft`, and the
+user's own `reviewer_states` entry has:
 
 - `is_approver: true`, in any `state` (`approved` included); or
 - `state` `commented` or `re_review_requested`.
@@ -123,4 +123,5 @@ A file is `{"path": string, "additions": number, "deletions": number}`.
 
 Each fetch error line starts with the fixed prefix `mrboard: fetch error: `, followed by the
 error text. A partial result has no separate exit code: a caller that must detect one looks for
-that prefix on stderr. `[]` with status `0` means there are no MRs; a failure never prints `[]`.
+that prefix on stderr. `[]` with status `0` means no MRs matched (none fetched, or none left after
+`--needs-my-review`); a total failure never prints `[]`.

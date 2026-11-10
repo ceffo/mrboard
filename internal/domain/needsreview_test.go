@@ -2,6 +2,7 @@ package domain
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -11,6 +12,9 @@ func reviewedBy(phase MRPhase, reviewers ...ReviewerInfo) MergeRequest {
 }
 
 func TestNeedsReviewBy(t *testing.T) {
+	merged := reviewedBy(PhaseNeedsReview,
+		ReviewerInfo{Username: attnMe, State: ReviewerReReviewRequested, IsApprover: true})
+	merged.MergedAt = time.Date(2026, 5, 2, 8, 0, 0, 0, time.UTC)
 	approverOther := ReviewerInfo{Username: attnApprover, State: ReviewerNotStarted, IsApprover: true}
 	tests := []struct {
 		name string
@@ -50,7 +54,10 @@ func TestNeedsReviewBy(t *testing.T) {
 			Author: attnMe, Phase: PhaseNeedsAuthorAction,
 			Reviewers: []ReviewerInfo{{Username: attnOther, State: ReviewerCommented}},
 		}, attnMe, false},
-		{"no current user", reviewedBy(PhaseNeedsReview,
+		{"merged with approver re-review requested", merged, attnMe, false},
+		{"no current user, approver reviewer", reviewedBy(PhaseNeedsReview,
+			ReviewerInfo{Username: attnMe, State: ReviewerCommented, IsApprover: true}), "", false},
+		{"no current user, nameless entry", reviewedBy(PhaseNeedsReview,
 			ReviewerInfo{Username: "", State: ReviewerCommented, IsApprover: true}), "", false},
 		{"unrelated user", reviewedBy(PhaseNeedsReview, approverOther), attnMe, false},
 	}
