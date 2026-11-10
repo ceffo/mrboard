@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ceffo/mrboard/internal/config"
 	"github.com/ceffo/mrboard/internal/domain"
@@ -186,4 +187,52 @@ func TestModel_ManualRefreshWhenIdleStartsFetch(t *testing.T) {
 	assert.Equal(t, seqBefore+1, m2.fetchSeq, "an idle manual refresh must dispatch a fetch")
 	assert.True(t, m2.IsRefreshing())
 	assert.NotNil(t, cmd)
+}
+
+// A write made while fetches fail stays dirty: a good fetch that started
+// before it does not revert it, and the first one started after it confirms it.
+func TestModel_WriteDuringOutageIsConfirmedOnce(t *testing.T) {
+	snap := &recordingSnapshotStore{}
+	m := makeModelWithSnapshotStore(t, snap)
+	written := m.AllMRs()[0]
+	written.Title = "local write"
+	m.allMRs[0] = written
+	writeAt := time.Now()
+	m.dirty.Mark(written.Key(), writeAt)
+
+	next, _ := m.Update(FetchResultMsg{
+		Errors: []error{errors.New("context deadline exceeded")}, FetchStartedAt: writeAt.Add(time.Second),
+	})
+	m = next.(Model)
+	require.Contains(t, m.dirty.Keys(), written.Key())
+
+	next, _ = m.Update(FetchResultMsg{MRs: someMRs(), FetchStartedAt: writeAt.Add(-time.Second)})
+	m = next.(Model)
+	assert.Equal(t, "local write", m.AllMRs()[0].Title, "a fetch older than the write does not revert it")
+	assert.Contains(t, m.dirty.Keys(), written.Key())
+	assert.True(t, m.IsRefreshing(), "the stale landing refetches the written MR at once")
+
+	confirmed := someMRs()
+	confirmed[0].Title = "local write"
+	next, _ = m.Update(FetchResultMsg{
+		MRs: confirmed, FetchStartedAt: writeAt.Add(2 * time.Second), Seq: m.fetchSeq,
+	})
+	m = next.(Model)
+	assert.Equal(t, "local write", m.AllMRs()[0].Title)
+	assert.Empty(t, m.dirty.Keys(), "the write is confirmed")
+}
+
+func TestModel_TotalFetchFailureOnColdBootShowsTheErrors(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t)
+	m := New(context.Background(), &config.Config{}, src, noopStore{}, &recordingSnapshotStore{},
+		nil, nil, nil, nil, "dev", Options{})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	next, _ = next.(Model).Update(FetchResultMsg{Errors: []error{errors.New("context deadline exceeded")}})
+	m2 := next.(Model)
+
+	assert.Equal(t, StateBoard, m2.State())
+	assert.Empty(t, m2.AllMRs())
+	assert.Len(t, m2.Errors(), 1)
+	assert.Contains(t, m2.renderContent(), "context deadline exceeded")
 }

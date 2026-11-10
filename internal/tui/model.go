@@ -346,6 +346,7 @@ type Model struct {
 	sprint             *ticketsvc.Sprint                // last active sprint read; nil when none
 	sprintRead         bool                             // a sprint read has answered at least once
 	sprintErr          error                            // the last sprint read's error
+	sprintMissing      bool                             // the last read found no sprint; m.sprint is kept
 }
 
 // ExitMessage returns the message to print after the terminal is restored,
@@ -623,13 +624,13 @@ func (m Model) handleFetchResult(msg FetchResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.state = stateBoard
 	m.isRefreshing = false
-	open := domain.OpenMRs(msg.MRs)
-	// A fetch that lists no open MR and reports errors failed as a whole: it
-	// says nothing about the board, so the previous open MRs stay on screen and
-	// no dirty entry counts as confirmed by it.
-	totalFailure := len(open) == 0 && len(msg.Errors) > 0
+	// A fetch that lists no MR at all, open or merged, and reports errors
+	// failed as a whole: it says nothing about the board, so the previous open
+	// MRs stay on screen and no dirty entry counts as confirmed by it. A
+	// listing that returned any MR worked, and lands as usual.
+	totalFailure := len(msg.MRs) == 0 && len(msg.Errors) > 0
 	if !totalFailure {
-		m.allMRs = m.dirty.Resolve(m.allMRs, open, msg.FetchStartedAt)
+		m.allMRs = m.dirty.Resolve(m.allMRs, domain.OpenMRs(msg.MRs), msg.FetchStartedAt)
 	}
 	m.errors = msg.Errors
 	m.landMerged(msg)
@@ -1614,21 +1615,27 @@ func sameSprintDates(prev, next *ticketsvc.Sprint) *ticketsvc.Sprint {
 func (m Model) handleSprintIssueKeys(msg SprintIssueKeysMsg) (tea.Model, tea.Cmd) {
 	m.sprintRead = true
 	m.sprintErr = msg.Err
+	m.sprintMissing = false
 	if msg.Err != nil {
 		m.logger.Warn("tui: sprint fetch failed", "err", msg.Err)
 		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "Sprint refresh failed, showing last known sprint")
 	}
-	if msg.Sprint == nil && m.sprint != nil {
-		// A read that finds no sprint while one is shown keeps the last known
-		// sprint, so the load view keeps its rows until a read reports one.
+	if msg.Sprint == nil && m.sprint != nil && m.sprint.End.After(time.Now()) {
+		// A read that finds no sprint while one is shown and not yet over keeps
+		// it, so the load view keeps its rows and notes the miss; a sprint past
+		// its end gives way to the read.
 		m.logger.Warn("tui: sprint read returned no active sprint, keeping the last known one")
+		m.sprintMissing = true
+		m.refreshLoad()
 		return m, m.toast(toast.WarnAlert, "No active sprint found, showing last known sprint")
 	}
 	m.sprint = sameSprintDates(m.sprint, msg.Sprint)
 	loadCmd := m.syncLoadSprint()
 	if len(msg.Keys) == 0 {
-		// No active sprint; keep sprintIssueKeys nil so the filter stays inert.
+		// No active sprint; sprintIssueKeys is nil so the filter stays inert.
+		m.sprintIssueKeys = nil
+		m.applyMRFilter()
 		m.refreshLoad()
 		return m, loadCmd
 	}

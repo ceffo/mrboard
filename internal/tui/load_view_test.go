@@ -677,10 +677,45 @@ func TestLoadView_MissingSprintKeepsTheRows(t *testing.T) {
 
 	cmd := h.send(SprintIssueKeysMsg{})
 
-	assert.Equal(t, before, frameOf(h), "the last known sprint's rows stay")
+	during := frameOf(h)
+	assert.Equal(t, before.count, during.count, "the last known sprint's rows stay")
+	assert.Equal(t, before.selected, during.selected)
+	assert.Contains(t, during.view, "last sprint read found no active sprint", "the header notes the miss")
 	assert.NotNil(t, cmd, "the missing sprint is reported")
 	assert.Equal(t, seq, h.m.fetchSeq, "no refetch")
 
 	h.send(h.m.sprintFetchCmd()())
-	assert.Equal(t, before, frameOf(h), "the next good read changes nothing")
+	assert.Equal(t, before, frameOf(h), "the next good read clears the note")
+}
+
+func TestLoadView_MissingSprintPastItsEndIsTaken(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	ended := *h.m.sprint
+	ended.End = time.Now().Add(-time.Hour)
+	h.m.sprint = &ended
+	require.NotNil(t, h.m.sprintIssueKeys)
+
+	h.send(SprintIssueKeysMsg{})
+
+	assert.Nil(t, h.m.sprint, "an ended sprint gives way to the read")
+	assert.Nil(t, h.m.sprintIssueKeys, "its keys no longer filter the board")
+	assert.Contains(t, h.screen(), "The board has no active sprint")
+}
+
+// Every open MR merged between two fetches, and the fetch reported an error:
+// the merged listing returned MRs, so the listing worked and lands as usual.
+func TestLoadView_ListingWithOnlyMergedMRsAndErrorsLands(t *testing.T) {
+	h := openedLoad(t, domain.DefaultAppState())
+	require.Contains(t, frameOf(h).view, "platform-api!701")
+
+	msg := findMsg[FetchResultMsg](h.press("r"))
+	require.NotNil(t, msg)
+	msg.MRs = domain.MergedMRs(msg.MRs)
+	require.NotEmpty(t, msg.MRs)
+	msg.Errors = []error{errors.New("diff stats 101!702: timeout")}
+	h.send(*msg)
+
+	assert.Empty(t, h.m.AllMRs(), "no merged MR is kept as open")
+	assert.NotContains(t, frameOf(h).view, "platform-api!701")
+	assert.Equal(t, 1, strings.Count(frameOf(h).view, "platform-api!705"), "no MR is listed twice")
 }

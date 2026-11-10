@@ -172,7 +172,19 @@ func (m *Model) refreshLoad() {
 		Filter:      m.filterOptions(),
 		Exclusions:  rs.ExclusionsFor(),
 		Thresholds:  rs.Buckets.Thresholds(),
-	}, LoadSprint{Name: sprint.Name, Start: start, End: sprint.End})
+	}, LoadSprint{Name: sprint.Name, Start: start, End: sprint.End, Note: m.loadSprintNote()})
+}
+
+// loadSprintNote names a problem with the last sprint read while the load
+// view still shows the sprint held from an earlier one.
+func (m Model) loadSprintNote() string {
+	switch {
+	case m.sprintErr != nil:
+		return "last sprint read failed, showing the last known sprint"
+	case m.sprintMissing:
+		return "last sprint read found no active sprint, showing the last known sprint"
+	}
+	return ""
 }
 
 // handleKeyLoad handles keys while the load view owns focus. Selection and

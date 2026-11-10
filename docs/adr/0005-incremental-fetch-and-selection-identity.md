@@ -242,6 +242,17 @@ in the header. There is no staleness ceiling: a three-day-old board is more usef
 one, the label makes it impossible to mistake for live, and the first fetch is running the whole
 time anyway.
 
+**A failed refresh keeps the board (amended 2026-11-10, #87).** A fetch that lists no MR at all,
+open or merged, and reports errors failed as a whole and says nothing about the board: the previous
+open MRs stay on screen, the errors show as for any fetch, the snapshot is not written and the
+header keeps the real snapshot age. It confirms no local write either, so the dirty set is left as
+it was and no immediate targeted refetch is issued; the next refresh tick retries, so a lasting
+outage does not refetch in a loop. A listing that returned any MR worked and lands as usual, even
+with errors beside it. The limit: with the load view closed merged MRs are not listed, so a board
+whose open MRs all merged, fetched while one source's listing fails, reads as a total failure and
+shows the previous MRs until the next clean fetch. Per-source failures (some sources failed, others
+answered) still land as a truncated board, since MRs carry no source attribution.
+
 ### The write race that ungating creates (resolved 2026-07-30)
 
 Writes cannot race a refresh today because the keyboard is dead during one. Ungating makes this
@@ -253,7 +264,8 @@ reviewer list, visibly reverting the edit.
 written. A landing snapshot applies to every clean key; for dirty keys whose `fetchStartedAt` is
 earlier than `writeAt` it skips the entry, leaving the local version in place, and issues a
 **targeted phase-2 refetch for just those MRs**. A dirty entry clears when a fetch that started
-after `writeAt` returns that MR.
+after `writeAt` returns that MR. A fetch that failed as a whole (see "Non-blocking refresh")
+returns nothing and so clears nothing.
 
 Refetching only the dirty MRs — rather than discarding the whole snapshot — costs one aliased query
 for one or two MRs, and requires no new machinery: phase 2 already fetches individual MRs by

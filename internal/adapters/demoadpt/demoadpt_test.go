@@ -489,3 +489,13 @@ func TestFaults_FailTheNamedCallsOnly(t *testing.T) {
 	}
 	assert.Equal(t, []bool{true, false, true}, found, "only sprint read 2 finds no sprint")
 }
+
+func TestFaults_RejectCallNumbersBelowOne(t *testing.T) {
+	for _, calls := range [][]int{{0}, {2, -1}} {
+		_, err := callSet("failed_fetches", calls)
+		assert.ErrorContains(t, err, "failed_fetches", "calls %v", calls)
+	}
+	set, err := callSet("failed_fetches", []int{1, 3})
+	require.NoError(t, err)
+	assert.Equal(t, map[int]bool{1: true, 3: true}, set)
+}

@@ -89,12 +89,16 @@ type fixtureFaults struct {
 	MissingSprintReads []int `yaml:"missing_sprint_reads"`
 }
 
-func callSet(calls []int) map[int]bool {
+// callSet indexes a faults list by call number; calls count from 1.
+func callSet(field string, calls []int) (map[int]bool, error) {
 	set := make(map[int]bool, len(calls))
 	for _, n := range calls {
+		if n < 1 {
+			return nil, fmt.Errorf("demoadpt: faults %s: call number %d, want 1 or more", field, n)
+		}
 		set[n] = true
 	}
-	return set
+	return set, nil
 }
 
 // fixtureSprint dates the demo's active sprint relative to boot, like the
@@ -265,9 +269,12 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 		threads: make(map[domain.MRKey][]domain.Thread),
 		diffs:   make(map[domain.MRKey]domain.MRDiff),
 		drafts:  make(map[domain.MRKey]bool),
-
-		failedFetches:      callSet(f.Faults.FailedFetches),
-		missingSprintReads: callSet(f.Faults.MissingSprintReads),
+	}
+	if ds.failedFetches, err = callSet("failed_fetches", f.Faults.FailedFetches); err != nil {
+		return nil, err
+	}
+	if ds.missingSprintReads, err = callSet("missing_sprint_reads", f.Faults.MissingSprintReads); err != nil {
+		return nil, err
 	}
 	for _, p := range f.People {
 		ds.people[p.Username] = p

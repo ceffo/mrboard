@@ -332,6 +332,12 @@ read that lands after the view opened starts that fetch, superseding a board-onl
 Merged MRs never join the board's MR set, so no board write (auto-assign, ticket back-links) and
 no board snapshot ever sees them.
 
+**A sprint read that finds nothing (amended 2026-11-10, #87).** A read that reports no active
+sprint while the view shows one whose end is still ahead keeps that sprint and its rows, notes the
+miss at the end of the view's sprint line and raises a warning toast; a failed read is noted the
+same way. Once the held sprint's end has passed, the read is taken: the view shows the no-sprint
+status and the sprint filter goes inert.
+
 **Header.** While the view is open the header's count is the load's MRs in scope against the
 sprint's population, the sprint segment is not shown (sprint scoping is what the view is), and the
 sort indicator names the grouping and sort (`sort size · by person`). `↑↓`, `r` refresh and `tab` My
