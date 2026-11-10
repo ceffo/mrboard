@@ -131,6 +131,8 @@ func TestParseMergedSince(t *testing.T) {
 }
 
 func TestToMRJSON_MergedAt(t *testing.T) {
-	assert.Equal(t, "2026-10-14T00:00:00Z", toMRJSON(testMergedMR, "", testSizing(false)).MergedAt)
-	assert.Empty(t, toMRJSON(testOpenMR, "", testSizing(false)).MergedAt)
+	merged := toMRJSON(testMergedMR, "", testSizing(false)).MergedAt
+	require.NotNil(t, merged)
+	assert.Equal(t, "2026-10-14T00:00:00Z", *merged)
+	assert.Nil(t, toMRJSON(testOpenMR, "", testSizing(false)).MergedAt)
 }

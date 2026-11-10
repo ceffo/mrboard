@@ -242,21 +242,25 @@ func printJSON(mrs []domain.MergeRequest, currentUser string, sizing sizeOptions
 
 type mrJSON struct {
 	ID                int            `json:"id"`
+	IID               int            `json:"iid"`
+	ProjectPath       string         `json:"project_path"`
 	Title             string         `json:"title"`
 	WebURL            string         `json:"web_url"`
+	HeadSHA           string         `json:"head_sha"`
+	UpdatedAt         string         `json:"updated_at"`
 	Phase             string         `json:"phase"`
 	Author            string         `json:"author"`
 	ReviewerStates    []reviewerJSON `json:"reviewer_states"`
-	ApprovalsRequired int            `json:"approvals_required,omitempty"`
+	ApprovalsRequired int            `json:"approvals_required"`
 	TimeInPhase       string         `json:"time_in_phase"`
 	TimeOpen          string         `json:"time_open"`
-	// MergedAt is set for a merged MR only (--merged-since), RFC 3339.
-	MergedAt   string `json:"merged_at,omitempty"`
-	RoundTrips int    `json:"round_trips"`
-	// Roles and NeedsAttention are relative to the configured current_user and
-	// omitted when none is set.
-	Roles          []domain.Role `json:"roles,omitempty"`
-	NeedsAttention bool          `json:"needs_attention,omitempty"`
+	// MergedAt is null for an open MR; RFC 3339 for a merged one (--merged-since).
+	MergedAt   *string `json:"merged_at"`
+	RoundTrips int     `json:"round_trips"`
+	// Roles and NeedsAttention are relative to the configured current_user; with
+	// none set Roles is [] and NeedsAttention false.
+	Roles          []domain.Role `json:"roles"`
+	NeedsAttention bool          `json:"needs_attention"`
 	// ReviewSize is null when the MR's diff stats are unknown, and SizeBucket is
 	// then "?". SizeFiles is set in verbose mode for an MR of known size.
 	ReviewSize *int           `json:"review_size"`
@@ -273,14 +277,15 @@ type sizeFilesJSON struct {
 type reviewerJSON struct {
 	Username   string `json:"username"`
 	State      string `json:"state"`
-	IsApprover bool   `json:"is_approver,omitempty"`
+	IsApprover bool   `json:"is_approver"`
 }
 
-func mergedAtJSON(mr domain.MergeRequest) string {
+func mergedAtJSON(mr domain.MergeRequest) *string {
 	if !mr.Merged() {
-		return ""
+		return nil
 	}
-	return mr.MergedAt.Format(time.RFC3339)
+	s := mr.MergedAt.Format(time.RFC3339)
+	return &s
 }
 
 func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mrJSON {
@@ -296,6 +301,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 			IsApprover: r.IsApprover,
 		})
 	}
+	roles := append([]domain.Role{}, mr.RolesOf(currentUser)...)
 	now := time.Now()
 	m := mr.MeasureReviewSize(sizing.exclusions.Of(mr))
 	var reviewSize *int
@@ -312,6 +318,10 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 	}
 	return mrJSON{
 		ID:                mr.ID,
+		IID:               mr.IID,
+		ProjectPath:       mr.ProjectPath,
+		HeadSHA:           mr.HeadSHA,
+		UpdatedAt:         mr.UpdatedAt.Format(time.RFC3339),
 		Title:             mr.Title,
 		WebURL:            mr.WebURL,
 		Phase:             mr.Phase.String(),
@@ -322,7 +332,7 @@ func toMRJSON(mr domain.MergeRequest, currentUser string, sizing sizeOptions) mr
 		TimeOpen:          domain.FormatDuration(now.Sub(mr.CreatedAt)),
 		MergedAt:          mergedAtJSON(mr),
 		RoundTrips:        mr.RoundTripCount,
-		Roles:             mr.RolesOf(currentUser),
+		Roles:             roles,
 		NeedsAttention:    mr.NeedsAttention(currentUser),
 		ReviewSize:        reviewSize,
 		SizeBucket:        string(sizing.thresholds.Bucket(m.Size)),

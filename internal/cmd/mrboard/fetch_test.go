@@ -3,6 +3,7 @@ package mrboardcmd
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,4 +163,85 @@ func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
 	}
 	assert.Equal(t, 60, loadSize[1])
 	assert.Equal(t, 320, loadSize[2])
+}
+
+// contractKeys are the keys every `mrboard fetch` MR object carries, whatever
+// the MR looks like. size_files is verbose-only and not part of this list.
+var contractKeys = []string{
+	"id", "iid", "project_path", "title", "web_url", "head_sha", "updated_at", "phase", "author",
+	"reviewer_states", "approvals_required", "time_in_phase", "time_open", "merged_at",
+	"round_trips", "roles", "needs_attention", "review_size", "size_bucket",
+}
+
+func encodeMR(t *testing.T, mr domain.MergeRequest, currentUser string) map[string]json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(toMRJSON(mr, currentUser, testSizing(false)))
+	require.NoError(t, err)
+	var obj map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &obj))
+	return obj
+}
+
+func requireContractKeys(t *testing.T, obj map[string]json.RawMessage) {
+	t.Helper()
+	for _, k := range contractKeys {
+		assert.Contains(t, obj, k)
+	}
+	assert.NotContains(t, obj, "size_files")
+}
+
+func TestToMRJSON_NewFieldsCarryMRValues(t *testing.T) {
+	updated := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
+	mr := domain.MergeRequest{IID: 42, ProjectPath: "group/repo", HeadSHA: "abc123", UpdatedAt: updated}
+
+	got := toMRJSON(mr, "", testSizing(false))
+
+	assert.Equal(t, 42, got.IID)
+	assert.Equal(t, "group/repo", got.ProjectPath)
+	assert.Equal(t, "abc123", got.HeadSHA)
+	assert.Equal(t, "2026-05-01T10:30:00Z", got.UpdatedAt)
+}
+
+func TestToMRJSON_OpenMRNoReviewersNoUser(t *testing.T) {
+	obj := encodeMR(t, domain.MergeRequest{Author: "alice"}, "")
+
+	requireContractKeys(t, obj)
+	assert.JSONEq(t, `[]`, string(obj["reviewer_states"]))
+	assert.JSONEq(t, `[]`, string(obj["roles"]))
+	assert.JSONEq(t, `null`, string(obj["merged_at"]))
+	assert.JSONEq(t, `false`, string(obj["needs_attention"]))
+	assert.JSONEq(t, `0`, string(obj["approvals_required"]))
+}
+
+func TestToMRJSON_MergedMR(t *testing.T) {
+	merged := time.Date(2026, 5, 2, 8, 0, 0, 0, time.UTC)
+	obj := encodeMR(t, domain.MergeRequest{MergedAt: merged}, "")
+
+	requireContractKeys(t, obj)
+	assert.JSONEq(t, `"2026-05-02T08:00:00Z"`, string(obj["merged_at"]))
+}
+
+func TestToMRJSON_AuthoredByCurrentUser(t *testing.T) {
+	obj := encodeMR(t, domain.MergeRequest{Author: "alice"}, "alice")
+
+	requireContractKeys(t, obj)
+	assert.JSONEq(t, `["author"]`, string(obj["roles"]))
+}
+
+func TestToMRJSON_NonApproverReviewerOnApproverMR(t *testing.T) {
+	mr := domain.MergeRequest{
+		Author: "alice",
+		Reviewers: []domain.ReviewerInfo{
+			{Username: "bob", IsApprover: false},
+			{Username: "carol", IsApprover: true},
+		},
+	}
+
+	obj := encodeMR(t, mr, "bob")
+
+	requireContractKeys(t, obj)
+	assert.JSONEq(t, `[]`, string(obj["roles"]))
+	assert.JSONEq(t, `1`, string(obj["approvals_required"]))
+	assert.Contains(t, string(obj["reviewer_states"]), `"is_approver":false`)
+	assert.Contains(t, string(obj["reviewer_states"]), `"is_approver":true`)
 }
