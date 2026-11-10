@@ -3,8 +3,9 @@ package mrboardcmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ func buildFetchCmd() *cobra.Command {
 				}
 				opts.viewOverride = &mode
 			}
-			return execFetch(cmd.Context(), opts)
+			return execFetch(cmd.Context(), opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&filtered, "filtered", false,
@@ -176,7 +177,11 @@ func boardFilterOptions(
 	}
 }
 
-func execFetch(ctx context.Context, opts fetchCmdOptions) error {
+// errFetchFailed is returned when the fetch produced errors and no MRs. The
+// errors themselves have already been written to stderr, and stdout is empty.
+var errFetchFailed = errors.New("mrboard: fetch failed")
+
+func execFetch(ctx context.Context, opts fetchCmdOptions, stdout, stderr io.Writer) error {
 	c := ctx.Value(coreKey{}).(*core.Core)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout(c))
@@ -200,10 +205,10 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 		return err
 	}
 	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "mrboard: fetch error: %v\n", e)
+		fmt.Fprintf(stderr, "mrboard: fetch error: %v\n", e)
 	}
 	if len(mrs) == 0 && len(errs) > 0 {
-		os.Exit(1)
+		return errFetchFailed
 	}
 	if opts.filtered || opts.viewOverride != nil {
 		viewMode := state.ViewMode
@@ -219,7 +224,7 @@ func execFetch(ctx context.Context, opts fetchCmdOptions) error {
 		thresholds: rs.Buckets.Thresholds(),
 		verbose:    opts.verbose,
 	}
-	return printJSON(mrs, c.Config.CurrentUser, sizing)
+	return printJSON(stdout, mrs, c.Config.CurrentUser, sizing)
 }
 
 // sizeOptions controls how fetch output reports each MR's review size
@@ -230,12 +235,12 @@ type sizeOptions struct {
 	verbose    bool
 }
 
-func printJSON(mrs []domain.MergeRequest, currentUser string, sizing sizeOptions) error {
+func printJSON(w io.Writer, mrs []domain.MergeRequest, currentUser string, sizing sizeOptions) error {
 	out := make([]mrJSON, 0, len(mrs))
 	for _, mr := range mrs {
 		out = append(out, toMRJSON(mr, currentUser, sizing))
 	}
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
 }
