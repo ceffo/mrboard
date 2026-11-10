@@ -121,7 +121,8 @@ graph TD
 (snapshot cache, saved reviewer-MRs setting) with `MergedSince` set to the sprint start, then
 `ComputeLoad` and `tui.RenderLoad`, or serialises the rows with `--json`. It errors when no sprint
 can be scoped. Its `--group`, `--sort` and `--remaining` flags are never persisted. `mrboard fetch
---merged-since` drives the same merged listing without the ticket port.
+--merged-since` drives the same merged listing without the ticket port. The keys `fetch` prints are
+listed in [fetch-json.md](fetch-json.md).
 
 In the TUI, `L` opens the load view (`internal/tui/load_view.go`, `load_mode.go`), a full-screen
 widget over the same rows and renderer. Opening it renders the cached merged snapshot and starts a

@@ -109,7 +109,8 @@ setting; `--cold` ignores the snapshots and caches and recomputes every MR from 
 `--merged-since YYYY-MM-DD` also lists the MRs merged on or after that day (`merged_at` set),
 cached in a merged snapshot of their own, kept for that date only. Each MR carries its
 review size (`review_size`, null when unknown, and `size_bucket`); `--verbose` adds the counted
-and excluded files behind it.
+and excluded files behind it. Every key is listed in
+[docs/fetch-json.md](docs/fetch-json.md).
 
 `load` prints how much review size each approver carries in the active sprint (open MRs, plus MRs
 merged since it started), as a tree. `--group person|jira`, `--sort person|jira|size` and

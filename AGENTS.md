@@ -125,6 +125,9 @@ can be reproduced and verified against real GitLab data from the command line, w
 interactive TUI through agent-tui. Letting it drift out of parity removes that capability silently
 — the next debugging session won't know it's gone until it needs it.
 
+A change to the JSON shape (a key added, removed or retyped) also updates the field reference in
+[docs/fetch-json.md](docs/fetch-json.md) in the same commit.
+
 ## Writing tests
 
 **All test assertions use testify — never call `t.Fatal`, `t.Fatalf`, `t.Error`, or `t.Errorf` directly.**
