@@ -21,6 +21,7 @@ packages:
     interfaces:
       MergedSnapshotStore:
       Notifier:
+      StateStore:
       SnapshotStore:
   github.com/ceffo/mrboard/internal/domain/service/mrsvc:
     config:

@@ -91,9 +91,19 @@ be absent, and it is outside the field set above: it is absent without `--verbos
 
 A file is `{"path": string, "additions": number, "deletions": number}`.
 
-## Exit codes and stderr
+## Exit status and stderr
 
-_Reserved: documented here when the exit-code item (#95) lands._
+| Outcome | Exit status | stdout | stderr |
+| --- | --- | --- | --- |
+| MRs fetched, no errors | `0` | JSON array | empty |
+| No MRs, no errors | `0` | `[]` | empty |
+| Partial result: MRs fetched, some fetch errors | `0` | JSON array of the MRs fetched | one error line per error |
+| Total failure: no MRs, at least one fetch error | `1` | empty | one error line per error, then the final failure message |
+| Bad flag, config, state or snapshot load failure | `1` | empty | the error message |
+
+Each fetch error line starts with the fixed prefix `mrboard: fetch error: `, followed by the
+error text. A partial result has no separate exit code: a caller that must detect one looks for
+that prefix on stderr. `[]` with status `0` means there are no MRs; a failure never prints `[]`.
 
 ## Further derived fields
 
