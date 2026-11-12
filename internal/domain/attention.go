@@ -89,8 +89,8 @@ func (mr MergeRequest) hasApprovers() bool {
 }
 
 // NeedsReviewBy reports whether username is expected to review the MR: it is
-// open (not merged), not a draft, and username has a reviewer entry on it that is an approver (in
-// any state, approved included), or whose state is Commented or
+// open (not merged), not a draft, and username has a reviewer entry on it that
+// is an approver who has not approved yet, or whose state is Commented or
 // ReReviewRequested. Only the MR's reviewer list counts: an approval-rule
 // approver who is not a reviewer on the MR is not asked to review it.
 //
@@ -105,7 +105,10 @@ func (mr MergeRequest) NeedsReviewBy(username string) bool {
 		if r.Username != username {
 			continue
 		}
-		return r.IsApprover || r.State == ReviewerCommented || r.State == ReviewerReReviewRequested
+		if r.IsApprover && r.State != ReviewerApproved {
+			return true
+		}
+		return r.State == ReviewerCommented || r.State == ReviewerReReviewRequested
 	}
 	return false
 }

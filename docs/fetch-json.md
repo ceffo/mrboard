@@ -82,13 +82,14 @@ It is always `false` for a `draft`.
 `needs_my_review` is `true` when the MR is open (`merged_at` is `null`), not a `draft`, and the
 user's own `reviewer_states` entry has:
 
-- `is_approver: true`, in any `state` (`approved` included); or
+- `is_approver: true`, in any `state` except `approved`; or
 - `state` `commented` or `re_review_requested`.
 
 It reads the user's entry directly, **without the approver gate**: a non-approver reviewer who
 commented on an MR that designates approvers still gets `true`, though `roles` lacks `reviewer`.
 A user eligible under an approval rule but absent from `reviewer_states` gets `false`. It differs
 from `needs_attention`: it counts `commented`, and counts `not_started` only for an approver.
+An approver who has already approved gets `false`.
 
 ## Filtering with `--needs-my-review`
 

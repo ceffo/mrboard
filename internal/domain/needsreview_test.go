@@ -37,7 +37,7 @@ func TestNeedsReviewBy(t *testing.T) {
 		{"approver re-review requested", reviewedBy(PhaseNeedsReview,
 			ReviewerInfo{Username: attnMe, State: ReviewerReReviewRequested, IsApprover: true}), attnMe, true},
 		{"approver already approved", reviewedBy(PhaseReadyToMerge,
-			ReviewerInfo{Username: attnMe, State: ReviewerApproved, IsApprover: true}), attnMe, true},
+			ReviewerInfo{Username: attnMe, State: ReviewerApproved, IsApprover: true}), attnMe, false},
 		{"draft with approver", reviewedBy(PhaseDraft,
 			ReviewerInfo{Username: attnMe, State: ReviewerNotStarted, IsApprover: true}), attnMe, false},
 		{"draft with re-review requested", reviewedBy(PhaseDraft,
