@@ -21,8 +21,16 @@ import (
 // returns what it wrote to stdout and stderr along with its returned error.
 func runExecFetch(t *testing.T, mrs []domain.MergeRequest, errs []error) (string, string, error) {
 	t.Helper()
+	return runExecFetchWith(t, &config.AppConfig{}, fetchCmdOptions{}, mrs, errs)
+}
+
+// runExecFetchWith is runExecFetch with a given config and command options.
+func runExecFetchWith(
+	t *testing.T, cfg *config.AppConfig, opts fetchCmdOptions, mrs []domain.MergeRequest, errs []error,
+) (string, string, error) {
+	t.Helper()
 	m := newFetchMocks(t)
-	m.core.Config = &config.AppConfig{}
+	m.core.Config = cfg
 	state := domainmocks.NewMockStateStore(t)
 	state.EXPECT().Load().Return(domain.DefaultAppState(), nil)
 	m.core.StateStore = state
@@ -32,7 +40,7 @@ func runExecFetch(t *testing.T, mrs []domain.MergeRequest, errs []error) (string
 
 	var stdout, stderr bytes.Buffer
 	ctx := context.WithValue(context.Background(), coreKey{}, m.core)
-	err := execFetch(ctx, fetchCmdOptions{}, &stdout, &stderr)
+	err := execFetch(ctx, opts, &stdout, &stderr)
 	return stdout.String(), stderr.String(), err
 }
 

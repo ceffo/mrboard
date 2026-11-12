@@ -38,6 +38,7 @@ covers only the shape.
 | `round_trips` | number | How many times the MR bounced between reviewer and author (re-review requests). `0` when none. |
 | `roles` | array of string | The user's connection to the MR; see [Keys relative to `current_user`](#keys-relative-to-current_user). `[]` when none. |
 | `needs_attention` | boolean | `true` when the ball is in the user's court; see below. `false` otherwise. |
+| `needs_my_review` | boolean | `true` when the user is expected to review the MR; see below. `false` otherwise. |
 | `review_size` | number or `null` | Changed lines counted toward review size after the configured exclusions. `null` when the MR's diff stats are unknown. |
 | `size_bucket` | string | One of `S`, `M`, `L`, `XL`, or `?` when `review_size` is `null`. |
 
@@ -54,9 +55,9 @@ covers only the shape.
 
 ## Keys relative to `current_user`
 
-`roles` and `needs_attention` are computed for the `current_user` set in the mrboard config
-([docs/configuration.md](configuration.md)). With no `current_user`, `roles` is `[]` and
-`needs_attention` is `false` on every MR.
+`roles`, `needs_attention` and `needs_my_review` are computed for the `current_user` set in the
+mrboard config ([docs/configuration.md](configuration.md)). With no `current_user`, `roles` is `[]`
+and both booleans are `false` on every MR.
 
 `roles` lists, in this fixed order, each of:
 
@@ -77,6 +78,26 @@ approvers, every listed reviewer counts.
   `re_review_requested`.
 
 It is always `false` for a `draft`.
+
+`needs_my_review` is `true` when the MR is open (`merged_at` is `null`), not a `draft`, and the
+user's own `reviewer_states` entry has:
+
+- `is_approver: true`, in any `state` except `approved`; or
+- `state` `commented` or `re_review_requested`.
+
+It reads the user's entry directly, **without the approver gate**: a non-approver reviewer who
+commented on an MR that designates approvers still gets `true`, though `roles` lacks `reviewer`.
+A user eligible under an approval rule but absent from `reviewer_states` gets `false`. It differs
+from `needs_attention`: it counts `commented`, and counts `not_started` only for an approver.
+An approver who has already approved gets `false`.
+
+## Filtering with `--needs-my-review`
+
+`mrboard fetch --needs-my-review` keeps only the MRs whose `needs_my_review` is `true`, in their
+output order. The output is still an array (`[]` when none match). It is applied after
+`--filtered` / `--view`, so `--view all --needs-my-review` filters the board's "all" view. Without
+a `current_user` it fails before fetching: exit status `1`, nothing on stdout, and an error on
+stderr naming `current_user`.
 
 ## Verbose only
 
@@ -99,12 +120,9 @@ A file is `{"path": string, "additions": number, "deletions": number}`.
 | No MRs, no errors | `0` | `[]` | empty |
 | Partial result: MRs fetched, some fetch errors | `0` | JSON array of the MRs fetched | one error line per error |
 | Total failure: no MRs, at least one fetch error | `1` | empty | one error line per error, then the final failure message |
-| Bad flag, config, state or snapshot load failure | `1` | empty | the error message |
+| Bad flag, config, state or snapshot load failure, or `--needs-my-review` without `current_user` | `1` | empty | the error message |
 
 Each fetch error line starts with the fixed prefix `mrboard: fetch error: `, followed by the
 error text. A partial result has no separate exit code: a caller that must detect one looks for
-that prefix on stderr. `[]` with status `0` means there are no MRs; a failure never prints `[]`.
-
-## Further derived fields
-
-_Reserved: new derived keys such as `needs_my_review` (#96) get their rows in the table above._
+that prefix on stderr. `[]` with status `0` means no MRs matched (none fetched, or none left after
+`--needs-my-review`); a total failure never prints `[]`.

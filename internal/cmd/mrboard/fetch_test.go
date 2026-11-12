@@ -170,7 +170,7 @@ func TestReviewSize_FetchMatchesLoadPerMR(t *testing.T) {
 var contractKeys = []string{
 	"id", "iid", "project_path", "title", "web_url", "head_sha", "updated_at", "phase", "author",
 	"reviewer_states", "approvals_required", "time_in_phase", "time_open", "merged_at",
-	"round_trips", "roles", "needs_attention", "review_size", "size_bucket",
+	"round_trips", "roles", "needs_attention", "needs_my_review", "review_size", "size_bucket",
 }
 
 func encodeMR(t *testing.T, mr domain.MergeRequest, currentUser string) map[string]json.RawMessage {
@@ -210,6 +210,7 @@ func TestToMRJSON_OpenMRNoReviewersNoUser(t *testing.T) {
 	assert.JSONEq(t, `[]`, string(obj["roles"]))
 	assert.JSONEq(t, `null`, string(obj["merged_at"]))
 	assert.JSONEq(t, `false`, string(obj["needs_attention"]))
+	assert.JSONEq(t, `false`, string(obj["needs_my_review"]))
 	assert.JSONEq(t, `0`, string(obj["approvals_required"]))
 }
 

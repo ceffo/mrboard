@@ -178,6 +178,13 @@ Defined in `internal/domain/attention.go` (see `docs/adr/0013-my-view-visibility
 - `NeedsAttention(user)` — the ball is in the user's court: as author or assignee, the phase is
   `NeedsAuthorAction` or `ReadyToMerge`; as reviewer, their state is `NotStarted` or
   `ReReviewRequested`. Drafts never need attention.
+- `NeedsReviewBy(user)` — the user is expected to review the MR: it is not merged, not a draft, and
+  the user's own reviewer entry is an approver who has not yet `Approved`, or is in state
+  `Commented` or `ReReviewRequested`. It reads the reviewer entry without the approver gate of `RolesOf`, so a
+  non-approver reviewer who commented counts; a user eligible under an approval rule but not in
+  the reviewer list does not. Unlike `NeedsAttention` it counts `Commented`, and counts
+  `NotStarted` only for an approver. Surfaced as `needs_my_review` by `mrboard fetch`; the TUI
+  does not use it.
 
 Visibility and attention are independent: an MR can concern a user without needing them.
 
