@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -171,7 +172,10 @@ func newReviewerEditorWidget(
 	keyMatcher domain.TicketKeyMatcher,
 ) *reviewerEditorWidget {
 	// Build the initial staged list from the MR's current reviewers, excluding the author.
+	// A managed rule member is ticked even when GitLab does not let them approve
+	// this MR, so saving keeps them on the rule.
 	locked := mr.LockedApprovers()
+	managed := mr.ManagedApprovers()
 	staged := make([]stagedReviewer, 0, len(mr.Reviewers))
 	for _, r := range mr.Reviewers {
 		if r.Username == mr.Author {
@@ -181,7 +185,7 @@ func newReviewerEditorWidget(
 			Username:   r.Username,
 			Name:       r.Name,
 			State:      r.State,
-			IsApprover: r.IsApprover,
+			IsApprover: r.IsApprover || slices.Contains(managed, r.Username),
 		}, locked))
 	}
 	others := make([]domain.MergeRequest, 0, len(siblings))

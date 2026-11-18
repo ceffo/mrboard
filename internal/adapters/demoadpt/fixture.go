@@ -428,7 +428,7 @@ func buildMR(
 		WebURL:              fmt.Sprintf("%s/%s/-/merge_requests/%d", strings.TrimRight(baseURL, "/"), path, fm.IID),
 		DetailedMergeStatus: fm.MergeStatus,
 		SourceBranch:        fm.SourceBranch, TargetBranch: target,
-		Reviewers: reviewers, Approvers: fm.Approvers, ApproverRules: approverRules(fm),
+		Reviewers: reviewers, Approvers: fm.Approvers, ApproverRules: approverRules(fm, author.Username),
 		CreatedAt: createdAt, UpdatedAt: updatedAt, MergedAt: mergedAt,
 		OpenThreads: fm.OpenThreads, RoundTripCount: fm.RoundTrips,
 		ReviewerSource: fm.ReviewerSource,
@@ -440,13 +440,15 @@ func buildMR(
 
 // approverRules returns fm's managed rule (when it lists approvers), which
 // needs every member's approval as the one mrboard writes does, followed by its
-// other rules.
-func approverRules(fm fixtureMR) []domain.ApproverRule {
+// other rules. Like GitLab on a project that prevents author approval, its
+// default, a rule's eligible approvers leave out author; its members keep them.
+func approverRules(fm fixtureMR, author string) []domain.ApproverRule {
 	var rules []domain.ApproverRule
 	if len(fm.Approvers) > 0 {
 		set := domain.NormalizeApprovers(fm.Approvers)
 		rules = append(rules, domain.ApproverRule{
-			Name: domain.ManagedApproverRuleName, Approvers: set, ApprovalsRequired: len(set), Managed: true,
+			Name: domain.ManagedApproverRuleName, Approvers: eligible(set, author), Members: set,
+			ApprovalsRequired: len(set), Managed: true,
 		})
 	}
 	for _, r := range fm.ApprovalRules {
@@ -455,15 +457,32 @@ func approverRules(fm fixtureMR) []domain.ApproverRule {
 		if r.ApprovalsRequired != nil {
 			required = *r.ApprovalsRequired
 		}
-		rules = append(rules, domain.ApproverRule{Name: r.Name, Approvers: set, ApprovalsRequired: required})
+		rules = append(rules, domain.ApproverRule{
+			Name: r.Name, Approvers: eligible(set, author), Members: set, ApprovalsRequired: required,
+		})
 	}
 	return rules
+}
+
+// excludeAuthor leaves mr's author out of every rule's eligible approvers, as
+// GitLab's read after a write does, and re-derives the approvers.
+func excludeAuthor(mr *domain.MergeRequest) {
+	rules := slices.Clone(mr.ApproverRules)
+	for i := range rules {
+		rules[i].Approvers = eligible(rules[i].Approvers, mr.Author)
+	}
+	mr.ApplyApproverRules(rules)
+}
+
+// eligible returns members without author.
+func eligible(members []string, author string) []string {
+	return slices.DeleteFunc(slices.Clone(members), func(u string) bool { return u == author })
 }
 
 // lockApprovers adds the required approvers of mr's unmanaged rules to
 // Approvers and flags those among its reviewers, as GitLab's rules would.
 func lockApprovers(mr *domain.MergeRequest) {
-	required := domain.RequiredApprovers(mr.ApproverRules, mr.Author)
+	required := domain.RequiredApprovers(mr.ApproverRules)
 	if len(required) == 0 {
 		return
 	}

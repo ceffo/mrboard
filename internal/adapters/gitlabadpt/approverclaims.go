@@ -55,7 +55,7 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 	// An observation can be stale by the time it is claimed; claiming it would
 	// announce a revert of a change another instance already announced.
 	if !req.Authoritative {
-		live, liveErr := a.liveApprovers(ctx, req.ProjectID, req.MRIID, req.Author)
+		live, liveErr := a.liveApprovers(ctx, req.ProjectID, req.MRIID)
 		if liveErr != nil {
 			return false, liveErr
 		}
@@ -148,10 +148,10 @@ func (a *GitLabAdapter) appendClaimID(
 	return note.ID, nil
 }
 
-func (a *GitLabAdapter) liveApprovers(ctx context.Context, projectID, mrIID int64, author string) ([]string, error) {
+func (a *GitLabAdapter) liveApprovers(ctx context.Context, projectID, mrIID int64) ([]string, error) {
 	rules, err := a.client.GetMRApprovalStateRules(ctx, projectID, mrIID)
 	if err != nil {
 		return nil, err
 	}
-	return domain.RequiredApprovers(approverRulesFromRESTRules(rules), author), nil
+	return domain.RequiredApprovers(approverRulesFromRESTRules(rules)), nil
 }

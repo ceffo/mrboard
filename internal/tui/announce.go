@@ -101,7 +101,6 @@ func (m *Model) makeApproverAnnounceCmds() tea.Cmd {
 			MRIID:      int64(mr.IID),
 			Approvers:  set,
 			Prior:      prior,
-			Author:     mr.Author,
 			Discovered: !seen,
 		}, prev, seen))
 	}
@@ -178,6 +177,5 @@ func (m *Model) announceEditedApprovers(mr domain.MergeRequest, before []string)
 		Approvers:     set,
 		Prior:         domain.NormalizeApprovers(before),
 		Authoritative: true,
-		Author:        mr.Author,
 	}, prev, seen)
 }

@@ -196,24 +196,32 @@ func extractReReviewUsername(body string) string {
 }
 
 // approverRulesFromRESTRules returns the regular approval rules, with the
-// first one named approversRuleName marked managed.
+// first one named approversRuleName marked managed. A rule's approvers are its
+// eligible approvers and its members the users added to it.
 func approverRulesFromRESTRules(rules []*gl.MergeRequestApprovalRule) []domain.ApproverRule {
 	var out []domain.ApproverRule
 	for _, r := range rules {
 		if r.RuleType != ruleTypeRegular {
 			continue
 		}
-		set := make(map[string]bool, len(r.EligibleApprovers))
-		ids := make(map[string]int64, len(r.EligibleApprovers))
-		for _, u := range r.EligibleApprovers {
-			set[u.Username] = true
-			if u.ID != 0 {
-				ids[u.Username] = u.ID
-			}
-		}
-		out = appendApproverRule(out, r.Name, int(r.ApprovalsRequired), set, ids)
+		ids := make(map[string]int64, len(r.Users)+len(r.EligibleApprovers))
+		eligible := usernamesOfREST(r.EligibleApprovers, ids)
+		members := usernamesOfREST(r.Users, ids)
+		out = appendApproverRule(out, r.Name, int(r.ApprovalsRequired), eligible, members, ids)
 	}
 	return out
+}
+
+// usernamesOfREST returns the set of users' usernames, recording their IDs in ids.
+func usernamesOfREST(users []*gl.BasicUser, ids map[string]int64) map[string]bool {
+	set := make(map[string]bool, len(users))
+	for _, u := range users {
+		set[u.Username] = true
+		if u.ID != 0 {
+			ids[u.Username] = u.ID
+		}
+	}
+	return set
 }
 
 // approverRulesFromGQLRules is approverRulesFromRESTRules for GraphQL rules.
@@ -223,21 +231,29 @@ func approverRulesFromGQLRules(rules []pkggitlab.GQLApprovalRule) []domain.Appro
 		if r.Type != gqlRuleTypeRegular {
 			continue
 		}
-		set := make(map[string]bool, len(r.EligibleApprovers))
-		for _, u := range r.EligibleApprovers {
-			set[u.Username] = true
-		}
-		out = appendApproverRule(out, r.Name, r.ApprovalsRequired, set, nil)
+		out = appendApproverRule(out, r.Name, r.ApprovalsRequired,
+			usernamesOfGQL(r.EligibleApprovers), usernamesOfGQL(r.Users.Nodes), nil)
 	}
 	return out
 }
 
-// appendApproverRule appends the rule name needing required approvals from
-// approvers set, and their user IDs when the read carries them, to rules. Only
-// the first regular rule named approversRuleName is managed: it is the one
-// SaveApprovers writes. Callers pass regular rules only.
+// usernamesOfGQL returns the set of users' usernames.
+func usernamesOfGQL(users []pkggitlab.GQLUser) map[string]bool {
+	set := make(map[string]bool, len(users))
+	for _, u := range users {
+		set[u.Username] = true
+	}
+	return set
+}
+
+// appendApproverRule appends the rule name needing required approvals, with
+// its eligible approvers, its members and their user IDs when the read
+// carries them, to rules. Only the first regular rule named approversRuleName
+// is managed: it is the one SaveApprovers writes. Callers pass regular rules
+// only.
 func appendApproverRule(
-	rules []domain.ApproverRule, name string, required int, set map[string]bool, ids map[string]int64,
+	rules []domain.ApproverRule, name string, required int, eligible, members map[string]bool,
+	ids map[string]int64,
 ) []domain.ApproverRule {
 	managed := name == approversRuleName
 	for _, r := range rules {
@@ -249,7 +265,8 @@ func appendApproverRule(
 		ids = nil
 	}
 	return append(rules, domain.ApproverRule{
-		Name: name, Approvers: sortedUsernames(set), ApprovalsRequired: required, UserIDs: ids, Managed: managed,
+		Name: name, Approvers: sortedUsernames(eligible), Members: sortedUsernames(members),
+		ApprovalsRequired: required, UserIDs: ids, Managed: managed,
 	})
 }
 

@@ -41,6 +41,7 @@ query($username: String!) {
             type
             approvalsRequired
             eligibleApprovers { username }
+            users { nodes { username } }
           }
         }
         discussions(first: 100) {
@@ -96,6 +97,7 @@ query($username: String!) {
             type
             approvalsRequired
             eligibleApprovers { username }
+            users { nodes { username } }
           }
         }
         resolvedDiscussionsCount
@@ -118,6 +120,14 @@ type GQLApprovalRule struct {
 	Type              string    `json:"type"` // REGULAR, CODE_OWNER, ANY_APPROVER or REPORT_APPROVER
 	ApprovalsRequired int       `json:"approvalsRequired"`
 	EligibleApprovers []GQLUser `json:"eligibleApprovers"`
+	// Users are the users added to the rule, including those GitLab does not
+	// let approve this MR (left out of EligibleApprovers).
+	Users GQLUserConnection `json:"users"`
+}
+
+// GQLUserConnection is a GraphQL connection of users.
+type GQLUserConnection struct {
+	Nodes []GQLUser `json:"nodes"`
 }
 
 // GQLNote is a single note within a discussion.
@@ -269,6 +279,7 @@ query($username: String!) {
             type
             approvalsRequired
             eligibleApprovers { username }
+            users { nodes { username } }
           }
         }
         discussions(first: 100) {
@@ -331,6 +342,7 @@ query($username: String!) {
             type
             approvalsRequired
             eligibleApprovers { username }
+            users { nodes { username } }
           }
         }
         resolvedDiscussionsCount

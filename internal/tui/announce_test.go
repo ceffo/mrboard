@@ -45,7 +45,7 @@ func announceMR(age time.Duration, approvers ...string) domain.MergeRequest {
 func claimReqFor(mr domain.MergeRequest, prior []string) mrsvc.ClaimRequest {
 	return mrsvc.ClaimRequest{
 		ProjectID: int64(mr.ProjectID), MRIID: int64(mr.IID),
-		Approvers: domain.NormalizeApprovers(mr.Approvers), Prior: prior, Author: mr.Author,
+		Approvers: domain.NormalizeApprovers(mr.Approvers), Prior: prior,
 	}
 }
 

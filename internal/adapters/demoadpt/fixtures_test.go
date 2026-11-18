@@ -123,7 +123,8 @@ func TestReviewersFixture_UnionKeepsWhatEachRelatedMRAlreadyHas(t *testing.T) {
 		wantReviewers []string
 		wantApprovers []string
 	}{
-		// An MR's author is never its approver: grace wrote !502 and !509, katherine !505 and !511.
+		// Like GitLab by default, the demo does not let an author approve: grace wrote !502 and !509,
+		// katherine !505 and !511.
 		{101, 502, []string{userGrace, userKatherine, userLinus}, []string{userKatherine}},
 		{102, 503, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{103, 504, []string{userGrace, userKatherine, userLinus, userMargaret}, []string{userGrace, userKatherine}},

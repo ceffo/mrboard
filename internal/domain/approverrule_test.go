@@ -80,7 +80,8 @@ func TestSetManagedApprovers_AddsManagedRuleWhenMissing(t *testing.T) {
 
 	require.Len(t, mr.ApproverRules, 2)
 	assert.Equal(t, ApproverRule{
-		Name: ManagedApproverRuleName, Approvers: []string{testUsername}, ApprovalsRequired: 1, Managed: true,
+		Name: ManagedApproverRuleName, Approvers: []string{testUsername}, Members: []string{testUsername},
+		ApprovalsRequired: 1, Managed: true,
 	}, mr.ApproverRules[1])
 	assert.Equal(t, []string{testUsername, userDave}, mr.Approvers)
 	assert.True(t, mr.Reviewers[0].IsApprover)
@@ -102,6 +103,15 @@ func TestSetManagedApprovers_KeepsIDsOfRemainingMembersOnly(t *testing.T) {
 	mr.SetManagedApprovers([]string{testOther, "frank"})
 
 	assert.Equal(t, map[string]int64{testOther: 2}, mr.ManagedApproverIDs())
+}
+
+func TestManagedApprovers_KeepsMembersGitLabDoesNotLetApprove(t *testing.T) {
+	mr := MergeRequest{ApproverRules: []ApproverRule{{
+		Name: ManagedApproverRuleName, Approvers: []string{testUsername},
+		Members: []string{testOther, testUsername}, ApprovalsRequired: 2, Managed: true,
+	}}}
+
+	assert.Equal(t, []string{testUsername, testOther}, mr.ManagedApprovers())
 }
 
 func TestRequiredApprovers(t *testing.T) {
@@ -128,14 +138,17 @@ func TestRequiredApprovers(t *testing.T) {
 		{"no approval required", []ApproverRule{rule(testRuleTeam, 0, testUsername)}, nil},
 		{"rule without members", []ApproverRule{rule("empty", 1)}, nil},
 		{
-			"the author never counts, in the result or the count",
+			"an author GitLab lets approve counts like any member: 2 of 3 makes no one required",
 			[]ApproverRule{rule(testRuleLeads, 2, userAuthor, testUsername, testOther)},
-			[]string{testUsername, testOther},
+			nil,
 		},
 		{
-			"an author-only rule makes no one required",
-			[]ApproverRule{rule(testRuleLeads, 1, userAuthor)},
-			nil,
+			"managed members GitLab does not let approve are not approvers",
+			[]ApproverRule{{
+				Name: ManagedApproverRuleName, Approvers: []string{testUsername},
+				Members: []string{testUsername, testOther}, ApprovalsRequired: 2, Managed: true,
+			}},
+			[]string{testUsername},
 		},
 		{
 			"managed rule members are required whatever the count",
@@ -163,7 +176,7 @@ func TestRequiredApprovers(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, RequiredApprovers(tc.rules, userAuthor))
+			assert.Equal(t, tc.want, RequiredApprovers(tc.rules))
 		})
 	}
 }

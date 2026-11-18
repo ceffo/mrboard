@@ -12,8 +12,13 @@ type ApproverRule struct {
 	Approvers []string // sorted
 	// ApprovalsRequired is how many approvals the rule needs.
 	ApprovalsRequired int
-	// UserIDs maps each approver to their user ID when the read that produced
-	// the rule carries IDs; nil otherwise.
+	// Members are the users added to the rule, sorted, when the read that
+	// produced the rule carries them; nil otherwise. GitLab leaves members who
+	// cannot approve this MR (its author or committers, when the project
+	// prevents their approval) out of Approvers, but not out of Members.
+	Members []string
+	// UserIDs maps each approver and member to their user ID when the read
+	// that produced the rule carries IDs; nil otherwise.
 	UserIDs map[string]int64
 	// Managed marks the rule mrboard writes. mrboard never changes any other
 	// rule: their approvers are locked as far as mrboard is concerned.
@@ -21,11 +26,13 @@ type ApproverRule struct {
 }
 
 // ManagedApprovers returns the usernames on mr's managed rule, sorted; nil when
-// the MR has none.
+// the MR has none. They are the rule's Members when the read carried them, so
+// a member GitLab does not let approve this MR is still one: writing the rule
+// back keeps them.
 func (mr MergeRequest) ManagedApprovers() []string {
 	for _, r := range mr.ApproverRules {
 		if r.Managed {
-			return NormalizeApprovers(r.Approvers)
+			return NormalizeApprovers(append(slices.Clone(r.Members), r.Approvers...))
 		}
 	}
 	return nil
@@ -52,7 +59,7 @@ func (mr MergeRequest) LockedApprovers() map[string][]string {
 		if r.Managed {
 			continue
 		}
-		for _, u := range r.RequiredMembers(mr.Author) {
+		for _, u := range r.RequiredMembers() {
 			if !slices.Contains(locked[u], r.Name) {
 				locked[u] = append(locked[u], r.Name)
 			}
@@ -64,38 +71,34 @@ func (mr MergeRequest) LockedApprovers() map[string][]string {
 	return locked
 }
 
-// RequiredMembers returns the members of r other than author when every one
-// of them must approve; nil otherwise. The MR's author never counts: GitLab
-// leaves them out of a rule's eligible approvers when the project prevents
-// author approval, which some reads reflect and others do not, so dropping
-// them everywhere keeps every read agreeing.
+// RequiredMembers returns the approvers of r when every one of them must
+// approve; nil otherwise. Approvers are GitLab's eligible approvers: GitLab has
+// already left out anyone who cannot approve this MR.
 //
-// An unmanaged rule requires every member when it needs at least one approval
-// and at least as many as it has members. Needing more than it has members is
-// the case where GitLab dropped ineligible members from the read: every
+// An unmanaged rule requires every approver when it needs at least one
+// approval and at least as many as it has approvers. Needing more than it has
+// approvers is the case where GitLab left ineligible members out: every
 // remaining one must still approve. A rule needing fewer approvals than it has
-// members, or none, makes no one required.
+// approvers, or none, makes no one required.
 //
-// The managed rule's members are always required: mrboard writes it needing
+// The managed rule's approvers are always required: mrboard writes it needing
 // every member, and a count lowered by hand in GitLab does not demote them.
-func (r ApproverRule) RequiredMembers(author string) []string {
-	members := slices.DeleteFunc(slices.Clone(r.Approvers), func(u string) bool { return u == author })
-	if len(members) == 0 {
+func (r ApproverRule) RequiredMembers() []string {
+	if len(r.Approvers) == 0 {
 		return nil
 	}
-	if r.Managed || (r.ApprovalsRequired > 0 && r.ApprovalsRequired >= len(members)) {
-		return members
+	if r.Managed || (r.ApprovalsRequired > 0 && r.ApprovalsRequired >= len(r.Approvers)) {
+		return slices.Clone(r.Approvers)
 	}
 	return nil
 }
 
 // RequiredApprovers returns the required members (ApproverRule.RequiredMembers)
-// of every rule on an MR by author, sorted and deduplicated; nil when there are
-// none.
-func RequiredApprovers(rules []ApproverRule, author string) []string {
+// of every rule, sorted and deduplicated; nil when there are none.
+func RequiredApprovers(rules []ApproverRule) []string {
 	var all []string
 	for _, r := range rules {
-		all = append(all, r.RequiredMembers(author)...)
+		all = append(all, r.RequiredMembers()...)
 	}
 	if len(all) == 0 {
 		return nil
@@ -104,11 +107,10 @@ func RequiredApprovers(rules []ApproverRule, author string) []string {
 }
 
 // ApplyApproverRules records rules on mr and derives from them Approvers
-// (RequiredApprovers for mr.Author) and each reviewer's IsApprover flag. Set
-// mr.Author first.
+// (RequiredApprovers) and each reviewer's IsApprover flag.
 func (mr *MergeRequest) ApplyApproverRules(rules []ApproverRule) {
 	mr.ApproverRules = rules
-	mr.Approvers = RequiredApprovers(rules, mr.Author)
+	mr.Approvers = RequiredApprovers(rules)
 	for i := range mr.Reviewers {
 		mr.Reviewers[i].IsApprover = slices.Contains(mr.Approvers, mr.Reviewers[i].Username)
 	}
@@ -125,6 +127,7 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 		if r.Managed && !found {
 			found = true
 			r.Approvers = set
+			r.Members = set
 			r.ApprovalsRequired = len(set)
 			r.UserIDs = idsOf(r.UserIDs, set)
 		}
@@ -132,7 +135,7 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 	}
 	if !found {
 		rules = append(rules, ApproverRule{
-			Name: ManagedApproverRuleName, Approvers: set, ApprovalsRequired: len(set), Managed: true,
+			Name: ManagedApproverRuleName, Approvers: set, Members: set, ApprovalsRequired: len(set), Managed: true,
 		})
 	}
 	mr.ApplyApproverRules(rules)

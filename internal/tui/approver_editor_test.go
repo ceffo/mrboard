@@ -639,3 +639,22 @@ func TestReviewerEditorWidget_OtherApproversLine_FitsTheModalWidth(t *testing.T)
 	assert.LessOrEqual(t, lip.Width(line), max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint)),
 		"the summary line is truncated to the modal's content width")
 }
+
+func TestReviewerEditorWidget_ManagedMemberGitLabDoesNotLetApprove_StartsTicked(t *testing.T) {
+	mr := domain.MergeRequest{
+		IID: 10, ProjectID: 100, ProjectPath: editorTestRepo,
+		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover}, {Username: editorTestOther}},
+	}
+	mr.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover},
+		Members: []string{editorTestApprover, editorTestOther}, ApprovalsRequired: 2, Managed: true,
+	}})
+	require.False(t, mr.Reviewers[1].IsApprover, "GitLab leaves the other member out of the eligible approvers")
+
+	w := newReviewerEditorWidget(context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap,
+		mocks.NewMockMergeRequestSource(t), nil, domain.NewTicketKeyMatcher(false))
+
+	require.Len(t, w.staged, 2)
+	assert.True(t, w.staged[0].IsApprover)
+	assert.True(t, w.staged[1].IsApprover, "a managed member stays ticked, so a save keeps them on the rule")
+}
