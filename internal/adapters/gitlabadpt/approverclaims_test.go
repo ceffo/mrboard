@@ -163,14 +163,22 @@ func TestClaim_LegacySilentEntry_StillBaselinesTheLedger(t *testing.T) {
 	assert.Len(t, c.notes, 1)
 }
 
+const (
+	testUserGrace  = "grace"
+	testUserEdsger = "edsger"
+	testUserLinus  = "linus"
+)
+
 // legacyLedgerClient holds one v1 ledger entry recording grace, edsger and
 // linus, while the live required set is grace and edsger: linus is only in an
 // optional rule, which the old meaning counted.
 func legacyLedgerClient(t *testing.T) *fakeLedgerClient {
 	t.Helper()
-	c := newFakeLedgerClient("grace", "edsger")
-	c.liveRules = append(c.liveRules, approvalRuleNeeding(testRuleTeam, 1, "linus", testUserBob))
-	v2 := domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{"grace", "edsger", "linus"}})
+	c := newFakeLedgerClient(testUserGrace, testUserEdsger)
+	c.liveRules = append(c.liveRules, approvalRuleNeeding(testRuleTeam, 1, testUserLinus, testUserBob))
+	v2 := domain.FormatApproverClaim(domain.ApproverClaim{
+		Approvers: []string{testUserGrace, testUserEdsger, testUserLinus},
+	})
 	v1 := strings.Replace(v2, "mrboard:approvers-claim v2", "mrboard:approvers-claim v1", 1)
 	require.NotEqual(t, v2, v1)
 	c.add(v1, false)
@@ -180,7 +188,7 @@ func legacyLedgerClient(t *testing.T) *fakeLedgerClient {
 func TestClaim_DiscoveredSetAgainstLegacyLedger_WritesNothing(t *testing.T) {
 	c := legacyLedgerClient(t)
 	a := &GitLabAdapter{client: c}
-	req := claimReq([]string{"edsger", "grace"}, []string{"edsger", "grace"})
+	req := claimReq([]string{testUserEdsger, testUserGrace}, []string{testUserEdsger, testUserGrace})
 	req.Discovered = true
 
 	owned, err := a.Claim(context.Background(), req)
@@ -194,7 +202,7 @@ func TestClaim_ChangeSeenAgainstLegacyLedger_IsClaimedInTheCurrentFormat(t *test
 	a := &GitLabAdapter{client: c}
 
 	owned, err := a.Claim(context.Background(),
-		claimReq([]string{"edsger", "grace"}, []string{"edsger", "grace", "linus"}))
+		claimReq([]string{testUserEdsger, testUserGrace}, []string{testUserEdsger, testUserGrace, testUserLinus}))
 	require.NoError(t, err)
 	assert.True(t, owned)
 	require.Len(t, c.claims(), 2)
