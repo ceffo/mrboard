@@ -119,9 +119,9 @@ type MergeRequest struct {
     // flags entries already present in Reviewers.
     Approvers []string
 
-    // ApproverRules are the rules Approvers is derived from: name, sorted approvers,
-    // ApprovalsRequired, and Managed for approvers_mrboard, the one rule mrboard writes
-    // (docs/adr/0002). Approvers of the other rules that require every member are locked
+    // ApproverRules are the rules Approvers is derived from: name, sorted eligible approvers,
+    // Members (the users added to the rule), ApprovalsRequired, and Managed for
+    // approvers_mrboard, the one rule mrboard writes (docs/adr/0002). Approvers of the other rules that require every member are locked
     // as far as mrboard is concerned (LockedApprovers); optional rules lock no one.
     ApproverRules []ApproverRule
 
@@ -166,12 +166,13 @@ GitLab approval rule that needs at least one approval and at least as many as it
 approvers ([ADR-0016](adr/0016-required-approvers.md)). A rule needing more than it has members is
 one GitLab's read dropped members from, and every remaining member must approve. Members of a rule
 needing fewer approvals than it has members (1 of 5), or none, are not approvers; a user in both a
-required and an optional rule is one. The managed rule's (`approvers_mrboard`) members are always
-approvers. The MR's author is never an approver of their own MR and is not counted among a rule's
-members. Being an Approver is not a separate role — it is a property of a reviewer. `IsApprover` is
-derived from the MR's approval rules (REST `approval_rules`: `approvals_required`,
-`eligible_approvers[].username`; GraphQL `approvalState.rules`: `approvalsRequired`,
-`eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires every member, all
+required and an optional rule is one. The managed rule's (`approvers_mrboard`) eligible approvers
+are always approvers. Eligible approvers are counted exactly as GitLab returns them: GitLab already
+leaves out the author or committers when the project prevents their approval, and a managed member
+left out is still kept on the rule by a save (`ManagedApprovers` reads the rule's members). Being
+an Approver is not a separate role — it is a property of a reviewer. `IsApprover` is derived from
+the MR's approval rules (REST `approval_rules`: `approvals_required`, `eligible_approvers[].username`;
+GraphQL `approvalState.rules`: `approvalsRequired`, `eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires every member, all
 `IsApprover` fields are false.
 
 `WaitingSince` is computed and stored for every reviewer regardless of `IsApprover` — it is an

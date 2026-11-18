@@ -15,27 +15,26 @@ charged the MR to all five, and `needs_my_review` asked all five to review.
 
 A reviewer is a **required approver** of an MR when they are an eligible approver of a regular
 approval rule that needs at least one approval and at least as many approvals as it has eligible
-approvers. Every member of such a rule must approve, so each member's approval is required. Members of
-any other rule are not approvers: their approval is optional and mrboard ignores it. The MR's author
-is never an approver of their own MR, and is left out of a rule's members before they are counted.
+approvers. Every eligible approver of such a rule must approve, so each one's approval is required.
+Eligible approvers of any other rule are not approvers: their approval is optional and mrboard ignores
+it. Rules are counted from their eligible approvers exactly as GitLab returns them.
 
-| Rule (members counted without the MR's author) | Its members are approvers |
+| Rule (counted on its eligible approvers) | Its eligible approvers are approvers |
 | --- | --- |
-| needs N approvals, N members, N > 0 | yes |
-| needs more approvals than it has members (GitLab dropped members who cannot approve) | yes |
-| needs fewer approvals than it has members (e.g. 1 of 5) | no |
+| needs N approvals, N eligible approvers, N > 0 | yes |
+| needs more approvals than it has eligible approvers (GitLab left out members who cannot approve) | yes |
+| needs fewer approvals than it has eligible approvers (e.g. 1 of 5) | no |
 | needs no approval (0) | no |
 | the managed rule (`approvers_mrboard`), whatever it needs | yes |
 
-**Needing more than its members.** GitLab's GraphQL `approvalState.rules` are wrapped rules: their
-`eligibleApprovers` drop the author and, when the project prevents it, committers, while
-`approvalsRequired` stays as configured. GitLab treats such a rule as one every remaining member must
-approve (its `invalid_rule?` case), so mrboard does too.
-
-**The author never counts.** GitLab cannot count an author's own approval when the project prevents
-author approval, its default. The REST read (`eligible_approvers` of the raw rule) keeps the author,
-the GraphQL read drops them; dropping the author in the domain rule, both from the result and from the
-count, makes the two reads give the same approvers.
+**Eligible approvers, in both reads.** REST `GET …/approval_state` and GraphQL `approvalState.rules`
+both return GitLab's wrapped rules (`ApprovalWrappedRule`). Their eligible approvers
+(`eligible_approvers`, `eligibleApprovers`) leave out the MR's author when the project prevents author
+approval (its default) and the MR's committers when it prevents committer approval, while
+`approvals_required` stays as configured. Both reads therefore give the same approvers. GitLab treats a
+rule needing more approvals than it has eligible approvers as one every remaining one must approve (its
+`invalid_rule?` case), so mrboard does too. An author the project lets approve is eligible like anyone
+else and counts: a rule of the author, alice and bob needing 2 makes no one required.
 
 A user in a required rule and an optional rule is an approver (the required rule decides).
 `MergeRequest.Approvers` is the union of the members of every required rule; `ReviewerInfo.IsApprover`
@@ -50,10 +49,15 @@ announcement ledger records and compares against the live MR (ADR-0014).
   `SetManagedApprovers` all derive through them; none re-implements the test.
 - **Data.** `ApproverRule.ApprovalsRequired` carries the rule's count: REST `approvals_required`,
   GraphQL `approvalsRequired` on `approvalState.rules` (selected by every MR query).
+  `ApproverRule.Approvers` holds the eligible approvers, `ApproverRule.Members` the users added to the
+  rule (REST `users`, GraphQL `users`, selected by the open-MR queries), with their IDs when REST read
+  them.
 - **The managed rule** (`approvers_mrboard`, ADR-0002) is written with approvals required equal to
-  its member count, and its members are always required approvers, whatever count GitLab returns. A
-  count lowered by hand in GitLab, or a read that drops a member, never demotes them, so the editor
-  shows them ticked and a save never drops them from the rule.
+  its member count. Its eligible approvers are always required approvers, whatever count GitLab
+  returns, so a count lowered by hand in GitLab does not demote them. Its members, eligible or not,
+  are what `ManagedApprovers` returns: a member GitLab does not let approve this MR (for example a
+  member who pushed a commit) is not an approver on the board, but the editor starts them ticked and
+  a save writes them back to the rule. Only unticking a member removes them.
 - **Snapshots.** The board snapshot and merged snapshot formats move to version 2, so a file holding
   the old meaning is a cold cache (one full fetch) instead of being shown until the next refresh.
 
@@ -61,11 +65,6 @@ announcement ledger records and compares against the live MR (ADR-0014).
 
 - An MR whose only rules are optional has no approvers: like an MR without rules, every reviewer
   counts and the MR never reaches the Approved column (phase rule 2 in `docs/domain-model.md`).
-- **Known limit: committers.** When the project prevents committer approval, GraphQL drops the MR's
-  committers from a rule's eligible approvers and REST does not, and REST cannot tell who they are. On
-  such an MR, with a rule needing fewer approvals than its full membership, the board (GraphQL) and a
-  single-MR refresh or the claim's live read (REST) can disagree on the approvers. This predates the
-  required meaning and is not fixed here.
 - **Locked approvers follow the same meaning.** The approver editor locks (`🔒 <rule>`) only the
   members of an unmanaged rule that requires every member (`LockedApprovers`). A member of an
   optional rule is an ordinary row: ticking them adds them to `approvers_mrboard`, which makes them
