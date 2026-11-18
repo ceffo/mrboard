@@ -233,10 +233,14 @@ func approverRulesFromRESTRules(rules []*gl.MergeRequestApprovalRule) []domain.A
 			continue
 		}
 		set := make(map[string]bool, len(r.EligibleApprovers))
+		ids := make(map[string]int64, len(r.EligibleApprovers))
 		for _, u := range r.EligibleApprovers {
 			set[u.Username] = true
+			if u.ID != 0 {
+				ids[u.Username] = u.ID
+			}
 		}
-		out = appendApproverRule(out, r.Name, set)
+		out = appendApproverRule(out, r.Name, set, ids)
 	}
 	return out
 }
@@ -252,22 +256,30 @@ func approverRulesFromGQLRules(rules []pkggitlab.GQLApprovalRule) []domain.Appro
 		for _, u := range r.EligibleApprovers {
 			set[u.Username] = true
 		}
-		out = appendApproverRule(out, r.Name, set)
+		out = appendApproverRule(out, r.Name, set, nil)
 	}
 	return out
 }
 
-// appendApproverRule appends the rule name with approvers set to rules. Only
-// the first rule named approversRuleName is managed: it is the one SaveApprovers
-// writes.
-func appendApproverRule(rules []domain.ApproverRule, name string, set map[string]bool) []domain.ApproverRule {
+// appendApproverRule appends the rule name with approvers set, and their user
+// IDs when the read carries them, to rules. Only the first regular rule named
+// approversRuleName is managed: it is the one SaveApprovers writes. Callers pass
+// regular rules only.
+func appendApproverRule(
+	rules []domain.ApproverRule, name string, set map[string]bool, ids map[string]int64,
+) []domain.ApproverRule {
 	managed := name == approversRuleName
 	for _, r := range rules {
 		if r.Managed {
 			managed = false
 		}
 	}
-	return append(rules, domain.ApproverRule{Name: name, Approvers: sortedUsernames(set), Managed: managed})
+	if len(ids) == 0 {
+		ids = nil
+	}
+	return append(rules, domain.ApproverRule{
+		Name: name, Approvers: sortedUsernames(set), UserIDs: ids, Managed: managed,
+	})
 }
 
 // applyApproverFlag sets IsApprover on each ReviewerInfo whose username is in the approver set.

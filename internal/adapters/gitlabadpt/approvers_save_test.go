@@ -94,3 +94,16 @@ func TestSaveApprovers_ManagedRuleExists_UpdatesOnlyIt(t *testing.T) {
 	assert.Equal(t, 1, c.updated[9].ApprovalsRequired)
 	assert.Empty(t, c.deleted, "no rule is deleted")
 }
+
+func TestSaveApprovers_NonRegularRuleWithManagedName_IsNotWritten(t *testing.T) {
+	// Only a regular rule named approvers_mrboard is mrboard's: the read marks
+	// no other kind managed, so the write must not update it either.
+	c := &fakeApprovalRulesClient{rules: append(foreignRules(), rule(9, approversRuleName, "code_owner"))}
+	a := &GitLabAdapter{client: c}
+
+	require.NoError(t, a.SaveApprovers(context.Background(), 1, 10, []int64{7}))
+
+	require.Len(t, c.created, 1, "a regular managed rule is created instead")
+	assert.Empty(t, c.updated, "the code-owner rule is left alone")
+	assert.Empty(t, c.deleted)
+}

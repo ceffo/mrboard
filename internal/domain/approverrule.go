@@ -10,6 +10,9 @@ const ManagedApproverRuleName = "approvers_mrboard"
 type ApproverRule struct {
 	Name      string
 	Approvers []string // sorted
+	// UserIDs maps each approver to their user ID when the read that produced
+	// the rule carries IDs; nil otherwise.
+	UserIDs map[string]int64
 	// Managed marks the rule mrboard writes. mrboard never changes any other
 	// rule: their approvers are locked as far as mrboard is concerned.
 	Managed bool
@@ -21,6 +24,17 @@ func (mr MergeRequest) ManagedApprovers() []string {
 	for _, r := range mr.ApproverRules {
 		if r.Managed {
 			return NormalizeApprovers(r.Approvers)
+		}
+	}
+	return nil
+}
+
+// ManagedApproverIDs maps the managed rule's members to their user IDs, as far
+// as the read that produced mr carried them; nil when it carried none.
+func (mr MergeRequest) ManagedApproverIDs() map[string]int64 {
+	for _, r := range mr.ApproverRules {
+		if r.Managed {
+			return r.UserIDs
 		}
 	}
 	return nil
@@ -58,6 +72,7 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 		if r.Managed && !found {
 			found = true
 			r.Approvers = set
+			r.UserIDs = idsOf(r.UserIDs, set)
 		}
 		rules = append(rules, r)
 	}
@@ -83,4 +98,18 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 	for i := range mr.Reviewers {
 		mr.Reviewers[i].IsApprover = union[mr.Reviewers[i].Username]
 	}
+}
+
+// idsOf returns the entries of ids for usernames; nil when none remain.
+func idsOf(ids map[string]int64, usernames []string) map[string]int64 {
+	var out map[string]int64
+	for _, u := range usernames {
+		if id, ok := ids[u]; ok {
+			if out == nil {
+				out = make(map[string]int64, len(usernames))
+			}
+			out[u] = id
+		}
+	}
+	return out
 }

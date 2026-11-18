@@ -377,3 +377,50 @@ func TestApplyReviewerChanges_KeepsManagedApproversWhoAreNotReviewers(t *testing
 	}, map[string]int64{})
 	require.NoError(t, err)
 }
+
+func TestApplyReviewerChanges_ManagedMemberWhoLeftTheProjectResolvesFromTheRead(t *testing.T) {
+	// dave is on the managed rule but no longer a project member, so
+	// GetProjectMembers cannot resolve him. The read carries his ID: the save
+	// keeps him without a members lookup instead of failing.
+	src := mocks.NewMockMergeRequestSource(t) // no GetProjectMembers EXPECT()
+	live := fetchedMR(domain.ReviewerInfo{Username: userAlice})
+	live.SetManagedApprovers([]string{userDave})
+	live.ApproverRules[0].UserIDs = map[string]int64{userDave: 104}
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 104}).Return(nil).Once()
+
+	alice := mrsvc.ReviewerEdit{Username: userAlice, UserID: 101}
+	ticked := alice
+	ticked.IsApprover = true
+	_, changed, err := applyChanges(src, mrsvc.ReviewerChange{
+		Staged: []mrsvc.ReviewerEdit{ticked}, Baseline: []mrsvc.ReviewerEdit{alice}, Mode: mrsvc.ReviewerWriteEdit,
+	}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.True(t, changed)
+}
+
+func TestApplyReviewerChanges_RemovingAManagedAndLockedReviewerKeepsThemApprover(t *testing.T) {
+	// alice is on the managed rule and on orekit-stelar. Removing her as a
+	// reviewer drops her from the managed rule; orekit-stelar keeps her approver.
+	live := liveWithForeignRule()
+	live.SetManagedApprovers([]string{userAlice, userBob})
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{102, 103}).Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{102}).Return(nil).Once()
+
+	alice := mrsvc.ReviewerEdit{Username: userAlice, UserID: 101, IsApprover: true}
+	bob := mrsvc.ReviewerEdit{Username: userBob, UserID: 102, IsApprover: true}
+	carol := mrsvc.ReviewerEdit{Username: userCarol, UserID: 103}
+	mr, changed, err := applyChanges(src, mrsvc.ReviewerChange{
+		Staged:   []mrsvc.ReviewerEdit{bob, carol},
+		Baseline: []mrsvc.ReviewerEdit{alice, bob, carol},
+		Mode:     mrsvc.ReviewerWriteEdit,
+	}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.Equal(t, []string{userBob}, mr.ManagedApprovers())
+	assert.Contains(t, mr.Approvers, userAlice, "orekit-stelar keeps alice an approver")
+}

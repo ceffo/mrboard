@@ -17,7 +17,8 @@ The PAT already configured for reads is assumed to have `api` scope (required fo
 
 ### mrboard writes only its own approval rule
 
-`SaveApprovers` creates or updates the `approvers_mrboard` rule and nothing else: it never updates
+`SaveApprovers` creates or updates the `approvers_mrboard` rule (the first *regular* rule with that
+name, the same one the read marks managed) and nothing else: it never updates
 or deletes another approval rule. Rules that come from the repository or project configuration and
 rules people add by hand are not mrboard's to change, so mrboard has no rule-deleting call at all.
 
@@ -30,7 +31,9 @@ Consequences for the approver editor:
 - Applying an edit to sibling MRs propagates only the user's picks: a locked approver on the edited
   MR joins a sibling as a plain reviewer, never as a managed-rule member.
 - `domain.MergeRequest.ApproverRules` carries each rule's name and approvers, with the managed one
-  flagged, so the editor and `mrsvc.ApplyReviewerChanges` can tell the two apart.
+  flagged, so the editor and `mrsvc.ApplyReviewerChanges` can tell the two apart. The REST read
+  also carries each rule's member IDs, so a managed member who has left the project (and so is not
+  in the members list) still resolves, and a save keeps or drops them like anyone else.
 
 ## Consequences
 

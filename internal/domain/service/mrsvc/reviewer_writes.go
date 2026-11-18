@@ -138,6 +138,17 @@ func ApplyReviewerChanges(
 		return domain.MergeRequest{}, false, fmt.Errorf("re-read MR before writing reviewers: %w", err)
 	}
 	desired := ResolveReviewerSet(live.Reviewers, change)
+	if knownIDs == nil {
+		knownIDs = make(map[string]int64)
+	}
+	// The read carries the managed rule's member IDs, so a member who is no
+	// longer a project member (and so absent from GetProjectMembers) still
+	// resolves and is kept or dropped like anyone else.
+	for u, id := range live.ManagedApproverIDs() {
+		if _, ok := knownIDs[u]; !ok && id != 0 {
+			knownIDs[u] = id
+		}
+	}
 
 	liveNames := make(map[string]bool, len(live.Reviewers))
 	for _, r := range live.Reviewers {

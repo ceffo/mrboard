@@ -557,3 +557,59 @@ func TestMakeReviewerWriteCmd_UnionNeverCopiesLockedApprover(t *testing.T) {
 	require.NoError(t, msg.Err)
 	assert.False(t, msg.ApproversChanged, "no SaveApprovers call for a locked approver")
 }
+
+func TestMakeReviewerWriteCmd_OldSnapshotWithoutRulesWritesOnlyTheManagedDelta(t *testing.T) {
+	// A board loaded from a snapshot written before rules were recorded has no
+	// ApproverRules: dave looks like a plain ticked approver. The write re-reads
+	// the MR, sees the repository rule, and puts only the new pick in the
+	// managed rule.
+	snapshot := domain.MergeRequest{
+		ID: 1, IID: 10, ProjectID: 100, ProjectPath: editorTestRepo, Title: "feat(OD-1): change",
+		Reviewers: []domain.ReviewerInfo{{Username: editorTestLocked, IsApprover: true}},
+		Approvers: []string{editorTestLocked},
+	}
+	live := snapshot
+	live.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{editorTestLocked}}}
+	live.SetManagedApprovers(nil)
+
+	w := newReviewerEditorWidget(
+		context.Background(), snapshot, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
+		domain.NewTicketKeyMatcher(false),
+	)
+	require.Len(t, w.staged, 1)
+	assert.Empty(t, w.staged[0].LockedBy, "an old snapshot cannot tell which rule dave comes from")
+
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, int64(100), int64(10)).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, int64(100), int64(10), []int64{4, 2}).Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, int64(100), int64(10), []int64{2}).Return(nil).Once()
+
+	staged := append(append([]stagedReviewer(nil), w.staged...),
+		stagedReviewer{Username: editorTestOther, IsApprover: true, UserID: 2})
+	staged[0].UserID = 4
+	cmd := makeReviewerWriteCmd(context.Background(), src, snapshot, staged, w.baseline, mrsvc.ReviewerWriteEdit, nil)
+	msg, ok := cmd().(ReviewersSavedMsg)
+	require.True(t, ok)
+	require.NoError(t, msg.Err)
+	assert.Equal(t, []string{editorTestOther}, msg.MR.ManagedApprovers(), "dave stays out of the managed rule")
+	assert.Equal(t, []string{editorTestOther, editorTestLocked}, msg.MR.Approvers)
+}
+
+func TestReviewerEditorWidget_OtherApproversLine_FitsTheModalWidth(t *testing.T) {
+	mr := lockedFocusedMR()
+	many := make([]string, 0, 30)
+	for i := range 30 {
+		many = append(many, "approver-with-a-long-username-"+string(rune('a'+i%26)))
+	}
+	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{Name: "a-very-long-project-rule", Approvers: many})
+	mr.SetManagedApprovers(mr.ManagedApprovers())
+	w := newReviewerEditorWidget(
+		context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
+		domain.NewTicketKeyMatcher(false),
+	)
+
+	line := w.otherApproversLine()
+	require.NotEmpty(t, line)
+	assert.LessOrEqual(t, lip.Width(line), max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint)),
+		"the summary line is truncated to the modal's content width")
+}

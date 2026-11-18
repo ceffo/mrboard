@@ -525,9 +525,11 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 		ApprovalsRequired: required,
 		UserIDs:           userIDs,
 	}
+	// The managed rule is the first regular rule with its name, the same one the
+	// read marks Managed. No other rule is ever updated or deleted.
 	var managedID int64
 	for _, r := range rules {
-		if r.Name == approversRuleName {
+		if r.Name == approversRuleName && r.RuleType == ruleTypeRegular {
 			managedID = r.ID
 			break
 		}

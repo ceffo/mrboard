@@ -72,3 +72,12 @@ func TestSetManagedApprovers_EmptyLeavesNilApprovers(t *testing.T) {
 	assert.Nil(t, mr.Approvers)
 	assert.False(t, mr.Reviewers[0].IsApprover)
 }
+
+func TestSetManagedApprovers_KeepsIDsOfRemainingMembersOnly(t *testing.T) {
+	mr := ruledMR()
+	mr.ApproverRules[1].UserIDs = map[string]int64{"alice": 1, "bob": 2}
+
+	mr.SetManagedApprovers([]string{"bob", "frank"})
+
+	assert.Equal(t, map[string]int64{"bob": 2}, mr.ManagedApproverIDs())
+}

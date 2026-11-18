@@ -484,3 +484,11 @@ func TestMergeMRFromGraphQL_ApproverRules_FromFreshRules(t *testing.T) {
 		{Name: approversRuleName, Approvers: []string{testUserAlice}, Managed: true},
 	}, result.ApproverRules)
 }
+
+func TestMapMR_ApproverRules_CarriesManagedMemberIDs(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	managed := approvalRule(approversRuleName, testUserBob)
+	managed.EligibleApprovers[0].ID = 42
+	result := MapMR(m, nil, approvals(), []*gl.MergeRequestApprovalRule{managed})
+	assert.Equal(t, map[string]int64{testUserBob: 42}, result.ManagedApproverIDs())
+}
