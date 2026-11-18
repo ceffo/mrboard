@@ -162,14 +162,14 @@ func ruledReviewMR() MergeRequest {
 	mr := MergeRequest{
 		Phase: PhaseNeedsReview,
 		Reviewers: []ReviewerInfo{
-			{Username: "alice", State: ReviewerNotStarted},
-			{Username: "bob", State: ReviewerNotStarted},
-			{Username: "carol", State: ReviewerApproved},
+			{Username: testUsername, State: ReviewerNotStarted},
+			{Username: testOther, State: ReviewerNotStarted},
+			{Username: userCarol, State: ReviewerApproved},
 		},
 	}
 	mr.ApplyApproverRules([]ApproverRule{
-		{Name: "leads", Approvers: []string{"alice"}, ApprovalsRequired: 1},
-		{Name: "team", Approvers: []string{"bob", "carol"}, ApprovalsRequired: 1},
+		{Name: testRuleLeads, Approvers: []string{testUsername}, ApprovalsRequired: 1},
+		{Name: testRuleTeam, Approvers: []string{testOther, userCarol}, ApprovalsRequired: 1},
 	})
 	return mr
 }
@@ -177,15 +177,15 @@ func ruledReviewMR() MergeRequest {
 func TestNeedsReviewBy_OptionalRuleMemberIsNotAskedToReview(t *testing.T) {
 	mr := ruledReviewMR()
 
-	assert.True(t, mr.NeedsReviewBy("alice"), "alice's approval is required")
-	assert.False(t, mr.NeedsReviewBy("bob"), "bob's approval is optional and he has not started")
+	assert.True(t, mr.NeedsReviewBy(testUsername), "alice's approval is required")
+	assert.False(t, mr.NeedsReviewBy(testOther), "bob's approval is optional and he has not started")
 }
 
 func TestRolesOf_OptionalRuleMemberIsGatedOut(t *testing.T) {
 	mr := ruledReviewMR()
 
-	assert.Contains(t, mr.RolesOf("alice"), RoleReviewer)
-	assert.NotContains(t, mr.RolesOf("bob"), RoleReviewer, "only required approvers count once an MR has one")
+	assert.Contains(t, mr.RolesOf(testUsername), RoleReviewer)
+	assert.NotContains(t, mr.RolesOf(testOther), RoleReviewer, "only required approvers count once an MR has one")
 }
 
 func TestClassifyPhase_OptionalApprovalIsNotAwaited(t *testing.T) {

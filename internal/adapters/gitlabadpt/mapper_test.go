@@ -32,6 +32,8 @@ const (
 	testUserBobName   = "Bob"
 	testUserPriya     = "priya"
 	testRepoRule      = "orekit-stelar"
+	testRuleLeads     = "leads"
+	testRuleTeam      = "team"
 )
 
 func basicUser(username, name string) *gl.BasicUser {
@@ -513,22 +515,25 @@ var requiredApproverCases = []struct {
 	rules []testRule
 	want  []string
 }{
-	{"every member required", []testRule{{"leads", 2, []string{testUserAlice, testUserBob}}},
-		[]string{testUserAlice, testUserBob}},
-	{"one of several required", []testRule{{"team", 1, []string{testUserAlice, testUserBob, testUserCarol}}}, nil},
-	{"more required than members", []testRule{{"team", 3, []string{testUserAlice, testUserBob}}}, nil},
-	{"no approval required", []testRule{{"team", 0, []string{testUserAlice}}}, nil},
+	{
+		"every member required",
+		[]testRule{{testRuleLeads, 2, []string{testUserAlice, testUserBob}}},
+		[]string{testUserAlice, testUserBob},
+	},
+	{"one of several required", []testRule{{testRuleTeam, 1, []string{testUserAlice, testUserBob, testUserCarol}}}, nil},
+	{"more required than members", []testRule{{testRuleTeam, 3, []string{testUserAlice, testUserBob}}}, nil},
+	{"no approval required", []testRule{{testRuleTeam, 0, []string{testUserAlice}}}, nil},
 	{
 		"member of a required and an optional rule",
-		[]testRule{{"leads", 1, []string{testUserAlice}}, {"team", 1, []string{testUserAlice, testUserBob}}},
+		[]testRule{{testRuleLeads, 1, []string{testUserAlice}}, {testRuleTeam, 1, []string{testUserAlice, testUserBob}}},
 		[]string{testUserAlice},
 	},
 	{
 		"several rules",
 		[]testRule{
-			{"leads", 1, []string{testUserAlice}},
+			{testRuleLeads, 1, []string{testUserAlice}},
 			{"security", 1, []string{testUserCarol}},
-			{"team", 1, []string{testUserBob, testUserCarol}},
+			{testRuleTeam, 1, []string{testUserBob, testUserCarol}},
 		},
 		[]string{testUserAlice, testUserCarol},
 	},
@@ -611,8 +616,8 @@ func TestMergeMRFromGraphQL_RequiredApprovers(t *testing.T) {
 
 func TestMapMRFromGraphQL_OptionalApproverDoesNotHoldBackReadyToMerge(t *testing.T) {
 	mr := gqlMRWithRules([]testRule{
-		{"leads", 1, []string{testUserAlice}},
-		{"team", 1, []string{testUserBob, testUserCarol}},
+		{testRuleLeads, 1, []string{testUserAlice}},
+		{testRuleTeam, 1, []string{testUserBob, testUserCarol}},
 	})
 	mr.ApprovedBy.Nodes = []pkggitlab.GQLUser{{Username: testUserAlice}}
 

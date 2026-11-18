@@ -209,7 +209,7 @@ func TestClaim_StaleObservation_WritesNothing(t *testing.T) {
 
 func TestClaim_LiveSetIsTheRequiredApproversOnly(t *testing.T) {
 	c := newFakeLedgerClient(testUserAlice)
-	c.liveRules = append(c.liveRules, approvalRuleNeeding("team", 1, testUserAlice, testUserBob))
+	c.liveRules = append(c.liveRules, approvalRuleNeeding(testRuleTeam, 1, testUserAlice, testUserBob))
 	a := &GitLabAdapter{client: c}
 
 	owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
