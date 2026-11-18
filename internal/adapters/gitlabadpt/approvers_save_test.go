@@ -57,8 +57,8 @@ func rule(id int64, name, ruleType string) *gl.MergeRequestApprovalRule {
 // foreignRules are rules mrboard did not create: one copied from the project's
 // settings, one a person added by hand, and the system-managed kinds.
 func foreignRules() []*gl.MergeRequestApprovalRule {
-	repo := rule(1, "orekit-stelar", "regular")
-	repo.SourceRule = &gl.ProjectApprovalRule{ID: 500, Name: "orekit-stelar"}
+	repo := rule(1, testRepoRule, "regular")
+	repo.SourceRule = &gl.ProjectApprovalRule{ID: 500, Name: testRepoRule}
 	return []*gl.MergeRequestApprovalRule{
 		repo,
 		rule(2, "Approvers", "regular"),

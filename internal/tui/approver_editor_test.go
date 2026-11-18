@@ -473,8 +473,11 @@ func TestMakeReviewerWriteCmd_UnionKeepsTargetsOwnReviewersAndApprovers(t *testi
 
 // --- Approvers from rules mrboard does not manage ---
 
+// testUserDave is a username shared by tests that need a fourth person.
+const testUserDave = "dave"
+
 const (
-	editorTestLocked     = "dave"
+	editorTestLocked     = testUserDave
 	editorTestLockedOnly = "erin"
 	editorTestRepoRule   = "orekit-stelar"
 )

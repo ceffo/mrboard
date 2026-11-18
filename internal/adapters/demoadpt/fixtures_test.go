@@ -19,6 +19,8 @@ const (
 	userLinus     = "linus"
 	userMargaret  = "margaret"
 	userKatherine = "katherine"
+	userEdsger    = "edsger"
+	userBarbara   = "barbara"
 
 	reviewersFixture  = "reviewers"
 	autoAssignFixture = "auto-assign"
@@ -130,10 +132,10 @@ func TestReviewersFixture_UnionKeepsWhatEachRelatedMRAlreadyHas(t *testing.T) {
 		{101, 508, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{
 			102, 509,
-			[]string{"edsger", userGrace, userKatherine, userLinus, userMargaret},
+			[]string{userEdsger, userGrace, userKatherine, userLinus, userMargaret},
 			[]string{userGrace, userKatherine, userMargaret},
 		},
-		{103, 510, []string{"barbara", userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
+		{103, 510, []string{userBarbara, userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		// linus stays an approver although the staged edit lists him as a plain reviewer.
 		{101, 511, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine, userLinus}},
 	}
@@ -293,12 +295,12 @@ func TestAutoAssignFixture_NeverReplacesAnMRThatAlreadyHasReviewers(t *testing.T
 func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T) {
 	a := newTestAdapterFor(t, reviewersFixture)
 	before := fetchMR(t, a, 102, 550)
-	require.Equal(t, map[string][]string{"barbara": {"platform-owners"}, "edsger": {"platform-owners"}},
+	require.Equal(t, map[string][]string{userBarbara: {"platform-owners"}, userEdsger: {"platform-owners"}},
 		before.LockedApprovers())
 
 	// Untick grace and drop edsger as a reviewer.
 	baseline := []mrsvc.ReviewerEdit{
-		{Username: userGrace, IsApprover: true}, {Username: "edsger", IsApprover: true}, {Username: userLinus},
+		{Username: userGrace, IsApprover: true}, {Username: userEdsger, IsApprover: true}, {Username: userLinus},
 	}
 	staged := []mrsvc.ReviewerEdit{{Username: userGrace}, {Username: userLinus}}
 	applyChange(t, a, 102, 550, mrsvc.ReviewerChange{Staged: staged, Baseline: baseline, Mode: mrsvc.ReviewerWriteEdit})
@@ -306,5 +308,5 @@ func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T)
 	after := fetchMR(t, a, 102, 550)
 	assert.Equal(t, before.LockedApprovers(), after.LockedApprovers(), "the project's rule must survive the write")
 	assert.Empty(t, after.ManagedApprovers(), "grace leaves mrboard's rule")
-	assert.Equal(t, []string{"barbara", "edsger"}, after.Approvers, "the rule's approvers stay approvers")
+	assert.Equal(t, []string{userBarbara, userEdsger}, after.Approvers, "the rule's approvers stay approvers")
 }

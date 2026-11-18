@@ -198,10 +198,10 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	// A project rule keeps making dave an approver although he is no reviewer.
 	saved := before
 	saved.Reviewers = []domain.ReviewerInfo{{Username: editorTestOther}}
-	saved.ApproverRules = []domain.ApproverRule{{Name: "orekit-stelar", Approvers: []string{"dave"}}}
+	saved.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{testUserDave}}}
 	saved.SetManagedApprovers([]string{editorTestOther})
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
-		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, "dave"},
+		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, testUserDave},
 		Prior: []string{editorTestApprover}, Authoritative: true,
 	}).Return(true, nil).Once()
 	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil).Once()
@@ -216,7 +216,7 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	assert.Equal(t, 1, announced)
 
 	confirmed := before
-	confirmed.Approvers = []string{"dave", editorTestOther}
+	confirmed.Approvers = []string{testUserDave, editorTestOther}
 	f.m.dirty = dirtySet{}
 	assert.Empty(t, f.refresh(confirmed), "the refresh that confirms the edit must not announce it again")
 }

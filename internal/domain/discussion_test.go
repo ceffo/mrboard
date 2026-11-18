@@ -134,8 +134,8 @@ func TestDeriveReviewerInfos_MultipleReviewers(t *testing.T) {
 		return ReviewerNotStarted
 	}
 
-	assert.Equal(t, ReviewerCommented, stateFor(testUsername), "alice")
-	assert.Equal(t, ReviewerReReviewRequested, stateFor(testOther), "bob")
+	assert.Equal(t, ReviewerCommented, stateFor(testUsername), testUsername)
+	assert.Equal(t, ReviewerReReviewRequested, stateFor(testOther), testOther)
 }
 
 func TestDeriveReviewerInfos_WaitingSince_ReReviewRequested(t *testing.T) {

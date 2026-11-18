@@ -30,6 +30,7 @@ const (
 	testUserCarol     = "carol"
 	testUserBobName   = "Bob"
 	testUserPriya     = "priya"
+	testRepoRule      = "orekit-stelar"
 )
 
 func basicUser(username, name string) *gl.BasicUser {
@@ -458,29 +459,29 @@ func TestMapMR_ApproverRules_MarksOnlyTheManagedRule(t *testing.T) {
 	codeOwners := approvalRule("*", testUserBob)
 	codeOwners.RuleType = "code_owner"
 	rules := []*gl.MergeRequestApprovalRule{
-		approvalRule("orekit-stelar", testUserCarol, testUserAlice),
+		approvalRule(testRepoRule, testUserCarol, testUserAlice),
 		approvalRule(approversRuleName, testUserBob),
 		codeOwners,
 	}
 	result := MapMR(m, nil, approvals(), rules)
 	assert.Equal(t, []domain.ApproverRule{
-		{Name: "orekit-stelar", Approvers: []string{testUserAlice, testUserCarol}},
+		{Name: testRepoRule, Approvers: []string{testUserAlice, testUserCarol}},
 		{Name: approversRuleName, Approvers: []string{testUserBob}, Managed: true},
 	}, result.ApproverRules)
 	assert.Equal(t, []string{testUserBob}, result.ManagedApprovers())
-	assert.Equal(t, map[string][]string{testUserAlice: {"orekit-stelar"}, testUserCarol: {"orekit-stelar"}},
+	assert.Equal(t, map[string][]string{testUserAlice: {testRepoRule}, testUserCarol: {testRepoRule}},
 		result.LockedApprovers())
 }
 
 func TestMergeMRFromGraphQL_ApproverRules_FromFreshRules(t *testing.T) {
 	mr := pkggitlab.GQLMergeRequest{}
 	mr.ApprovalState.Rules = []pkggitlab.GQLApprovalRule{
-		gqlApprovalRule("orekit-stelar", testUserCarol),
+		gqlApprovalRule(testRepoRule, testUserCarol),
 		gqlApprovalRule(approversRuleName, testUserAlice),
 	}
 	result := MergeMRFromGraphQL(mr, domain.MergeRequest{})
 	assert.Equal(t, []domain.ApproverRule{
-		{Name: "orekit-stelar", Approvers: []string{testUserCarol}},
+		{Name: testRepoRule, Approvers: []string{testUserCarol}},
 		{Name: approversRuleName, Approvers: []string{testUserAlice}, Managed: true},
 	}, result.ApproverRules)
 }

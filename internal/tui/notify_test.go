@@ -42,7 +42,7 @@ func modelWithNotifier(t *testing.T, notifier domain.Notifier) Model {
 func savedMR() domain.MergeRequest {
 	return domain.MergeRequest{
 		ID: 1, IID: 10, Author: "carol", ProjectPath: "org/gamma",
-		Reviewers: []domain.ReviewerInfo{{Username: "dave", IsApprover: true}},
+		Reviewers: []domain.ReviewerInfo{{Username: testUserDave, IsApprover: true}},
 	}
 }
 

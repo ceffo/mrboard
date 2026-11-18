@@ -31,7 +31,7 @@ func TestApproverSetHash(t *testing.T) {
 
 func TestApproverClaim_FormatParseRoundTrip(t *testing.T) {
 	for name, in := range map[string]ApproverClaim{
-		"announce": {Approvers: []string{testUsername, "bob"}},
+		"announce": {Approvers: []string{testUsername, testOther}},
 		"silent":   {Approvers: []string{testUsername}, Silent: true},
 		"empty":    {},
 		"released": {Approvers: []string{testUsername}, Released: true},
