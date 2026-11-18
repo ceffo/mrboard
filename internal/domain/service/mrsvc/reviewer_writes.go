@@ -140,52 +140,32 @@ func ApplyReviewerChanges(
 	desired := ResolveReviewerSet(live.Reviewers, change)
 
 	liveNames := make(map[string]bool, len(live.Reviewers))
-	liveApprovers := make(map[string]bool)
 	for _, r := range live.Reviewers {
 		liveNames[r.Username] = true
-		if r.IsApprover {
-			liveApprovers[r.Username] = true
-		}
 	}
 	desiredNames := make(map[string]bool, len(desired))
-	nowApprovers := make(map[string]bool)
 	for _, d := range desired {
 		desiredNames[d.Username] = true
-		if d.IsApprover {
-			nowApprovers[d.Username] = true
-		}
 	}
+	liveManaged := setOf(live.ManagedApprovers())
+	managed := resolveManagedApprovers(live, desired)
 	reviewersChanged := !sameSet(desiredNames, liveNames)
-	approversChanged = !sameSet(nowApprovers, liveApprovers)
+	approversChanged = !sameSet(managed, liveManaged)
 	if !reviewersChanged && !approversChanged {
 		return live, false, nil
 	}
 
-	if err := resolveMissingIDs(ctx, src, projectID, desired, knownIDs); err != nil {
+	managedNames := sortedKeys(managed)
+	if err := resolveMissingIDs(ctx, src, projectID, desired, managedNames, knownIDs); err != nil {
 		return domain.MergeRequest{}, false, err
 	}
-	seen := make(map[int64]bool)
-	var reviewerIDs, approverIDs []int64
-	for _, d := range desired {
-		id := d.UserID
-		if id == 0 {
-			id = knownIDs[d.Username]
-		}
-		if id == 0 {
-			if liveNames[d.Username] {
-				return domain.MergeRequest{}, false, fmt.Errorf(
-					"cannot resolve a user ID for existing reviewer @%s; leaving the reviewers unchanged", d.Username)
-			}
-			continue
-		}
-		if d.IsApprover {
-			approverIDs = append(approverIDs, id)
-		}
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		reviewerIDs = append(reviewerIDs, id)
+	reviewerIDs, err := reviewerIDsOf(desired, liveNames, knownIDs)
+	if err != nil {
+		return domain.MergeRequest{}, false, err
+	}
+	approverIDs, err := managedIDsOf(managedNames, liveManaged, desired, knownIDs)
+	if err != nil {
+		return domain.MergeRequest{}, false, err
 	}
 
 	if reviewersChanged {
@@ -201,9 +181,109 @@ func ApplyReviewerChanges(
 
 	mr, err = src.FetchMR(ctx, projectID, mrIID)
 	if err == nil {
-		ApplyStagedApproverFlags(&mr, nowApprovers)
+		mr.SetManagedApprovers(managedNames)
 	}
 	return mr, approversChanged, err
+}
+
+// resolveManagedApprovers returns the members the managed approval rule should
+// have once desired is written: the live members, plus every desired reviewer
+// flagged approver, minus every desired reviewer not flagged approver and every
+// live reviewer the write removes. A reviewer an unmanaged rule makes an
+// approver is never added to the managed rule: they are an approver already.
+// Members of the managed rule who are not reviewers stay.
+func resolveManagedApprovers(live domain.MergeRequest, desired []ReviewerEdit) map[string]bool {
+	managed := setOf(live.ManagedApprovers())
+	locked := live.LockedApprovers()
+	desiredNames := make(map[string]bool, len(desired))
+	for _, d := range desired {
+		desiredNames[d.Username] = true
+		_, isLocked := locked[d.Username]
+		switch {
+		case !d.IsApprover:
+			delete(managed, d.Username)
+		case !isLocked:
+			managed[d.Username] = true
+		}
+	}
+	for _, r := range live.Reviewers {
+		if !desiredNames[r.Username] {
+			delete(managed, r.Username)
+		}
+	}
+	return managed
+}
+
+// reviewerIDsOf returns the user IDs of desired, deduplicated, in order. An
+// entry without an ID is left out, except a reviewer already on the MR, which
+// fails the write rather than being stripped from it.
+func reviewerIDsOf(desired []ReviewerEdit, liveNames map[string]bool, knownIDs map[string]int64) ([]int64, error) {
+	seen := make(map[int64]bool)
+	var ids []int64
+	for _, d := range desired {
+		id := idOf(d.Username, d.UserID, knownIDs)
+		if id == 0 {
+			if liveNames[d.Username] {
+				return nil, fmt.Errorf(
+					"cannot resolve a user ID for existing reviewer @%s; leaving the reviewers unchanged", d.Username)
+			}
+			continue
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// managedIDsOf returns the user IDs of names, the managed rule's members to
+// write. A member without an ID is left out, except one already on the rule,
+// which fails the write rather than being dropped from it.
+func managedIDsOf(
+	names []string, liveManaged map[string]bool, desired []ReviewerEdit, knownIDs map[string]int64,
+) ([]int64, error) {
+	staged := make(map[string]int64, len(desired))
+	for _, d := range desired {
+		staged[d.Username] = d.UserID
+	}
+	ids := make([]int64, 0, len(names))
+	for _, u := range names {
+		id := idOf(u, staged[u], knownIDs)
+		if id == 0 {
+			if liveManaged[u] {
+				return nil, fmt.Errorf(
+					"cannot resolve a user ID for existing approver @%s; leaving the approvers unchanged", u)
+			}
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func idOf(username string, id int64, knownIDs map[string]int64) int64 {
+	if id != 0 {
+		return id
+	}
+	return knownIDs[username]
+}
+
+func setOf(usernames []string) map[string]bool {
+	set := make(map[string]bool, len(usernames))
+	for _, u := range usernames {
+		set[u] = true
+	}
+	return set
+}
+
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	return domain.NormalizeApprovers(keys)
 }
 
 // sameSet reports whether a and b hold the same keys.
@@ -220,9 +300,11 @@ func sameSet(a, b map[string]bool) bool {
 }
 
 // resolveMissingIDs fills knownIDs for every entry of desired that has neither a
-// UserID nor a knownIDs entry, with a single GetProjectMembers call.
+// UserID nor a knownIDs entry, and every such username in extra, with a single
+// GetProjectMembers call.
 func resolveMissingIDs(
-	ctx context.Context, src reviewerStore, projectID int64, desired []ReviewerEdit, knownIDs map[string]int64,
+	ctx context.Context, src reviewerStore, projectID int64, desired []ReviewerEdit, extra []string,
+	knownIDs map[string]int64,
 ) error {
 	needFetch := false
 	for _, d := range desired {
@@ -231,6 +313,16 @@ func resolveMissingIDs(
 				needFetch = true
 				break
 			}
+		}
+	}
+	staged := make(map[string]bool, len(desired))
+	for _, d := range desired {
+		staged[d.Username] = true
+	}
+	for _, u := range extra {
+		if _, ok := knownIDs[u]; !ok && !staged[u] {
+			needFetch = true
+			break
 		}
 	}
 	if !needFetch {
@@ -244,15 +336,4 @@ func resolveMissingIDs(
 		knownIDs[m.Username] = m.UserID
 	}
 	return nil
-}
-
-// ApplyStagedApproverFlags overlays the just-written approver set onto the MR's
-// reviewers. GitLab's approval-rule read is eventually consistent, so a fetch fired
-// immediately after SaveApprovers can return stale EligibleApprovers and drop the
-// IsApprover flag. Trusting the staged intent instead keeps callers correct until the
-// next full refresh.
-func ApplyStagedApproverFlags(mr *domain.MergeRequest, approvers map[string]bool) {
-	for i := range mr.Reviewers {
-		mr.Reviewers[i].IsApprover = approvers[mr.Reviewers[i].Username]
-	}
 }

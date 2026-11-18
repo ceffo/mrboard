@@ -161,6 +161,13 @@ type fixtureDiff struct {
 	Files   []fixtureFileDiff `yaml:"files"`
 }
 
+// fixtureApprovalRule is an approval rule mrboard did not create, such as one
+// copied from the project's settings.
+type fixtureApprovalRule struct {
+	Name      string   `yaml:"name"`
+	Approvers []string `yaml:"approvers"`
+}
+
 type fixtureMR struct {
 	ProjectID    int    `yaml:"project_id"`
 	IID          int    `yaml:"iid"`
@@ -176,15 +183,18 @@ type fixtureMR struct {
 	UpdatedAgo   string `yaml:"updated_ago"`
 	// MergedAgo, when set, makes the MR merged that long before boot: it is
 	// listed only by a fetch whose MergedSince it reaches.
-	MergedAgo      string            `yaml:"merged_ago"`
-	OpenThreads    int               `yaml:"open_threads"`
-	RoundTrips     int               `yaml:"round_trips"`
-	ReviewerSource bool              `yaml:"reviewer_source"`
-	Description    string            `yaml:"description"`
-	Approvers      []string          `yaml:"approvers"`
-	Reviewers      []fixtureReviewer `yaml:"reviewers"`
-	Threads        []fixtureThread   `yaml:"threads"`
-	Diff           *fixtureDiff      `yaml:"diff"`
+	MergedAgo      string `yaml:"merged_ago"`
+	OpenThreads    int    `yaml:"open_threads"`
+	RoundTrips     int    `yaml:"round_trips"`
+	ReviewerSource bool   `yaml:"reviewer_source"`
+	Description    string `yaml:"description"`
+	// Approvers are the members of the rule mrboard writes; ApprovalRules are
+	// the MR's other approval rules, which mrboard never changes.
+	Approvers     []string              `yaml:"approvers"`
+	ApprovalRules []fixtureApprovalRule `yaml:"approval_rules"`
+	Reviewers     []fixtureReviewer     `yaml:"reviewers"`
+	Threads       []fixtureThread       `yaml:"threads"`
+	Diff          *fixtureDiff          `yaml:"diff"`
 }
 
 // reviewerStates maps the fixture's state names onto the domain enum. The names
@@ -415,13 +425,48 @@ func buildMR(
 		WebURL:              fmt.Sprintf("%s/%s/-/merge_requests/%d", strings.TrimRight(baseURL, "/"), path, fm.IID),
 		DetailedMergeStatus: fm.MergeStatus,
 		SourceBranch:        fm.SourceBranch, TargetBranch: target,
-		Reviewers: reviewers, Approvers: fm.Approvers,
+		Reviewers: reviewers, Approvers: fm.Approvers, ApproverRules: approverRules(fm),
 		CreatedAt: createdAt, UpdatedAt: updatedAt, MergedAt: mergedAt,
 		OpenThreads: fm.OpenThreads, RoundTripCount: fm.RoundTrips,
 		ReviewerSource: fm.ReviewerSource,
 	}
+	lockApprovers(&mr)
 	applyDerivedFields(&mr, fm.Draft)
 	return mr, nil
+}
+
+// approverRules returns fm's managed rule (when it lists approvers) followed by
+// its other rules.
+func approverRules(fm fixtureMR) []domain.ApproverRule {
+	var rules []domain.ApproverRule
+	if len(fm.Approvers) > 0 {
+		rules = append(rules, domain.ApproverRule{
+			Name: domain.ManagedApproverRuleName, Approvers: domain.NormalizeApprovers(fm.Approvers), Managed: true,
+		})
+	}
+	for _, r := range fm.ApprovalRules {
+		rules = append(rules, domain.ApproverRule{Name: r.Name, Approvers: domain.NormalizeApprovers(r.Approvers)})
+	}
+	return rules
+}
+
+// lockApprovers adds the approvers of mr's unmanaged rules to Approvers and
+// flags those among its reviewers, as GitLab's rule union would.
+func lockApprovers(mr *domain.MergeRequest) {
+	locked := mr.LockedApprovers()
+	if len(locked) == 0 {
+		return
+	}
+	all := slices.Clone(mr.Approvers)
+	for u := range locked {
+		all = append(all, u)
+	}
+	mr.Approvers = domain.NormalizeApprovers(all)
+	for i := range mr.Reviewers {
+		if _, ok := locked[mr.Reviewers[i].Username]; ok {
+			mr.Reviewers[i].IsApprover = true
+		}
+	}
 }
 
 // applyDerivedFields recomputes Phase, WaitingSince and ReadyToMergeSince from

@@ -23,23 +23,26 @@ const (
 )
 
 func focusedMR() domain.MergeRequest {
-	return domain.MergeRequest{
+	mr := domain.MergeRequest{
 		ID: 1, IID: 10, ProjectID: 100, Author: "carol", ProjectPath: editorTestRepo,
 		Title:     "feat(OD-1): change",
-		Approvers: []string{editorTestApprover},
-		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover, IsApprover: true}},
+		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover}},
 	}
+	mr.SetManagedApprovers([]string{editorTestApprover})
+	return mr
 }
 
 func siblingMR(iid int, approverUsernames ...string) domain.MergeRequest {
 	reviewers := make([]domain.ReviewerInfo, len(approverUsernames))
 	for i, u := range approverUsernames {
-		reviewers[i] = domain.ReviewerInfo{Username: u, IsApprover: true}
+		reviewers[i] = domain.ReviewerInfo{Username: u}
 	}
-	return domain.MergeRequest{
+	mr := domain.MergeRequest{
 		ID: iid, IID: iid, ProjectID: 100, ProjectPath: editorTestRepo,
-		Title: "feat(OD-1): related change", Approvers: approverUsernames, Reviewers: reviewers,
+		Title: "feat(OD-1): related change", Reviewers: reviewers,
 	}
+	mr.SetManagedApprovers(approverUsernames)
+	return mr
 }
 
 func newTestReviewerEditor(siblings []domain.MergeRequest, src *mocks.MockMergeRequestSource) *reviewerEditorWidget {

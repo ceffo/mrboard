@@ -54,12 +54,21 @@ func rule(id int64, name, ruleType string) *gl.MergeRequestApprovalRule {
 	return &gl.MergeRequestApprovalRule{ID: id, Name: name, RuleType: ruleType}
 }
 
-func TestSaveApprovers_NoManagedRule_CreatesItAndReplacesManualRules(t *testing.T) {
-	c := &fakeApprovalRulesClient{rules: []*gl.MergeRequestApprovalRule{
-		rule(1, "Backend", "regular"),
-		rule(2, "Any", "any_approver"),
-		rule(3, "Code Owners", "code_owner"),
-	}}
+// foreignRules are rules mrboard did not create: one copied from the project's
+// settings, one a person added by hand, and the system-managed kinds.
+func foreignRules() []*gl.MergeRequestApprovalRule {
+	repo := rule(1, "orekit-stelar", "regular")
+	repo.SourceRule = &gl.ProjectApprovalRule{ID: 500, Name: "orekit-stelar"}
+	return []*gl.MergeRequestApprovalRule{
+		repo,
+		rule(2, "Approvers", "regular"),
+		rule(3, "Any", "any_approver"),
+		rule(4, "Code Owners", "code_owner"),
+	}
+}
+
+func TestSaveApprovers_NoManagedRule_CreatesItAndLeavesOtherRules(t *testing.T) {
+	c := &fakeApprovalRulesClient{rules: foreignRules()}
 	a := &GitLabAdapter{client: c}
 
 	require.NoError(t, a.SaveApprovers(context.Background(), 1, 10, []int64{7, 8}))
@@ -67,19 +76,21 @@ func TestSaveApprovers_NoManagedRule_CreatesItAndReplacesManualRules(t *testing.
 	require.Len(t, c.created, 1)
 	assert.Equal(t, approversRuleName, c.created[0].Name)
 	assert.Equal(t, []int64{7, 8}, c.created[0].UserIDs)
-	assert.Equal(t, []int64{1}, c.deleted, "only manual regular rules are replaced")
+	assert.Equal(t, 2, c.created[0].ApprovalsRequired)
+	assert.Empty(t, c.updated, "no other rule is rewritten")
+	assert.Empty(t, c.deleted, "no rule is deleted")
 }
 
-func TestSaveApprovers_ManagedRuleExists_UpdatesItAndReplacesLegacyRule(t *testing.T) {
-	c := &fakeApprovalRulesClient{rules: []*gl.MergeRequestApprovalRule{
-		rule(1, approversRuleName, "regular"),
-		rule(2, "Approvers", "regular"),
-	}}
+func TestSaveApprovers_ManagedRuleExists_UpdatesOnlyIt(t *testing.T) {
+	c := &fakeApprovalRulesClient{rules: append(foreignRules(), rule(9, approversRuleName, "regular"))}
 	a := &GitLabAdapter{client: c}
 
 	require.NoError(t, a.SaveApprovers(context.Background(), 1, 10, []int64{7}))
 
 	assert.Empty(t, c.created)
-	require.Contains(t, c.updated, int64(1))
-	assert.Equal(t, []int64{2}, c.deleted)
+	require.Len(t, c.updated, 1)
+	require.Contains(t, c.updated, int64(9))
+	assert.Equal(t, []int64{7}, c.updated[9].UserIDs)
+	assert.Equal(t, 1, c.updated[9].ApprovalsRequired)
+	assert.Empty(t, c.deleted, "no rule is deleted")
 }

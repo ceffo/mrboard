@@ -19,8 +19,20 @@ const (
 	writeTestMRIID     int64 = 7
 )
 
+// fetchedMR builds the MR as FetchMR returns it: its flagged approvers are the
+// members of the managed approval rule.
 func fetchedMR(reviewers ...domain.ReviewerInfo) domain.MergeRequest {
-	return domain.MergeRequest{ID: 1, IID: int(writeTestMRIID), ProjectID: int(writeTestProjectID), Reviewers: reviewers}
+	mr := domain.MergeRequest{ID: 1, IID: int(writeTestMRIID), ProjectID: int(writeTestProjectID), Reviewers: reviewers}
+	var approvers []string
+	for _, r := range reviewers {
+		if r.IsApprover {
+			approvers = append(approvers, r.Username)
+		}
+	}
+	if len(approvers) > 0 {
+		mr.SetManagedApprovers(approvers)
+	}
+	return mr
 }
 
 // applyChanges is a thin wrapper around mrsvc.ApplyReviewerChanges fixing the
@@ -272,15 +284,96 @@ func TestResolveReviewerSet_EditFlipsApproverFlagBothWays(t *testing.T) {
 	}, got)
 }
 
-func TestApplyStagedApproverFlags_OverlaysIntent(t *testing.T) {
-	mr := domain.MergeRequest{
-		Reviewers: []domain.ReviewerInfo{
-			{Username: "doc"},
-			{Username: "biff"},
-		},
-	}
-	mrsvc.ApplyStagedApproverFlags(&mr, map[string]bool{"doc": true})
+// liveWithForeignRule is an MR whose managed rule holds bob, and whose
+// project-sourced rule makes alice (a reviewer) and dave (not a reviewer)
+// approvers.
+func liveWithForeignRule() domain.MergeRequest {
+	mr := fetchedMR(
+		domain.ReviewerInfo{Username: userAlice},
+		domain.ReviewerInfo{Username: userBob},
+		domain.ReviewerInfo{Username: userCarol},
+	)
+	mr.ApproverRules = []domain.ApproverRule{{Name: "orekit-stelar", Approvers: []string{userAlice, userDave}}}
+	mr.SetManagedApprovers([]string{userBob})
+	return mr
+}
 
-	assert.True(t, mr.Reviewers[0].IsApprover, "doc should be flagged as approver from staged intent")
-	assert.False(t, mr.Reviewers[1].IsApprover, "biff was not staged as approver and must stay false")
+func TestApplyReviewerChanges_NeverCopiesLockedApproversIntoTheManagedRule(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()
+	// alice stays an approver through orekit-stelar; only bob and carol are mrboard's.
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{102, 103}).Return(nil).Once()
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()
+
+	before := []mrsvc.ReviewerEdit{
+		{Username: userAlice, UserID: 101, IsApprover: true},
+		{Username: userBob, UserID: 102, IsApprover: true},
+		{Username: userCarol, UserID: 103},
+	}
+	after := append([]mrsvc.ReviewerEdit(nil), before...)
+	after[2].IsApprover = true
+	mr, changed, err := applyChanges(src,
+		mrsvc.ReviewerChange{Staged: after, Baseline: before, Mode: mrsvc.ReviewerWriteEdit}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.Equal(t, []string{userBob, userCarol}, mr.ManagedApprovers(), "the refetch is overlaid with the write")
+	assert.Equal(t, []string{userAlice, userBob, userCarol, userDave}, mr.Approvers)
+	for _, r := range mr.Reviewers {
+		assert.True(t, r.IsApprover, "@%s", r.Username)
+	}
+}
+
+func TestApplyReviewerChanges_UnionLeavesALockedApproverOutOfTheManagedRule(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t) // no write EXPECT(): alice is an approver already
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()
+
+	change := mrsvc.ReviewerChange{
+		Staged: []mrsvc.ReviewerEdit{{Username: userAlice, UserID: 101, IsApprover: true}},
+		Mode:   mrsvc.ReviewerWriteUnion,
+	}
+	_, changed, err := applyChanges(src, change, map[string]int64{})
+	require.NoError(t, err)
+	assert.False(t, changed)
+}
+
+func TestApplyReviewerChanges_UntickingKeepsTheOtherRulesApprovers(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{}).Return(nil).Once()
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()
+
+	bob := mrsvc.ReviewerEdit{Username: userBob, UserID: 102, IsApprover: true}
+	unticked := bob
+	unticked.IsApprover = false
+	alice := mrsvc.ReviewerEdit{Username: userAlice, UserID: 101, IsApprover: true}
+	carol := mrsvc.ReviewerEdit{Username: userCarol, UserID: 103}
+	mr, changed, err := applyChanges(src, mrsvc.ReviewerChange{
+		Staged:   []mrsvc.ReviewerEdit{alice, unticked, carol},
+		Baseline: []mrsvc.ReviewerEdit{alice, bob, carol},
+		Mode:     mrsvc.ReviewerWriteEdit,
+	}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.Equal(t, []string{userAlice, userDave}, mr.Approvers, "orekit-stelar's approvers remain")
+}
+
+func TestApplyReviewerChanges_KeepsManagedApproversWhoAreNotReviewers(t *testing.T) {
+	src := mocks.NewMockMergeRequestSource(t)
+	live := fetchedMR(domain.ReviewerInfo{Username: userAlice})
+	live.SetManagedApprovers([]string{userDave})
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Once()
+	src.EXPECT().GetProjectMembers(mock.Anything, writeTestProjectID).
+		Return([]domain.ProjectMember{{UserID: 104, Username: userDave}}, nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 104}).Return(nil).Once()
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Once()
+
+	alice := mrsvc.ReviewerEdit{Username: userAlice, UserID: 101}
+	ticked := alice
+	ticked.IsApprover = true
+	_, _, err := applyChanges(src, mrsvc.ReviewerChange{
+		Staged: []mrsvc.ReviewerEdit{ticked}, Baseline: []mrsvc.ReviewerEdit{alice}, Mode: mrsvc.ReviewerWriteEdit,
+	}, map[string]int64{})
+	require.NoError(t, err)
 }

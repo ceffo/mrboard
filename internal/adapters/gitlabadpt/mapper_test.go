@@ -452,3 +452,35 @@ func TestApproverSetFromGQLRules_IgnoresSystemManagedRules(t *testing.T) {
 	set := approverSetFromGQLRules([]pkggitlab.GQLApprovalRule{codeOwners, anyApprover, regular})
 	assert.Equal(t, map[string]bool{testUserAlice: true}, set)
 }
+
+func TestMapMR_ApproverRules_MarksOnlyTheManagedRule(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	codeOwners := approvalRule("*", testUserBob)
+	codeOwners.RuleType = "code_owner"
+	rules := []*gl.MergeRequestApprovalRule{
+		approvalRule("orekit-stelar", testUserCarol, testUserAlice),
+		approvalRule(approversRuleName, testUserBob),
+		codeOwners,
+	}
+	result := MapMR(m, nil, approvals(), rules)
+	assert.Equal(t, []domain.ApproverRule{
+		{Name: "orekit-stelar", Approvers: []string{testUserAlice, testUserCarol}},
+		{Name: approversRuleName, Approvers: []string{testUserBob}, Managed: true},
+	}, result.ApproverRules)
+	assert.Equal(t, []string{testUserBob}, result.ManagedApprovers())
+	assert.Equal(t, map[string][]string{testUserAlice: {"orekit-stelar"}, testUserCarol: {"orekit-stelar"}},
+		result.LockedApprovers())
+}
+
+func TestMergeMRFromGraphQL_ApproverRules_FromFreshRules(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.ApprovalState.Rules = []pkggitlab.GQLApprovalRule{
+		gqlApprovalRule("orekit-stelar", testUserCarol),
+		gqlApprovalRule(approversRuleName, testUserAlice),
+	}
+	result := MergeMRFromGraphQL(mr, domain.MergeRequest{})
+	assert.Equal(t, []domain.ApproverRule{
+		{Name: "orekit-stelar", Approvers: []string{testUserCarol}},
+		{Name: approversRuleName, Approvers: []string{testUserAlice}, Managed: true},
+	}, result.ApproverRules)
+}

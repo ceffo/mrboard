@@ -526,13 +526,10 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 		UserIDs:           userIDs,
 	}
 	var managedID int64
-	var stale []*gl.MergeRequestApprovalRule
 	for _, r := range rules {
-		switch {
-		case r.Name == approversRuleName && managedID == 0:
+		if r.Name == approversRuleName {
 			managedID = r.ID
-		case r.RuleType == ruleTypeRegular:
-			stale = append(stale, r)
+			break
 		}
 	}
 	if managedID != 0 {
@@ -543,13 +540,8 @@ func (a *GitLabAdapter) SaveApprovers(ctx context.Context, projectID, mrIID int6
 	if err != nil {
 		return err
 	}
-	for _, r := range stale {
-		if err = a.client.DeleteMRApprovalRule(ctx, projectID, mrIID, r.ID); err != nil {
-			return err
-		}
-	}
 	logger.Info("gitlab: approval rules saved", "project_id", projectID, "mr_iid", mrIID,
-		"required", required, "replaced_rules", len(stale), "duration", ilog.FmtDur(time.Since(start)))
+		"required", required, "duration", ilog.FmtDur(time.Since(start)))
 	return nil
 }
 

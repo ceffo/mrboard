@@ -14,8 +14,8 @@ import (
 
 const (
 	// approversRuleName is the name of the single GitLab MR approval rule mrboard writes.
-	// Reads union every rule on the MR; writes own this rule and replace all others.
-	approversRuleName = "approvers_mrboard"
+	// Reads union every rule on the MR; writes touch this rule and no other.
+	approversRuleName = domain.ManagedApproverRuleName
 
 	// ruleTypeRegular and gqlRuleTypeRegular are the REST rule_type and GraphQL type of a
 	// user-defined approval rule, as opposed to the system-managed any_approver, code_owner
@@ -223,6 +223,53 @@ func approverSetFromGQLRules(rules []pkggitlab.GQLApprovalRule) map[string]bool 
 	return set
 }
 
+// approverRulesFromRESTRules returns the regular approval rules — the ones
+// approverSetFromRESTRules unions — with the first one named approversRuleName
+// marked managed.
+func approverRulesFromRESTRules(rules []*gl.MergeRequestApprovalRule) []domain.ApproverRule {
+	var out []domain.ApproverRule
+	for _, r := range rules {
+		if r.RuleType != ruleTypeRegular {
+			continue
+		}
+		set := make(map[string]bool, len(r.EligibleApprovers))
+		for _, u := range r.EligibleApprovers {
+			set[u.Username] = true
+		}
+		out = appendApproverRule(out, r.Name, set)
+	}
+	return out
+}
+
+// approverRulesFromGQLRules is approverRulesFromRESTRules for GraphQL rules.
+func approverRulesFromGQLRules(rules []pkggitlab.GQLApprovalRule) []domain.ApproverRule {
+	var out []domain.ApproverRule
+	for _, r := range rules {
+		if r.Type != gqlRuleTypeRegular {
+			continue
+		}
+		set := make(map[string]bool, len(r.EligibleApprovers))
+		for _, u := range r.EligibleApprovers {
+			set[u.Username] = true
+		}
+		out = appendApproverRule(out, r.Name, set)
+	}
+	return out
+}
+
+// appendApproverRule appends the rule name with approvers set to rules. Only
+// the first rule named approversRuleName is managed: it is the one SaveApprovers
+// writes.
+func appendApproverRule(rules []domain.ApproverRule, name string, set map[string]bool) []domain.ApproverRule {
+	managed := name == approversRuleName
+	for _, r := range rules {
+		if r.Managed {
+			managed = false
+		}
+	}
+	return append(rules, domain.ApproverRule{Name: name, Approvers: sortedUsernames(set), Managed: managed})
+}
+
 // applyApproverFlag sets IsApprover on each ReviewerInfo whose username is in the approver set.
 func applyApproverFlag(reviewers []domain.ReviewerInfo, approvers map[string]bool) []domain.ReviewerInfo {
 	for i := range reviewers {
@@ -288,6 +335,7 @@ func MapMR(
 		HeadSHA:        mr.SHA,
 		Reviewers:      reviewers,
 		Approvers:      sortedUsernames(approverSet),
+		ApproverRules:  approverRulesFromRESTRules(approvalRules),
 		CreatedAt:      mrCreatedAt,
 		UpdatedAt:      mrUpdatedAt,
 		OpenThreads:    openThreads,
@@ -395,6 +443,7 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		HeadSHA:        mr.DiffHeadSHA,
 		Reviewers:      reviewers,
 		Approvers:      sortedUsernames(approverSet),
+		ApproverRules:  approverRulesFromGQLRules(mr.ApprovalState.Rules),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    openThreads,
@@ -459,6 +508,7 @@ func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest
 		HeadSHA:        mr.DiffHeadSHA,
 		Reviewers:      reviewers,
 		Approvers:      sortedUsernames(approverSet),
+		ApproverRules:  approverRulesFromGQLRules(mr.ApprovalState.Rules),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    cached.OpenThreads,

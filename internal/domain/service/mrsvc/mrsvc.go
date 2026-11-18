@@ -56,9 +56,10 @@ type MergeRequestSource interface {
 	// GetProjectMembers returns all project members.
 	GetProjectMembers(ctx context.Context, projectID int64) ([]domain.ProjectMember, error)
 
-	// SaveApprovers writes the "approvers_mrboard" approval rule with the given user IDs and
-	// deletes the MR's other regular rules.
-	// Creates the rule if it doesn't exist; updates it if it does.
+	// SaveApprovers makes the given user IDs the members of the MR's managed approval rule
+	// (domain.ManagedApproverRuleName), requiring as many approvals as there are members.
+	// Creates the rule if it doesn't exist; updates it if it does. It never updates or
+	// deletes any other approval rule.
 	SaveApprovers(ctx context.Context, projectID int64, mrIID int64, userIDs []int64) error
 
 	// GetDiff fetches diff refs and per-file diffs for a single MR.
