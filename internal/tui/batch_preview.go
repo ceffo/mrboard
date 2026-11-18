@@ -129,7 +129,9 @@ func hasWriteDiff(staged []stagedReviewer, mr domain.MergeRequest, union bool) b
 // writes ApplyReviewerChanges performs (SetReviewers, SaveApprovers).
 //
 // With union set, only additions are reported: the write for a sibling MR never
-// removes a reviewer or clears an approver flag (mrsvc.ReviewerWriteUnion).
+// removes a reviewer or clears an approver flag (mrsvc.ReviewerWriteUnion), and
+// a reviewer locked as an approver on the edited MR is added as a plain reviewer
+// (propagatedPicks).
 //
 // A username never appears in both a reviewers list and the corresponding
 // approvers list: an approver is a reviewer, so listing it as a plain reviewer
@@ -138,6 +140,9 @@ func hasWriteDiff(staged []stagedReviewer, mr domain.MergeRequest, union bool) b
 func reviewerWriteDiff(
 	staged []stagedReviewer, mr domain.MergeRequest, union bool,
 ) (reviewersAdded, reviewersRemoved, approversAdded, approversRemoved []string) {
+	if union {
+		staged = propagatedPicks(staged)
+	}
 	type reviewerState struct {
 		isApprover bool
 	}

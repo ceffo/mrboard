@@ -1711,6 +1711,9 @@ func makeReviewerWriteCmd(
 	projectID := int64(target.ProjectID)
 	mrIID := int64(target.IID)
 
+	if mode == mrsvc.ReviewerWriteUnion {
+		staged = propagatedPicks(staged)
+	}
 	// Snapshot everything so the closure captures stable data.
 	change := mrsvc.ReviewerChange{
 		Staged:   reviewerEdits(staged),
@@ -1728,6 +1731,22 @@ func makeReviewerWriteCmd(
 		mr, approversChanged, err := mrsvc.ApplyReviewerChanges(ctx, src, projectID, mrIID, change, ids)
 		return ReviewersSavedMsg{MR: mr, ApproversChanged: approversChanged, Err: err}
 	}
+}
+
+// propagatedPicks returns staged as it applies to an MR other than the one it
+// was edited on: a reviewer locked as an approver by a rule mrboard does not
+// manage on the edited MR is carried over as a plain reviewer. That rule is not
+// the user's pick, so it never turns into a managed-rule entry elsewhere.
+func propagatedPicks(staged []stagedReviewer) []stagedReviewer {
+	out := make([]stagedReviewer, len(staged))
+	for i, s := range staged {
+		if s.locked() {
+			s.IsApprover = false
+			s.LockedBy = nil
+		}
+		out[i] = s
+	}
+	return out
 }
 
 func reviewerEdits(staged []stagedReviewer) []mrsvc.ReviewerEdit {

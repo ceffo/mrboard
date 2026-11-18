@@ -470,3 +470,90 @@ func TestMakeReviewerWriteCmd_UnionKeepsTargetsOwnReviewersAndApprovers(t *testi
 	require.NoError(t, msg.Err)
 	assert.True(t, msg.ApproversChanged, "expected the new approver to count as an approver change")
 }
+
+// --- Approvers from rules mrboard does not manage ---
+
+const (
+	editorTestLocked     = "dave"
+	editorTestLockedOnly = "erin"
+	editorTestRepoRule   = "orekit-stelar"
+)
+
+// lockedFocusedMR is focusedMR plus a repository rule that makes one reviewer
+// (dave) and one non-reviewer (erin) approvers.
+func lockedFocusedMR() domain.MergeRequest {
+	mr := focusedMR()
+	mr.Reviewers = append(mr.Reviewers, domain.ReviewerInfo{Username: editorTestLocked})
+	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{
+		Name: editorTestRepoRule, Approvers: []string{editorTestLocked, editorTestLockedOnly},
+	})
+	mr.SetManagedApprovers(mr.ManagedApprovers())
+	return mr
+}
+
+func newLockedTestReviewerEditor() *reviewerEditorWidget {
+	return newReviewerEditorWidget(
+		context.Background(), lockedFocusedMR(), nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
+		domain.NewTicketKeyMatcher(false),
+	)
+}
+
+func TestReviewerEditorWidget_LockedRow_ToggleIsNoop(t *testing.T) {
+	w := newLockedTestReviewerEditor()
+	require.Len(t, w.staged, 2)
+	require.Equal(t, editorTestLocked, w.staged[1].Username)
+	require.True(t, w.staged[1].IsApprover, "a locked reviewer starts ticked")
+	w.cursor = 1
+
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	w2 := updated.(*reviewerEditorWidget)
+
+	assert.True(t, w2.staged[1].IsApprover, "space must not untick a locked approver")
+	assert.Equal(t, []string{editorTestRepoRule}, w2.staged[1].LockedBy)
+}
+
+func TestReviewerEditorWidget_LockedRow_RendersRuleNameAndSummary(t *testing.T) {
+	out := newLockedTestReviewerEditor().render()
+
+	var lockedRow string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, editorTestLocked) {
+			lockedRow = line
+		}
+	}
+	require.NotEmpty(t, lockedRow, "the locked reviewer must be listed")
+	assert.Contains(t, lockedRow, markerFixed, "a locked row shows the fixed marker")
+	assert.Contains(t, lockedRow, "🔒 "+editorTestRepoRule, "a locked row names its rule")
+	assert.Contains(t, out, "also approvers: "+editorTestRepoRule+": "+editorTestLockedOnly,
+		"approvers a rule adds who are not reviewers are summarized by rule")
+}
+
+func TestReviewerWriteDiff_UnionLockedApproverIsPlainReviewer(t *testing.T) {
+	mr := siblingMR(20) // no reviewers
+	staged := []stagedReviewer{{Username: editorTestLocked, IsApprover: true, LockedBy: []string{editorTestRepoRule}}}
+
+	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(staged, mr, true)
+
+	assert.Equal(t, []string{editorTestLocked}, reviewersAdded)
+	assert.Empty(t, approversAdded, "a rule's approver on the edited MR is not the user's pick elsewhere")
+}
+
+func TestMakeReviewerWriteCmd_UnionNeverCopiesLockedApprover(t *testing.T) {
+	// The locked approver joins the sibling as a reviewer only: nothing is
+	// written to the sibling's managed approval rule.
+	target := siblingMR(20) // no reviewers, no managed members
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, int64(100), int64(20)).Return(target, nil).Twice() // live read + refetch
+	src.EXPECT().SetReviewers(mock.Anything, int64(100), int64(20), []int64{4}).Return(nil).Once()
+
+	staged := []stagedReviewer{
+		{Username: editorTestLocked, IsApprover: true, UserID: 4, LockedBy: []string{editorTestRepoRule}},
+	}
+
+	cmd := makeReviewerWriteCmd(context.Background(), src, target, staged, nil, mrsvc.ReviewerWriteUnion, nil)
+	result := cmd()
+	msg, ok := result.(ReviewersSavedMsg)
+	require.True(t, ok, "expected ReviewersSavedMsg, got %T", result)
+	require.NoError(t, msg.Err)
+	assert.False(t, msg.ApproversChanged, "no SaveApprovers call for a locked approver")
+}
