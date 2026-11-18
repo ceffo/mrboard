@@ -488,7 +488,7 @@ func lockedFocusedMR() domain.MergeRequest {
 	mr := focusedMR()
 	mr.Reviewers = append(mr.Reviewers, domain.ReviewerInfo{Username: editorTestLocked})
 	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{
-		Name: editorTestRepoRule, Approvers: []string{editorTestLocked, editorTestLockedOnly},
+		Name: editorTestRepoRule, Approvers: []string{editorTestLocked, editorTestLockedOnly}, ApprovalsRequired: 2,
 	})
 	mr.SetManagedApprovers(mr.ManagedApprovers())
 	return mr
@@ -572,7 +572,9 @@ func TestMakeReviewerWriteCmd_OldSnapshotWithoutRulesWritesOnlyTheManagedDelta(t
 		Approvers: []string{editorTestLocked},
 	}
 	live := snapshot
-	live.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{editorTestLocked}}}
+	live.ApproverRules = []domain.ApproverRule{
+		{Name: editorTestRepoRule, Approvers: []string{editorTestLocked}, ApprovalsRequired: 1},
+	}
 	live.SetManagedApprovers(nil)
 
 	w := newReviewerEditorWidget(
@@ -604,7 +606,9 @@ func TestReviewerEditorWidget_OtherApproversLine_FitsTheModalWidth(t *testing.T)
 	for i := range 30 {
 		many = append(many, "approver-with-a-long-username-"+string(rune('a'+i%26)))
 	}
-	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{Name: "a-very-long-project-rule", Approvers: many})
+	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{
+		Name: "a-very-long-project-rule", Approvers: many, ApprovalsRequired: len(many),
+	})
 	mr.SetManagedApprovers(mr.ManagedApprovers())
 	w := newReviewerEditorWidget(
 		context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,

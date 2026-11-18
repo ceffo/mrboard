@@ -400,3 +400,27 @@ func TestComputeLoad_ExclusionsPerMR(t *testing.T) {
 	assert.Equal(t, domain.ReviewSize{Lines: 320, Known: true}, got.Groups[0].Lines[0].Size)
 	assert.Equal(t, domain.ReviewSize{Lines: 20, Known: true}, got.Groups[0].Lines[1].Size)
 }
+
+func TestComputeLoad_OptionalRuleMemberCarriesNoLoad(t *testing.T) {
+	mr := loadMR(9, "feat(OD-1): i", 60, 0,
+		domain.ReviewerInfo{Username: userAlice, Name: userAlice},
+		domain.ReviewerInfo{Username: userBob, Name: userBob},
+		domain.ReviewerInfo{Username: userCarol, Name: userCarol},
+	)
+	mr.ApplyApproverRules([]domain.ApproverRule{
+		{Name: "leads", Approvers: []string{userAlice}, ApprovalsRequired: 1},
+		{Name: "team", Approvers: []string{userBob, userCarol}, ApprovalsRequired: 1},
+	})
+
+	got := summarize(mrsvc.ComputeLoad([]domain.MergeRequest{mr}, loadOpts()))
+
+	lines := map[string][]string{}
+	for _, g := range got {
+		lines[g.Key] = g.Lines
+	}
+	assert.Equal(t, map[string][]string{
+		userAlice: {"!9@" + userAlice},
+		userBob:   {},
+		userCarol: {},
+	}, lines, "bob and carol are in a rule needing one approval of two: they carry no load")
+}

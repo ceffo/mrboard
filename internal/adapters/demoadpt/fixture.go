@@ -166,6 +166,9 @@ type fixtureDiff struct {
 type fixtureApprovalRule struct {
 	Name      string   `yaml:"name"`
 	Approvers []string `yaml:"approvers"`
+	// ApprovalsRequired is how many approvals the rule needs; absent means every
+	// approver's.
+	ApprovalsRequired *int `yaml:"approvals_required"`
 }
 
 type fixtureMR struct {
@@ -435,35 +438,38 @@ func buildMR(
 	return mr, nil
 }
 
-// approverRules returns fm's managed rule (when it lists approvers) followed by
-// its other rules.
+// approverRules returns fm's managed rule (when it lists approvers), which
+// needs every member's approval as the one mrboard writes does, followed by its
+// other rules.
 func approverRules(fm fixtureMR) []domain.ApproverRule {
 	var rules []domain.ApproverRule
 	if len(fm.Approvers) > 0 {
+		set := domain.NormalizeApprovers(fm.Approvers)
 		rules = append(rules, domain.ApproverRule{
-			Name: domain.ManagedApproverRuleName, Approvers: domain.NormalizeApprovers(fm.Approvers), Managed: true,
+			Name: domain.ManagedApproverRuleName, Approvers: set, ApprovalsRequired: len(set), Managed: true,
 		})
 	}
 	for _, r := range fm.ApprovalRules {
-		rules = append(rules, domain.ApproverRule{Name: r.Name, Approvers: domain.NormalizeApprovers(r.Approvers)})
+		set := domain.NormalizeApprovers(r.Approvers)
+		required := len(set)
+		if r.ApprovalsRequired != nil {
+			required = *r.ApprovalsRequired
+		}
+		rules = append(rules, domain.ApproverRule{Name: r.Name, Approvers: set, ApprovalsRequired: required})
 	}
 	return rules
 }
 
-// lockApprovers adds the approvers of mr's unmanaged rules to Approvers and
-// flags those among its reviewers, as GitLab's rule union would.
+// lockApprovers adds the required approvers of mr's unmanaged rules to
+// Approvers and flags those among its reviewers, as GitLab's rules would.
 func lockApprovers(mr *domain.MergeRequest) {
-	locked := mr.LockedApprovers()
-	if len(locked) == 0 {
+	required := domain.RequiredApprovers(mr.ApproverRules)
+	if len(required) == 0 {
 		return
 	}
-	all := slices.Clone(mr.Approvers)
-	for u := range locked {
-		all = append(all, u)
-	}
-	mr.Approvers = domain.NormalizeApprovers(all)
+	mr.Approvers = domain.NormalizeApprovers(append(slices.Clone(mr.Approvers), required...))
 	for i := range mr.Reviewers {
-		if _, ok := locked[mr.Reviewers[i].Username]; ok {
+		if slices.Contains(required, mr.Reviewers[i].Username) {
 			mr.Reviewers[i].IsApprover = true
 		}
 	}

@@ -17,7 +17,7 @@ const (
 
 	// currentVersion is bumped whenever fileFormat's shape changes incompatibly.
 	// A mismatch on load is treated as a cold cache, not an error (see Load).
-	currentVersion = 1
+	currentVersion = 2
 )
 
 // Config holds configuration for the JSON-backed snapshot store.

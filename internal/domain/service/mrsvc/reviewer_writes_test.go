@@ -293,7 +293,9 @@ func liveWithForeignRule() domain.MergeRequest {
 		domain.ReviewerInfo{Username: userBob},
 		domain.ReviewerInfo{Username: userCarol},
 	)
-	mr.ApproverRules = []domain.ApproverRule{{Name: "orekit-stelar", Approvers: []string{userAlice, userDave}}}
+	mr.ApproverRules = []domain.ApproverRule{
+		{Name: "orekit-stelar", Approvers: []string{userAlice, userDave}, ApprovalsRequired: 2},
+	}
 	mr.SetManagedApprovers([]string{userBob})
 	return mr
 }

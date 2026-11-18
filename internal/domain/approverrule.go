@@ -10,6 +10,8 @@ const ManagedApproverRuleName = "approvers_mrboard"
 type ApproverRule struct {
 	Name      string
 	Approvers []string // sorted
+	// ApprovalsRequired is how many approvals the rule needs.
+	ApprovalsRequired int
 	// UserIDs maps each approver to their user ID when the read that produced
 	// the rule carries IDs; nil otherwise.
 	UserIDs map[string]int64
@@ -61,9 +63,42 @@ func (mr MergeRequest) LockedApprovers() map[string][]string {
 	return locked
 }
 
-// SetManagedApprovers makes usernames the managed rule's approvers, adding the
-// managed rule when mr has none, and recomputes Approvers and every reviewer's
-// IsApprover flag from the resulting rules.
+// RequiresEveryMember reports whether every approver of r must approve: the
+// rule needs at least one approval and as many as it has approvers. Only such a
+// rule makes its members required approvers; a rule needing fewer approvals
+// than it has members, none, or more than it has members makes no one required.
+func (r ApproverRule) RequiresEveryMember() bool {
+	return r.ApprovalsRequired > 0 && r.ApprovalsRequired == len(r.Approvers)
+}
+
+// RequiredApprovers returns the members of every rule that requires every
+// member, sorted and deduplicated; nil when there are none.
+func RequiredApprovers(rules []ApproverRule) []string {
+	var all []string
+	for _, r := range rules {
+		if r.RequiresEveryMember() {
+			all = append(all, r.Approvers...)
+		}
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	return NormalizeApprovers(all)
+}
+
+// ApplyApproverRules records rules on mr and derives from them Approvers
+// (RequiredApprovers) and each reviewer's IsApprover flag.
+func (mr *MergeRequest) ApplyApproverRules(rules []ApproverRule) {
+	mr.ApproverRules = rules
+	mr.Approvers = RequiredApprovers(rules)
+	for i := range mr.Reviewers {
+		mr.Reviewers[i].IsApprover = slices.Contains(mr.Approvers, mr.Reviewers[i].Username)
+	}
+}
+
+// SetManagedApprovers makes usernames the managed rule's approvers, every one
+// of them required, adding the managed rule when mr has none, and recomputes
+// Approvers and every reviewer's IsApprover flag from the resulting rules.
 func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 	set := NormalizeApprovers(usernames)
 	found := false
@@ -72,32 +107,17 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 		if r.Managed && !found {
 			found = true
 			r.Approvers = set
+			r.ApprovalsRequired = len(set)
 			r.UserIDs = idsOf(r.UserIDs, set)
 		}
 		rules = append(rules, r)
 	}
 	if !found {
-		rules = append(rules, ApproverRule{Name: ManagedApproverRuleName, Approvers: set, Managed: true})
+		rules = append(rules, ApproverRule{
+			Name: ManagedApproverRuleName, Approvers: set, ApprovalsRequired: len(set), Managed: true,
+		})
 	}
-	mr.ApproverRules = rules
-
-	union := make(map[string]bool)
-	for _, r := range rules {
-		for _, u := range r.Approvers {
-			union[u] = true
-		}
-	}
-	all := make([]string, 0, len(union))
-	for u := range union {
-		all = append(all, u)
-	}
-	mr.Approvers = NormalizeApprovers(all)
-	if len(mr.Approvers) == 0 {
-		mr.Approvers = nil
-	}
-	for i := range mr.Reviewers {
-		mr.Reviewers[i].IsApprover = union[mr.Reviewers[i].Username]
-	}
+	mr.ApplyApproverRules(rules)
 }
 
 // idsOf returns the entries of ids for usernames; nil when none remain.

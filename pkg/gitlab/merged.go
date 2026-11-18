@@ -40,6 +40,7 @@ const gqlMergedMRFields = `
           rules {
             name
             type
+            approvalsRequired
             eligibleApprovers { username }
           }
         }

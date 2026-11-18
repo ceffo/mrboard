@@ -39,6 +39,7 @@ query($username: String!) {
           rules {
             name
             type
+            approvalsRequired
             eligibleApprovers { username }
           }
         }
@@ -93,6 +94,7 @@ query($username: String!) {
           rules {
             name
             type
+            approvalsRequired
             eligibleApprovers { username }
           }
         }
@@ -114,6 +116,7 @@ type GQLUser struct {
 type GQLApprovalRule struct {
 	Name              string    `json:"name"`
 	Type              string    `json:"type"` // REGULAR, CODE_OWNER, ANY_APPROVER or REPORT_APPROVER
+	ApprovalsRequired int       `json:"approvalsRequired"`
 	EligibleApprovers []GQLUser `json:"eligibleApprovers"`
 }
 
@@ -264,6 +267,7 @@ query($username: String!) {
           rules {
             name
             type
+            approvalsRequired
             eligibleApprovers { username }
           }
         }
@@ -325,6 +329,7 @@ query($username: String!) {
           rules {
             name
             type
+            approvalsRequired
             eligibleApprovers { username }
           }
         }

@@ -207,6 +207,17 @@ func TestClaim_StaleObservation_WritesNothing(t *testing.T) {
 	assert.Empty(t, c.notes)
 }
 
+func TestClaim_LiveSetIsTheRequiredApproversOnly(t *testing.T) {
+	c := newFakeLedgerClient(testUserAlice)
+	c.liveRules = append(c.liveRules, approvalRuleNeeding("team", 1, testUserAlice, testUserBob))
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
+	require.NoError(t, err)
+	assert.True(t, owned, "bob is only in a rule needing one of two approvals: the live set is alice")
+	require.Len(t, c.claims(), 1)
+}
+
 func TestClaim_IgnoresSystemNotesAndPlainComments(t *testing.T) {
 	c := newFakeLedgerClient(testUserAlice)
 	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserAlice}}), true)

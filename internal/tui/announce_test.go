@@ -198,7 +198,9 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	// A project rule keeps making dave an approver although he is no reviewer.
 	saved := before
 	saved.Reviewers = []domain.ReviewerInfo{{Username: editorTestOther}}
-	saved.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{testUserDave}}}
+	saved.ApproverRules = []domain.ApproverRule{
+		{Name: editorTestRepoRule, Approvers: []string{testUserDave}, ApprovalsRequired: 1},
+	}
 	saved.SetManagedApprovers([]string{editorTestOther})
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, testUserDave},

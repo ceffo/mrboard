@@ -161,7 +161,7 @@ func (m Model) handleApproverAnnounceResult(msg approverAnnounceResultMsg) (tea.
 // just wrote. The written set is authoritative, so the claim does not wait for
 // a refresh to confirm it, and the session records it as handled so the
 // refresh that follows does not announce it again.
-// The set is mr.Approvers, the union of every approval rule after the write,
+// The set is mr.Approvers, the required approvers after the write,
 // which is what a refresh reads back.
 func (m *Model) announceEditedApprovers(mr domain.MergeRequest, before []string) tea.Cmd {
 	set := domain.NormalizeApprovers(mr.Approvers)

@@ -295,8 +295,11 @@ func TestAutoAssignFixture_NeverReplacesAnMRThatAlreadyHasReviewers(t *testing.T
 func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T) {
 	a := newTestAdapterFor(t, reviewersFixture)
 	before := fetchMR(t, a, 102, 550)
-	require.Equal(t, map[string][]string{userBarbara: {"platform-owners"}, userEdsger: {"platform-owners"}},
-		before.LockedApprovers())
+	require.Equal(t, map[string][]string{
+		userBarbara: {"console-reviewers", "platform-owners"},
+		userEdsger:  {"platform-owners"},
+		userLinus:   {"console-reviewers"},
+	}, before.LockedApprovers())
 
 	// Untick grace and drop edsger as a reviewer.
 	baseline := []mrsvc.ReviewerEdit{
@@ -309,4 +312,17 @@ func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T)
 	assert.Equal(t, before.LockedApprovers(), after.LockedApprovers(), "the project's rule must survive the write")
 	assert.Empty(t, after.ManagedApprovers(), "grace leaves mrboard's rule")
 	assert.Equal(t, []string{userBarbara, userEdsger}, after.Approvers, "the rule's approvers stay approvers")
+}
+
+func TestReviewersFixture_OptionalRuleMakesNoApprover(t *testing.T) {
+	a := newTestAdapterFor(t, reviewersFixture)
+	mr := fetchMR(t, a, 102, 550)
+
+	assert.Equal(t, []string{userBarbara, userEdsger, userGrace}, mr.Approvers,
+		"members of all-required rules only; console-reviewers needs one of two")
+	flags := map[string]bool{}
+	for _, r := range mr.Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{userGrace: true, userEdsger: true, userLinus: false}, flags)
 }

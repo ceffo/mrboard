@@ -143,5 +143,5 @@ func (a *GitLabAdapter) liveApprovers(ctx context.Context, projectID, mrIID int6
 	if err != nil {
 		return nil, err
 	}
-	return sortedUsernames(approverSetFromRESTRules(rules)), nil
+	return domain.RequiredApprovers(approverRulesFromRESTRules(rules)), nil
 }

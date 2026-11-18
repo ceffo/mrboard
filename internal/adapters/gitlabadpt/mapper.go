@@ -195,37 +195,8 @@ func extractReReviewUsername(body string) string {
 	return username
 }
 
-// approverSetFromRESTRules returns the usernames eligible to approve under any regular approval rule.
-func approverSetFromRESTRules(rules []*gl.MergeRequestApprovalRule) map[string]bool {
-	set := make(map[string]bool)
-	for _, r := range rules {
-		if r.RuleType != ruleTypeRegular {
-			continue
-		}
-		for _, u := range r.EligibleApprovers {
-			set[u.Username] = true
-		}
-	}
-	return set
-}
-
-// approverSetFromGQLRules returns the usernames eligible to approve under any regular approval rule.
-func approverSetFromGQLRules(rules []pkggitlab.GQLApprovalRule) map[string]bool {
-	set := make(map[string]bool)
-	for _, r := range rules {
-		if r.Type != gqlRuleTypeRegular {
-			continue
-		}
-		for _, u := range r.EligibleApprovers {
-			set[u.Username] = true
-		}
-	}
-	return set
-}
-
-// approverRulesFromRESTRules returns the regular approval rules — the ones
-// approverSetFromRESTRules unions — with the first one named approversRuleName
-// marked managed.
+// approverRulesFromRESTRules returns the regular approval rules, with the
+// first one named approversRuleName marked managed.
 func approverRulesFromRESTRules(rules []*gl.MergeRequestApprovalRule) []domain.ApproverRule {
 	var out []domain.ApproverRule
 	for _, r := range rules {
@@ -240,7 +211,7 @@ func approverRulesFromRESTRules(rules []*gl.MergeRequestApprovalRule) []domain.A
 				ids[u.Username] = u.ID
 			}
 		}
-		out = appendApproverRule(out, r.Name, set, ids)
+		out = appendApproverRule(out, r.Name, int(r.ApprovalsRequired), set, ids)
 	}
 	return out
 }
@@ -256,17 +227,17 @@ func approverRulesFromGQLRules(rules []pkggitlab.GQLApprovalRule) []domain.Appro
 		for _, u := range r.EligibleApprovers {
 			set[u.Username] = true
 		}
-		out = appendApproverRule(out, r.Name, set, nil)
+		out = appendApproverRule(out, r.Name, r.ApprovalsRequired, set, nil)
 	}
 	return out
 }
 
-// appendApproverRule appends the rule name with approvers set, and their user
-// IDs when the read carries them, to rules. Only the first regular rule named
+// appendApproverRule appends the rule name needing required approvals from
+// approvers set, and their user IDs when the read carries them, to rules. Only the first regular rule named
 // approversRuleName is managed: it is the one SaveApprovers writes. Callers pass
 // regular rules only.
 func appendApproverRule(
-	rules []domain.ApproverRule, name string, set map[string]bool, ids map[string]int64,
+	rules []domain.ApproverRule, name string, required int, set map[string]bool, ids map[string]int64,
 ) []domain.ApproverRule {
 	managed := name == approversRuleName
 	for _, r := range rules {
@@ -278,16 +249,8 @@ func appendApproverRule(
 		ids = nil
 	}
 	return append(rules, domain.ApproverRule{
-		Name: name, Approvers: sortedUsernames(set), UserIDs: ids, Managed: managed,
+		Name: name, Approvers: sortedUsernames(set), ApprovalsRequired: required, UserIDs: ids, Managed: managed,
 	})
-}
-
-// applyApproverFlag sets IsApprover on each ReviewerInfo whose username is in the approver set.
-func applyApproverFlag(reviewers []domain.ReviewerInfo, approvers map[string]bool) []domain.ReviewerInfo {
-	for i := range reviewers {
-		reviewers[i].IsApprover = approvers[reviewers[i].Username]
-	}
-	return reviewers
 }
 
 // sortedUsernames returns the set's members sorted, for a deterministic
@@ -331,8 +294,6 @@ func MapMR(
 	}
 	events := normalizeDiscussionEventsREST(discussions)
 	reviewers := domain.DeriveReviewerInfos(refs, events, approvedBy, mrCreatedAt)
-	approverSet := approverSetFromRESTRules(approvalRules)
-	reviewers = applyApproverFlag(reviewers, approverSet)
 	openThreads := countOpenThreads(restThreadStates(discussions))
 
 	domainMR := domain.MergeRequest{
@@ -346,13 +307,12 @@ func MapMR(
 		ProjectPath:    projectPathFromRef(mr.References),
 		HeadSHA:        mr.SHA,
 		Reviewers:      reviewers,
-		Approvers:      sortedUsernames(approverSet),
-		ApproverRules:  approverRulesFromRESTRules(approvalRules),
 		CreatedAt:      mrCreatedAt,
 		UpdatedAt:      mrUpdatedAt,
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}
+	domainMR.ApplyApproverRules(approverRulesFromRESTRules(approvalRules))
 	if mr.Author != nil {
 		domainMR.Author = mr.Author.Username
 		domainMR.AuthorName = mr.Author.Name
@@ -366,10 +326,11 @@ func MapMR(
 	}
 
 	domainMR.DetailedMergeStatus = mr.DetailedMergeStatus
-	domainMR.Phase = domain.ClassifyPhase(mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, reviewers)
-	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, reviewers, mrCreatedAt)
+	domainMR.Phase = domain.ClassifyPhase(
+		mr.Draft, mr.DetailedMergeStatus == detailedMergeStatusMergeable, domainMR.Reviewers)
+	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, domainMR.Reviewers, mrCreatedAt)
 	if domainMR.Phase == domain.PhaseReadyToMerge {
-		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(domainMR.Reviewers)
 	}
 
 	return domainMR
@@ -437,8 +398,6 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 
 	events := normalizeDiscussionEventsGQL(mr.Discussions.Nodes)
 	reviewers := domain.DeriveReviewerInfos(refs, events, approvedBy, createdAt)
-	approverSet := approverSetFromGQLRules(mr.ApprovalState.Rules)
-	reviewers = applyApproverFlag(reviewers, approverSet)
 	openThreads := countOpenThreads(gqlThreadStates(mr.Discussions.Nodes))
 
 	domainMR := domain.MergeRequest{
@@ -454,13 +413,12 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 		ProjectPath:    mr.Project.FullPath,
 		HeadSHA:        mr.DiffHeadSHA,
 		Reviewers:      reviewers,
-		Approvers:      sortedUsernames(approverSet),
-		ApproverRules:  approverRulesFromGQLRules(mr.ApprovalState.Rules),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}
+	domainMR.ApplyApproverRules(approverRulesFromGQLRules(mr.ApprovalState.Rules))
 	if mr.MergedAt != "" {
 		domainMR.MergedAt, _ = time.Parse(time.RFC3339, mr.MergedAt) //nolint:errcheck
 	}
@@ -471,10 +429,10 @@ func MapMRFromGraphQL(mr pkggitlab.GQLMergeRequest) domain.MergeRequest {
 
 	domainMR.DetailedMergeStatus = strings.ToLower(mr.DetailedMergeStatus)
 	isMergeable := domainMR.DetailedMergeStatus == detailedMergeStatusMergeable
-	domainMR.Phase = domain.ClassifyPhase(mr.Draft, isMergeable, reviewers)
-	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, reviewers, createdAt)
+	domainMR.Phase = domain.ClassifyPhase(mr.Draft, isMergeable, domainMR.Reviewers)
+	domainMR.WaitingSince = domain.DeriveWaitingSince(domainMR.Phase, domainMR.Reviewers, createdAt)
 	if domainMR.Phase == domain.PhaseReadyToMerge {
-		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(reviewers)
+		domainMR.ReadyToMergeSince = deriveReadyToMergeSince(domainMR.Reviewers)
 	}
 
 	return domainMR
@@ -502,9 +460,7 @@ func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest
 	createdAt, _ := time.Parse(time.RFC3339, mr.CreatedAt) //nolint:errcheck
 	updatedAt, _ := time.Parse(time.RFC3339, mr.UpdatedAt) //nolint:errcheck
 
-	approverSet := approverSetFromGQLRules(mr.ApprovalState.Rules)
 	reviewers := append([]domain.ReviewerInfo(nil), cached.Reviewers...)
-	reviewers = applyApproverFlag(reviewers, approverSet)
 
 	domainMR := domain.MergeRequest{
 		ID:             parseGIDNumericSafe(mr.ID),
@@ -519,13 +475,12 @@ func MergeMRFromGraphQL(mr pkggitlab.GQLMergeRequest, cached domain.MergeRequest
 		ProjectPath:    mr.Project.FullPath,
 		HeadSHA:        mr.DiffHeadSHA,
 		Reviewers:      reviewers,
-		Approvers:      sortedUsernames(approverSet),
-		ApproverRules:  approverRulesFromGQLRules(mr.ApprovalState.Rules),
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		OpenThreads:    cached.OpenThreads,
 		RoundTripCount: cached.RoundTripCount,
 	}
+	domainMR.ApplyApproverRules(approverRulesFromGQLRules(mr.ApprovalState.Rules))
 	if len(mr.Assignees.Nodes) > 0 {
 		domainMR.Assignee = mr.Assignees.Nodes[0].Username
 		domainMR.AssigneeName = mr.Assignees.Nodes[0].Name
