@@ -51,7 +51,7 @@ covers only the shape.
 | --- | --- | --- |
 | `username` | string | Reviewer's GitLab username. |
 | `state` | string | One of `not_started`, `commented`, `re_review_requested`, `approved`, `unknown`. |
-| `is_approver` | boolean | `true` when the reviewer is a required approver of the MR: a member of an approval rule that needs every member's approval ([ADR-0016](adr/0016-required-approvers.md)). `false` otherwise, including for a member of a rule needing only some of its members (1 of 5). |
+| `is_approver` | boolean | `true` when the reviewer is a required approver of the MR: a member of an approval rule that needs every member's approval, or of `approvers_mrboard` ([ADR-0016](adr/0016-required-approvers.md)). `false` otherwise, including for a member of a rule needing only some of its members (1 of 5) and for the MR's author. |
 
 ## Keys relative to `current_user`
 

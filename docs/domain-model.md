@@ -162,14 +162,17 @@ type ReviewerInfo struct {
 ```
 
 An **Approver** is a reviewer whose approval is required: an eligible approver of a regular MR-level
-GitLab approval rule whose approvals required equals its number of eligible approvers, and is above
-zero ([ADR-0016](adr/0016-required-approvers.md)). Members of a rule needing fewer approvals than it
-has members (1 of 5), none, or more than it has members are not approvers; a user in both a required
-and an optional rule is one. Being an Approver is not a separate role — it is a property of a
-reviewer. `IsApprover` is derived from the MR's approval rules (REST `approval_rules`:
-`approvals_required`, `eligible_approvers[].username`; GraphQL `approvalState.rules`:
-`approvalsRequired`, `eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires
-every member, all `IsApprover` fields are false.
+GitLab approval rule that needs at least one approval and at least as many as it has eligible
+approvers ([ADR-0016](adr/0016-required-approvers.md)). A rule needing more than it has members is
+one GitLab's read dropped members from, and every remaining member must approve. Members of a rule
+needing fewer approvals than it has members (1 of 5), or none, are not approvers; a user in both a
+required and an optional rule is one. The managed rule's (`approvers_mrboard`) members are always
+approvers. The MR's author is never an approver of their own MR and is not counted among a rule's
+members. Being an Approver is not a separate role — it is a property of a reviewer. `IsApprover` is
+derived from the MR's approval rules (REST `approval_rules`: `approvals_required`,
+`eligible_approvers[].username`; GraphQL `approvalState.rules`: `approvalsRequired`,
+`eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires every member, all
+`IsApprover` fields are false.
 
 `WaitingSince` is computed and stored for every reviewer regardless of `IsApprover` — it is an
 objective fact about when their current state began, not a display decision. Basic reviewers are
