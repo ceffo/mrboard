@@ -121,8 +121,8 @@ type MergeRequest struct {
 
     // ApproverRules are the rules Approvers is derived from: name, sorted approvers,
     // ApprovalsRequired, and Managed for approvers_mrboard, the one rule mrboard writes
-    // (docs/adr/0002). Approvers of the other rules are locked as far as mrboard is concerned
-    // (LockedApprovers).
+    // (docs/adr/0002). Approvers of the other rules that require every member are locked
+    // as far as mrboard is concerned (LockedApprovers); optional rules lock no one.
     ApproverRules []ApproverRule
 
     CreatedAt         time.Time

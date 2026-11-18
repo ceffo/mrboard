@@ -200,8 +200,8 @@ func ApplyReviewerChanges(
 // resolveManagedApprovers returns the members the managed approval rule should
 // have once desired is written: the live members, plus every desired reviewer
 // flagged approver, minus every desired reviewer not flagged approver and every
-// live reviewer the write removes. A reviewer an unmanaged rule makes an
-// approver is never added to the managed rule: they are an approver already.
+// live reviewer the write removes. A reviewer an unmanaged rule makes a
+// required approver is never added to the managed rule: they are an approver already.
 // Members of the managed rule who are not reviewers stay.
 func resolveManagedApprovers(live domain.MergeRequest, desired []ReviewerEdit) map[string]bool {
 	managed := setOf(live.ManagedApprovers())

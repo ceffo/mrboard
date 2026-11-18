@@ -49,7 +49,9 @@ announcement ledger records and compares against the live MR (ADR-0014).
   counts and the MR never reaches the Approved column (phase rule 2 in `docs/domain-model.md`).
 - A rule GitLab lists with fewer eligible approvers than it needs (for example because the author
   is excluded from approving) makes no one required, even if the project meant it to.
-- The approver editor still marks the members of every rule mrboard does not manage as locked,
-  required or not; aligning it with this meaning is a separate change.
+- **Locked approvers follow the same meaning.** The approver editor locks (`🔒 <rule>`) only the
+  members of an unmanaged rule that requires every member (`LockedApprovers`). A member of an
+  optional rule is an ordinary row: ticking them adds them to `approvers_mrboard`, which makes them
+  a required approver.
 - An MR whose announcement ledger recorded an old-meaning set that included optional members sees a
   different set after the upgrade; the announcement rules of ADR-0014 decide what that produces.

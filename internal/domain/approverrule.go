@@ -42,13 +42,14 @@ func (mr MergeRequest) ManagedApproverIDs() map[string]int64 {
 	return nil
 }
 
-// LockedApprovers maps each username an unmanaged rule makes an approver to the
-// names of those rules, sorted. These approvers stay approvers whatever mrboard
-// writes.
+// LockedApprovers maps each username an unmanaged rule makes a required
+// approver to the names of those rules, sorted. These approvers stay approvers
+// whatever mrboard writes. An unmanaged rule that does not require every member
+// locks no one: its members are not approvers.
 func (mr MergeRequest) LockedApprovers() map[string][]string {
 	locked := make(map[string][]string)
 	for _, r := range mr.ApproverRules {
-		if r.Managed {
+		if r.Managed || !r.RequiresEveryMember() {
 			continue
 		}
 		for _, u := range r.Approvers {

@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	userErin     = "erin"
-	testRepoRule = "orekit-stelar"
+	userErin      = "erin"
+	testRepoRule  = "orekit-stelar"
+	testRuleLeads = "leads"
+	testRuleTeam  = "team"
 )
 
 func ruledMR() MergeRequest {
@@ -37,6 +39,18 @@ func TestLockedApprovers_MapsUnmanagedMembersToTheirRules(t *testing.T) {
 	}, locked, "managed members are never locked; rule names are sorted")
 }
 
+func TestLockedApprovers_OptionalRulesLockNoOne(t *testing.T) {
+	mr := MergeRequest{ApproverRules: []ApproverRule{
+		{Name: testRepoRule, Approvers: []string{userDave, userErin}, ApprovalsRequired: 1},
+		{Name: testRuleLeads, Approvers: []string{userCarol}, ApprovalsRequired: 1},
+		{Name: "unreachable", Approvers: []string{userDave}, ApprovalsRequired: 2},
+		{Name: "advisory", Approvers: []string{userErin}, ApprovalsRequired: 0},
+	}}
+
+	assert.Equal(t, map[string][]string{userCarol: {testRuleLeads}}, mr.LockedApprovers(),
+		"only a rule requiring every member locks its members")
+}
+
 func TestSetManagedApprovers_ReplacesOnlyTheManagedRule(t *testing.T) {
 	mr := ruledMR()
 
@@ -46,7 +60,8 @@ func TestSetManagedApprovers_ReplacesOnlyTheManagedRule(t *testing.T) {
 	assert.Equal(t, []string{userDave, userErin}, mr.ApproverRules[0].Approvers, "unmanaged rules are untouched")
 	assert.Equal(t, []string{testOther}, mr.ApproverRules[1].Approvers)
 	assert.Equal(t, []string{userErin}, mr.ApproverRules[2].Approvers)
-	assert.Equal(t, []string{testOther, userDave, userErin}, mr.Approvers, "approvers are the union of every all-required rule")
+	assert.Equal(t, []string{testOther, userDave, userErin}, mr.Approvers,
+		"approvers are the union of every all-required rule")
 	flags := map[string]bool{}
 	for _, r := range mr.Reviewers {
 		flags[r.Username] = r.IsApprover
@@ -98,22 +113,26 @@ func TestRequiredApprovers(t *testing.T) {
 		want  []string
 	}{
 		{"no rules", nil, nil},
-		{"every member required", []ApproverRule{rule("leads", 2, testUsername, testOther)}, []string{testUsername, testOther}},
-		{"one of several required", []ApproverRule{rule("team", 1, testUsername, testOther, userCarol)}, nil},
-		{"more required than members", []ApproverRule{rule("team", 3, testUsername, testOther)}, nil},
-		{"no approval required", []ApproverRule{rule("team", 0, testUsername)}, nil},
+		{
+			"every member required",
+			[]ApproverRule{rule(testRuleLeads, 2, testUsername, testOther)},
+			[]string{testUsername, testOther},
+		},
+		{"one of several required", []ApproverRule{rule(testRuleTeam, 1, testUsername, testOther, userCarol)}, nil},
+		{"more required than members", []ApproverRule{rule(testRuleTeam, 3, testUsername, testOther)}, nil},
+		{"no approval required", []ApproverRule{rule(testRuleTeam, 0, testUsername)}, nil},
 		{"rule without members", []ApproverRule{rule("empty", 0)}, nil},
 		{
 			"member of a required and an optional rule",
-			[]ApproverRule{rule("leads", 1, testUsername), rule("team", 1, testUsername, testOther)},
+			[]ApproverRule{rule(testRuleLeads, 1, testUsername), rule(testRuleTeam, 1, testUsername, testOther)},
 			[]string{testUsername},
 		},
 		{
 			"several required rules are unioned, optional ones ignored",
 			[]ApproverRule{
-				rule("leads", 2, testOther, testUsername),
+				rule(testRuleLeads, 2, testOther, testUsername),
 				rule("security", 1, userCarol),
-				rule("team", 2, userDave, userErin, "frank"),
+				rule(testRuleTeam, 2, userDave, userErin, "frank"),
 				rule("dup", 1, testUsername),
 			},
 			[]string{testUsername, testOther, userCarol},
@@ -131,8 +150,8 @@ func TestApplyApproverRules_FlagsOnlyRequiredReviewers(t *testing.T) {
 		{Username: testUsername}, {Username: testOther, IsApprover: true}, {Username: userCarol},
 	}}
 	rules := []ApproverRule{
-		{Name: "leads", Approvers: []string{testUsername}, ApprovalsRequired: 1},
-		{Name: "team", Approvers: []string{testOther, userCarol}, ApprovalsRequired: 1},
+		{Name: testRuleLeads, Approvers: []string{testUsername}, ApprovalsRequired: 1},
+		{Name: testRuleTeam, Approvers: []string{testOther, userCarol}, ApprovalsRequired: 1},
 	}
 
 	mr.ApplyApproverRules(rules)
@@ -150,7 +169,7 @@ func TestApplyApproverRules_FlagsOnlyRequiredReviewers(t *testing.T) {
 func TestSetManagedApprovers_IgnoresOptionalRules(t *testing.T) {
 	mr := MergeRequest{
 		Reviewers:     []ReviewerInfo{{Username: testUsername}, {Username: userDave}},
-		ApproverRules: []ApproverRule{{Name: "team", Approvers: []string{userDave, userErin}, ApprovalsRequired: 1}},
+		ApproverRules: []ApproverRule{{Name: testRuleTeam, Approvers: []string{userDave, userErin}, ApprovalsRequired: 1}},
 	}
 
 	mr.SetManagedApprovers([]string{testUsername})

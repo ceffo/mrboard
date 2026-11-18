@@ -515,6 +515,25 @@ func TestReviewerEditorWidget_LockedRow_ToggleIsNoop(t *testing.T) {
 	assert.Equal(t, []string{editorTestRepoRule}, w2.staged[1].LockedBy)
 }
 
+func TestReviewerEditorWidget_OptionalRuleMemberIsNotLocked(t *testing.T) {
+	mr := lockedFocusedMR()
+	mr.ApproverRules[len(mr.ApproverRules)-1].ApprovalsRequired = 1
+	mr.SetManagedApprovers(mr.ManagedApprovers())
+	w := newReviewerEditorWidget(
+		context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
+		domain.NewTicketKeyMatcher(false),
+	)
+	require.Len(t, w.staged, 2)
+	require.Equal(t, editorTestLocked, w.staged[1].Username)
+	assert.Empty(t, w.staged[1].LockedBy, "a rule needing one of two approvals locks no one")
+	assert.False(t, w.staged[1].IsApprover, "a member of an optional rule starts unticked")
+	assert.NotContains(t, w.render(), "🔒", "no row is locked")
+
+	w.cursor = 1
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	assert.True(t, updated.(*reviewerEditorWidget).staged[1].IsApprover, "space ticks an optional rule's member")
+}
+
 func TestReviewerEditorWidget_LockedRow_RendersRuleNameAndSummary(t *testing.T) {
 	out := newLockedTestReviewerEditor().render()
 
