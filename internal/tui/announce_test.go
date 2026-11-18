@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -245,4 +246,49 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	confirmed.Approvers = []string{testUserDave, editorTestOther}
 	f.m.dirty = dirtySet{}
 	assert.Empty(t, f.refresh(confirmed), "the refresh that confirms the edit must not announce it again")
+}
+
+// A managed rule of alice and bob, where GitLab does not let bob approve (he
+// pushed a commit): saving carol in claims alice and carol, never bob, and the
+// read that confirms the save claims nothing.
+func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *testing.T) {
+	const carol = "carol"
+	f := newAnnounceFixture(t)
+	before := announceMR(time.Hour)
+	before.Reviewers = []domain.ReviewerInfo{{Username: editorTestApprover}, {Username: editorTestOther}}
+	before.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover},
+		Members: []string{editorTestApprover, editorTestOther}, ApprovalsRequired: 2, Managed: true,
+	}})
+	f.m.allMRs = []domain.MergeRequest{before}
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	require.Len(t, f.refresh(before), 1)
+
+	saved := before
+	saved.Reviewers = append(slices.Clone(before.Reviewers), domain.ReviewerInfo{Username: carol})
+	saved.SetManagedApprovers([]string{editorTestApprover, editorTestOther, carol})
+	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
+		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestApprover, carol},
+		Prior: []string{editorTestApprover}, Authoritative: true,
+	}).Return(true, nil).Once()
+	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil).Once()
+
+	_, cmd := f.m.handleReviewersSaved(ReviewersSavedMsg{MR: saved, ApproversChanged: true})
+	require.Len(t, announceResults(cmd), 1)
+	flags := map[string]bool{}
+	for _, r := range f.m.allMRs[0].Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{editorTestApprover: true, editorTestOther: false, carol: true}, flags,
+		"bob gets no approver marker on the board")
+
+	confirmed := before
+	confirmed.Reviewers = saved.Reviewers
+	confirmed.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover, carol},
+		Members: []string{editorTestApprover, editorTestOther, carol}, ApprovalsRequired: 3, Managed: true,
+	}})
+	f.m.dirty = dirtySet{}
+	assert.Empty(t, f.refresh(confirmed), "the read confirming the save claims nothing")
+	assert.Empty(t, f.refresh(confirmed))
 }

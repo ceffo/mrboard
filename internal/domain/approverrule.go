@@ -116,9 +116,13 @@ func (mr *MergeRequest) ApplyApproverRules(rules []ApproverRule) {
 	}
 }
 
-// SetManagedApprovers makes usernames the managed rule's approvers, every one
-// of them required, adding the managed rule when mr has none, and recomputes
+// SetManagedApprovers makes usernames the managed rule's members, every one of
+// them required, adding the managed rule when mr has none, and recomputes
 // Approvers and every reviewer's IsApprover flag from the resulting rules.
+//
+// Who may approve is GitLab's call, not the write's: a member the rule already
+// had but GitLab left out of its eligible approvers stays out of them. A member
+// new to the rule counts as eligible.
 func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 	set := NormalizeApprovers(usernames)
 	found := false
@@ -126,7 +130,8 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 	for _, r := range mr.ApproverRules {
 		if r.Managed && !found {
 			found = true
-			r.Approvers = set
+			ineligible := r.ineligibleMembers()
+			r.Approvers = slices.DeleteFunc(slices.Clone(set), func(u string) bool { return slices.Contains(ineligible, u) })
 			r.Members = set
 			r.ApprovalsRequired = len(set)
 			r.UserIDs = idsOf(r.UserIDs, set)
@@ -139,6 +144,18 @@ func (mr *MergeRequest) SetManagedApprovers(usernames []string) {
 		})
 	}
 	mr.ApplyApproverRules(rules)
+}
+
+// ineligibleMembers returns the members of r that GitLab left out of its
+// eligible approvers; nil when the read that produced r carried no members.
+func (r ApproverRule) ineligibleMembers() []string {
+	var out []string
+	for _, u := range r.Members {
+		if !slices.Contains(r.Approvers, u) {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // idsOf returns the entries of ids for usernames; nil when none remain.

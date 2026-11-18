@@ -105,6 +105,27 @@ func TestSetManagedApprovers_KeepsIDsOfRemainingMembersOnly(t *testing.T) {
 	assert.Equal(t, map[string]int64{testOther: 2}, mr.ManagedApproverIDs())
 }
 
+func TestSetManagedApprovers_KeepsMembersGitLabDoesNotLetApproveIneligible(t *testing.T) {
+	mr := MergeRequest{
+		Reviewers: []ReviewerInfo{{Username: testUsername}, {Username: testOther}, {Username: userCarol}},
+		ApproverRules: []ApproverRule{{
+			Name: ManagedApproverRuleName, Approvers: []string{testUsername},
+			Members: []string{testOther, testUsername}, ApprovalsRequired: 2, Managed: true,
+		}},
+	}
+
+	mr.SetManagedApprovers([]string{testUsername, testOther, userCarol})
+
+	assert.Equal(t, []string{testUsername, testOther, userCarol}, mr.ManagedApprovers())
+	assert.Equal(t, []string{testUsername, userCarol}, mr.Approvers,
+		"the ineligible member stays out; the new member counts as eligible")
+	flags := map[string]bool{}
+	for _, r := range mr.Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{testUsername: true, testOther: false, userCarol: true}, flags)
+}
+
 func TestManagedApprovers_KeepsMembersGitLabDoesNotLetApprove(t *testing.T) {
 	mr := MergeRequest{ApproverRules: []ApproverRule{{
 		Name: ManagedApproverRuleName, Approvers: []string{testUsername},

@@ -171,7 +171,7 @@ are always approvers. Eligible approvers are counted exactly as GitLab returns t
 leaves out the author or committers when the project prevents their approval, and a managed member
 left out is still kept on the rule by a save (`ManagedApprovers` reads the rule's members). Being
 an Approver is not a separate role — it is a property of a reviewer. `IsApprover` is derived from
-the MR's approval rules (REST `approval_rules`: `approvals_required`, `eligible_approvers[].username`;
+the MR's approval rules (REST `approval_state` rules: `approvals_required`, `eligible_approvers[].username`;
 GraphQL `approvalState.rules`: `approvalsRequired`, `eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires every member, all
 `IsApprover` fields are false.
 

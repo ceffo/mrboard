@@ -57,7 +57,11 @@ announcement ledger records and compares against the live MR (ADR-0014).
   returns, so a count lowered by hand in GitLab does not demote them. Its members, eligible or not,
   are what `ManagedApprovers` returns: a member GitLab does not let approve this MR (for example a
   member who pushed a commit) is not an approver on the board, but the editor starts them ticked and
-  a save writes them back to the rule. Only unticking a member removes them.
+  a save writes them back to the rule. Only unticking a member removes them. Who may approve stays
+  GitLab's call through a write: after a save, `SetManagedApprovers` sets the rule's members to the
+  written set but keeps out of its eligible approvers any member the read already had as ineligible.
+  A member new to the rule counts as eligible until GitLab says otherwise. The board, and the
+  announcement the save claims, therefore never turn an ineligible member into an approver.
 - **Snapshots.** The board snapshot and merged snapshot formats move to version 2, so a file holding
   the old meaning is a cold cache (one full fetch) instead of being shown until the next refresh.
 
