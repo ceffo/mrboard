@@ -104,10 +104,8 @@ Backend: `github` (`FLEET_TRACKER` in `.claude/fleet.env`). Every agent uses
 
 ## Scope
 
-Current phase: the **Review load view** epic (`docs/adr/0015-review-load-view.md`). CLI first
-(`mrboard load`), then the TUI display mode once the CLI output is settled. Out of scope: navigating to
-previous sprints (ADR-0015 Non-goals). Anything outside the epic is filed as backlog and never
-dispatched without the user's say-so.
+No phase restriction. New items are filed as Todo and dispatched in priority order, like any other
+ready item.
 
 ## Hard rules for implementers
 
