@@ -618,10 +618,6 @@ func TestMergeMRFromGraphQL_RequiredApprovers(t *testing.T) {
 	}
 }
 
-// TestRequiredApprovers_RESTAndGraphQLAgreeWhenTheAuthorIsExcluded covers a
-// rule needing 3 approvals of priya (the author), alice and bob on a project
-// that prevents author approval: the REST read lists all three, the GraphQL
-// read only alice and bob. Both give the same approvers.
 // restAndGQLWithAuthor maps one rule, needing required approvals from
 // eligible, through REST and GraphQL for an MR priya wrote. Every eligible
 // approver except priya is a reviewer.

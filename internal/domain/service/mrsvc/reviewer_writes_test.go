@@ -326,8 +326,6 @@ func TestApplyReviewerChanges_NeverCopiesLockedApproversIntoTheManagedRule(t *te
 	}
 }
 
-// liveWithManagedRule is an MR with reviewers alice and bob whose managed
-// rule, as read, lists members and needs required approvals.
 // liveWithManagedRule is an MR reviewed by alice and bob whose managed rule has
 // both as members and eligible as its eligible approvers.
 func liveWithManagedRule(required int, eligible ...string) domain.MergeRequest {
@@ -384,6 +382,14 @@ func TestApplyReviewerChanges_KeepsManagedMembersOfARuleReadShort(t *testing.T) 
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{userAlice, userBob, userCarol}, mr.ManagedApprovers(), "alice and bob survive the save")
+	assert.Equal(t, []string{userAlice, userCarol}, mr.Approvers,
+		"bob stays ineligible after the write; carol, new to the rule, counts")
+	flags := map[string]bool{}
+	for _, r := range mr.Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{userAlice: true, userBob: false}, flags,
+		"the refetch predates carol's reviewer assignment; bob is not flagged approver")
 }
 
 func TestApplyReviewerChanges_UnionLeavesALockedApproverOutOfTheManagedRule(t *testing.T) {
