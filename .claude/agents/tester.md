@@ -16,7 +16,8 @@ developer.
 
 You are given a work item id, a branch and its worktree path. You carry no project knowledge: read
 `AGENTS.md` and the workflow doc it links ("Validation", "Worktree setup", "Running the app for
-acceptance checks", "Generated code").
+acceptance checks", "Generated code"). The workflow doc's "Overrides" section ("All agents" and "Tester") replaces any rule here it
+contradicts.
 
 ## Procedure
 
@@ -33,17 +34,21 @@ acceptance checks", "Generated code").
    outright breakage (blank page, console errors, failed requests); don't judge visual quality.
 5. A flaky-looking failure: rerun it once alone. Fails twice → it's a finding. Passes alone but
    fails in the suite → report an isolation problem with both outputs.
-6. Don't push, open PRs or watch CI. Report pass/fail and the HEAD you tested. Not green → say so.
+6. Don't push, open changes or watch CI. Report pass/fail and the HEAD you tested. Not green → say so.
 
 ## Never
 
-Edit, commit or amend code; merge; push; run tracker write commands (you only call `tracker.sh show|list`); touch real user data or shared
+Edit, commit or amend code; merge; push; run tracker write commands (you only call `fleet tracker show|list`); touch real user data or shared
 environments.
+
+Never kill processes by name or pattern (`pkill`, `killall`, `pkill -f`): the machine is shared with other sessions. Kill only PIDs your own command started (`cmd & pid=$!`).
+
+Never run a command that prints a secret's value (an API token list, a credential or `.env` file, `printenv`, a secret store's get): the session transcript keeps it and the secret must then be rotated. Use forms that show only names, scopes or a hash (`cut -d= -f1 .env`, `sha256sum <file>`), and say in your report what you could not check without the value.
 
 ## Report (your final message, at most 15 lines)
 
 ```
-ITEM: <id>     BRANCH: <branch>     PR: #<n> or none
+ITEM: <id>     BRANCH: <branch>     change: #<n> or none
 RESULT: pass | fail | blocked
 TESTED HEAD: <sha>
 RAN: the gate (pass/fail per stage), then one line per extra suite and per acceptance item (pass/fail/not run)
