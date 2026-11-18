@@ -30,6 +30,7 @@ const (
 	testUserCarol     = "carol"
 	testUserBobName   = "Bob"
 	testUserPriya     = "priya"
+	testRepoRule      = "orekit-stelar"
 )
 
 func basicUser(username, name string) *gl.BasicUser {
@@ -451,4 +452,44 @@ func TestApproverSetFromGQLRules_IgnoresSystemManagedRules(t *testing.T) {
 	}
 	set := approverSetFromGQLRules([]pkggitlab.GQLApprovalRule{codeOwners, anyApprover, regular})
 	assert.Equal(t, map[string]bool{testUserAlice: true}, set)
+}
+
+func TestMapMR_ApproverRules_MarksOnlyTheManagedRule(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	codeOwners := approvalRule("*", testUserBob)
+	codeOwners.RuleType = "code_owner"
+	rules := []*gl.MergeRequestApprovalRule{
+		approvalRule(testRepoRule, testUserCarol, testUserAlice),
+		approvalRule(approversRuleName, testUserBob),
+		codeOwners,
+	}
+	result := MapMR(m, nil, approvals(), rules)
+	assert.Equal(t, []domain.ApproverRule{
+		{Name: testRepoRule, Approvers: []string{testUserAlice, testUserCarol}},
+		{Name: approversRuleName, Approvers: []string{testUserBob}, Managed: true},
+	}, result.ApproverRules)
+	assert.Equal(t, []string{testUserBob}, result.ManagedApprovers())
+	assert.Equal(t, map[string][]string{testUserAlice: {testRepoRule}, testUserCarol: {testRepoRule}},
+		result.LockedApprovers())
+}
+
+func TestMergeMRFromGraphQL_ApproverRules_FromFreshRules(t *testing.T) {
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.ApprovalState.Rules = []pkggitlab.GQLApprovalRule{
+		gqlApprovalRule(testRepoRule, testUserCarol),
+		gqlApprovalRule(approversRuleName, testUserAlice),
+	}
+	result := MergeMRFromGraphQL(mr, domain.MergeRequest{})
+	assert.Equal(t, []domain.ApproverRule{
+		{Name: testRepoRule, Approvers: []string{testUserCarol}},
+		{Name: approversRuleName, Approvers: []string{testUserAlice}, Managed: true},
+	}, result.ApproverRules)
+}
+
+func TestMapMR_ApproverRules_CarriesManagedMemberIDs(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName))
+	managed := approvalRule(approversRuleName, testUserBob)
+	managed.EligibleApprovers[0].ID = 42
+	result := MapMR(m, nil, approvals(), []*gl.MergeRequestApprovalRule{managed})
+	assert.Equal(t, map[string]int64{testUserBob: 42}, result.ManagedApproverIDs())
 }

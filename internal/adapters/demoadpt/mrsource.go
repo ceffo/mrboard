@@ -72,19 +72,22 @@ func (s *mrSource) GetProjectMembers(ctx context.Context, projectID int64) ([]do
 	return s.a.ds.membersOf(int(projectID)), nil
 }
 
-// SaveApprovers flips IsApprover to match userIDs. The dataset re-derives the
-// phase afterwards, so promoting the last outstanding approver visibly moves the
-// card into the Approved column.
+// SaveApprovers makes userIDs the members of the managed rule, leaving every
+// other rule as it is, and recomputes the approver flags from all rules. The
+// dataset re-derives the phase afterwards, so promoting the last outstanding
+// approver visibly moves the card into the Approved column.
 func (s *mrSource) SaveApprovers(ctx context.Context, projectID, mrIID int64, userIDs []int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	approvers := s.a.ds.usernamesFromIDs(userIDs)
 	key := domain.MRKey{ProjectID: int(projectID), IID: int(mrIID)}
+	usernames := make([]string, 0, len(approvers))
+	for u := range approvers {
+		usernames = append(usernames, u)
+	}
 	if !s.a.ds.mutate(key, func(mr *domain.MergeRequest) {
-		for i := range mr.Reviewers {
-			mr.Reviewers[i].IsApprover = approvers[mr.Reviewers[i].Username]
-		}
+		mr.SetManagedApprovers(usernames)
 	}) {
 		return fmt.Errorf("demo: no MR %d!%d", projectID, mrIID)
 	}

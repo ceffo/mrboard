@@ -118,6 +118,11 @@ type MergeRequest struct {
     // Distinct from ReviewerInfo.IsApprover, which only flags entries already present in Reviewers.
     Approvers []string
 
+    // ApproverRules are the rules Approvers is the union of: name, sorted approvers, and
+    // Managed for approvers_mrboard, the one rule mrboard writes (docs/adr/0002). Approvers
+    // of the other rules are locked as far as mrboard is concerned (LockedApprovers).
+    ApproverRules []ApproverRule
+
     CreatedAt         time.Time
     UpdatedAt         time.Time // GitLab's updated_at; bumped on notes, reviewer changes, and
                                  // title/draft edits — but NOT reliably on approvals, so the

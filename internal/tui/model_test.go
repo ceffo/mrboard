@@ -346,7 +346,7 @@ func TestModel_FetchSwap_KeepsSameMRSelected(t *testing.T) {
 
 	// A refetched snapshot: same two MRs, reordered, plus a new third MR.
 	mrs := someMRs()
-	swapped := []domain.MergeRequest{mrs[1], mrs[0], {ID: 3, IID: 30, Author: "dave", ProjectPath: "org/gamma"}}
+	swapped := []domain.MergeRequest{mrs[1], mrs[0], {ID: 3, IID: 30, Author: testUserDave, ProjectPath: "org/gamma"}}
 	next, _ := m.Update(FetchResultMsg{MRs: swapped})
 	m2 := next.(Model)
 

@@ -83,7 +83,15 @@ type stagedReviewer struct {
 	State      domain.ReviewerState
 	IsApprover bool
 	UserID     int64 // 0 until resolved via members fetch or team roster
+	// LockedBy names the approval rules mrboard does not manage that make this
+	// reviewer an approver. A locked reviewer is always an approver: the editor
+	// cannot clear the flag.
+	LockedBy []string
 }
+
+// locked reports whether an approval rule mrboard does not manage makes s an
+// approver.
+func (s stagedReviewer) locked() bool { return len(s.LockedBy) > 0 }
 
 // reviewerWriter is the narrow slice of mrsvc.MergeRequestSource that
 // reviewerEditorWidget actually calls (GetProjectMembers directly, plus
@@ -114,6 +122,9 @@ type reviewerEditorWidget struct {
 	// joined the MR meanwhile are not dropped.
 	staged   []stagedReviewer
 	baseline []stagedReviewer
+	// locked maps each username an unmanaged approval rule makes an approver
+	// to the names of those rules (domain.MergeRequest.LockedApprovers).
+	locked map[string][]string
 
 	// Project members (lazy fetch for search and ID resolution at save time).
 	members        []domain.ProjectMember
@@ -160,17 +171,18 @@ func newReviewerEditorWidget(
 	keyMatcher domain.TicketKeyMatcher,
 ) *reviewerEditorWidget {
 	// Build the initial staged list from the MR's current reviewers, excluding the author.
+	locked := mr.LockedApprovers()
 	staged := make([]stagedReviewer, 0, len(mr.Reviewers))
 	for _, r := range mr.Reviewers {
 		if r.Username == mr.Author {
 			continue
 		}
-		staged = append(staged, stagedReviewer{
+		staged = append(staged, withLock(stagedReviewer{
 			Username:   r.Username,
 			Name:       r.Name,
 			State:      r.State,
 			IsApprover: r.IsApprover,
-		})
+		}, locked))
 	}
 	others := make([]domain.MergeRequest, 0, len(siblings))
 	for _, s := range siblings {
@@ -189,10 +201,20 @@ func newReviewerEditorWidget(
 		keyMatcher:   keyMatcher,
 		staged:       staged,
 		baseline:     append([]stagedReviewer(nil), staged...),
+		locked:       locked,
 		userIDByName: make(map[string]int64),
 		searchSel:    make(map[int64]bool),
 		siblings:     others,
 	}
+}
+
+// withLock marks s locked, and an approver, when locked lists rules for it.
+func withLock(s stagedReviewer, locked map[string][]string) stagedReviewer {
+	if rules := locked[s.Username]; len(rules) > 0 {
+		s.LockedBy = rules
+		s.IsApprover = true
+	}
+	return s
 }
 
 // SetMembers is called when the async member fetch completes. Populates userIDByName
@@ -284,7 +306,7 @@ func (w *reviewerEditorWidget) updateList(kMsg tea.KeyPressMsg) (tea.Model, tea.
 		}
 
 	case w.keys.ToggleApprover.Match(kMsg):
-		if w.panel == reviewerEditorPanelReviewers && w.cursor < len(w.staged) {
+		if w.panel == reviewerEditorPanelReviewers && w.cursor < len(w.staged) && !w.staged[w.cursor].locked() {
 			w.staged[w.cursor].IsApprover = !w.staged[w.cursor].IsApprover
 		}
 
@@ -370,11 +392,11 @@ func (w *reviewerEditorWidget) updateSearch(kMsg tea.KeyPressMsg) (tea.Model, te
 			if w.isAlreadyStaged(m.Username) {
 				continue
 			}
-			w.staged = append(w.staged, stagedReviewer{
+			w.staged = append(w.staged, withLock(stagedReviewer{
 				Username: m.Username,
 				Name:     m.Name,
 				UserID:   m.UserID,
-			})
+			}, w.locked))
 			w.userIDByName[m.Username] = m.UserID
 		}
 		w.mode = reviewerEditorModeList
@@ -446,11 +468,11 @@ func (w *reviewerEditorWidget) addTeam() {
 		if w.isAlreadyStaged(u.Username) {
 			continue
 		}
-		w.staged = append(w.staged, stagedReviewer{
+		w.staged = append(w.staged, withLock(stagedReviewer{
 			Username: u.Username,
 			Name:     u.Name,
 			UserID:   u.ID,
-		})
+		}, w.locked))
 		w.userIDByName[u.Username] = u.ID
 	}
 }
@@ -577,9 +599,12 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) string {
 		for i := w.scrollOff; i < end; i++ {
 			s := w.staged[i]
 			var markerStyled string
-			if s.IsApprover {
+			switch {
+			case s.locked():
+				markerStyled = w.styles.PopupItemMarkerOn.Render(markerFixed)
+			case s.IsApprover:
 				markerStyled = w.styles.PopupItemMarkerOn.Render(markerChecked)
-			} else {
+			default:
 				markerStyled = w.styles.PopupItemMarkerOff.Render(markerUnchecked)
 			}
 			name := s.Name
@@ -590,10 +615,14 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) string {
 			if icon := reviewerIcon(s.State, s.IsApprover); icon != "" {
 				label += " " + icon
 			}
+			lock := ""
+			if s.locked() {
+				lock = " " + w.styles.PopupHint.Render(lockedLabel(s.LockedBy))
+			}
 			if i == w.cursor {
-				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItemFocused.Render(label) + "\n")
+				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItemFocused.Render(label) + lock + "\n")
 			} else {
-				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItem.Render(label) + "\n")
+				sb.WriteString("  " + markerStyled + " " + w.styles.PopupItem.Render(label) + lock + "\n")
 			}
 		}
 		if len(w.staged) > reviewerEditorMaxVisible {
@@ -602,11 +631,51 @@ func (w *reviewerEditorWidget) renderList(sb *strings.Builder) string {
 				fmt.Sprintf("  %d–%d / %d", w.scrollOff+1, shown, len(w.staged))) + "\n")
 		}
 	}
+	if line := w.otherApproversLine(); line != "" {
+		sb.WriteString("\n" + w.styles.PopupHint.Render(line) + "\n")
+	}
 
 	if w.saving {
 		return "  Saving…"
 	}
 	return reviewerListHint
+}
+
+// lockedLabel is the suffix of a reviewer row an unmanaged approval rule makes
+// an approver: the padlock and the rules' names.
+func lockedLabel(rules []string) string {
+	return "🔒 " + strings.Join(rules, ", ")
+}
+
+// otherApproversLine summarizes the approvers unmanaged rules add who are not
+// staged reviewers, grouped by rule — "🔒 also approvers: rule: a, b · rule2: c"
+// — truncated to the modal's width. Empty when there are none.
+func (w *reviewerEditorWidget) otherApproversLine() string {
+	byRule := make(map[string][]string)
+	for u, rules := range w.locked {
+		if u == w.mr.Author || w.isAlreadyStaged(u) {
+			continue
+		}
+		for _, r := range rules {
+			byRule[r] = append(byRule[r], u)
+		}
+	}
+	if len(byRule) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(byRule))
+	for r := range byRule {
+		names = append(names, r)
+	}
+	sort.Strings(names)
+	parts := make([]string, len(names))
+	for i, r := range names {
+		users := byRule[r]
+		sort.Strings(users)
+		parts[i] = r + ": " + strings.Join(users, ", ")
+	}
+	contentW := max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint))
+	return truncateWidth("  🔒 also approvers: "+strings.Join(parts, " · "), contentW)
 }
 
 // renderSiblings shows the read-only list of other MRs sharing mr's JIRA key
