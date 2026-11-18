@@ -128,6 +128,23 @@ func TestApproverAnnounce_ChangeIsClaimedOnlyWhenSeenOnTwoRefreshes(t *testing.T
 	assert.Len(t, f.refresh(changed), 1)
 }
 
+func TestApproverAnnounce_OnlyTheFirstSightIsMarkedDiscovered(t *testing.T) {
+	f := newAnnounceFixture(t)
+	var got []mrsvc.ClaimRequest
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, req mrsvc.ClaimRequest) { got = append(got, req) }).
+		Return(false, nil).Times(2)
+
+	f.refresh(announceMR(time.Hour, editorTestApprover))
+	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
+	f.refresh(changed)
+	f.refresh(changed)
+
+	require.Len(t, got, 2)
+	assert.True(t, got[0].Discovered, "the first look at an MR finds its set without seeing it change")
+	assert.False(t, got[1].Discovered, "a change seen happening is not a discovery")
+}
+
 func TestApproverAnnounce_ChangeThatRevertsBeforeConfirmation_IsDropped(t *testing.T) {
 	f := newAnnounceFixture(t)
 	original := announceMR(time.Hour, editorTestApprover)

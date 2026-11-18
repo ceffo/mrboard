@@ -3,6 +3,7 @@ package gitlabadpt
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -160,6 +161,44 @@ func TestClaim_LegacySilentEntry_StillBaselinesTheLedger(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, owned, "the silent entry already recorded this set")
 	assert.Len(t, c.notes, 1)
+}
+
+// legacyLedgerClient holds one v1 ledger entry recording grace, edsger and
+// linus, while the live required set is grace and edsger: linus is only in an
+// optional rule, which the old meaning counted.
+func legacyLedgerClient(t *testing.T) *fakeLedgerClient {
+	t.Helper()
+	c := newFakeLedgerClient("grace", "edsger")
+	c.liveRules = append(c.liveRules, approvalRuleNeeding(testRuleTeam, 1, "linus", testUserBob))
+	v2 := domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{"grace", "edsger", "linus"}})
+	v1 := strings.Replace(v2, "mrboard:approvers-claim v2", "mrboard:approvers-claim v1", 1)
+	require.NotEqual(t, v2, v1)
+	c.add(v1, false)
+	return c
+}
+
+func TestClaim_DiscoveredSetAgainstLegacyLedger_WritesNothing(t *testing.T) {
+	c := legacyLedgerClient(t)
+	a := &GitLabAdapter{client: c}
+	req := claimReq([]string{"edsger", "grace"}, []string{"edsger", "grace"})
+	req.Discovered = true
+
+	owned, err := a.Claim(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, owned, "the set differs from the ledger only because the meaning changed")
+	assert.Len(t, c.notes, 1, "no note, so no email to the MR's participants")
+}
+
+func TestClaim_ChangeSeenAgainstLegacyLedger_IsClaimedInTheCurrentFormat(t *testing.T) {
+	c := legacyLedgerClient(t)
+	a := &GitLabAdapter{client: c}
+
+	owned, err := a.Claim(context.Background(),
+		claimReq([]string{"edsger", "grace"}, []string{"edsger", "grace", "linus"}))
+	require.NoError(t, err)
+	assert.True(t, owned)
+	require.Len(t, c.claims(), 2)
+	assert.False(t, c.claims()[1].Legacy)
 }
 
 func TestClaim_SetAlreadyRecorded_WritesNothing(t *testing.T) {
