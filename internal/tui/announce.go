@@ -97,10 +97,12 @@ func (m *Model) makeApproverAnnounceCmds() tea.Cmd {
 		delete(m.announce.pending, key)
 		m.announce.handled[key] = set
 		cmds = append(cmds, m.approverAnnounceCmd(mr, mrsvc.ClaimRequest{
-			ProjectID: int64(mr.ProjectID),
-			MRIID:     int64(mr.IID),
-			Approvers: set,
-			Prior:     prior,
+			ProjectID:  int64(mr.ProjectID),
+			MRIID:      int64(mr.IID),
+			Approvers:  set,
+			Prior:      prior,
+			Author:     mr.Author,
+			Discovered: !seen,
 		}, prev, seen))
 	}
 	if len(cmds) == 0 {
@@ -176,5 +178,6 @@ func (m *Model) announceEditedApprovers(mr domain.MergeRequest, before []string)
 		Approvers:     set,
 		Prior:         domain.NormalizeApprovers(before),
 		Authoritative: true,
+		Author:        mr.Author,
 	}, prev, seen)
 }

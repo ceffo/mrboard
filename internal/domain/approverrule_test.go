@@ -12,6 +12,7 @@ const (
 	testRepoRule  = "orekit-stelar"
 	testRuleLeads = "leads"
 	testRuleTeam  = "team"
+	userAuthor    = "olivia"
 )
 
 func ruledMR() MergeRequest {
@@ -47,8 +48,8 @@ func TestLockedApprovers_OptionalRulesLockNoOne(t *testing.T) {
 		{Name: "advisory", Approvers: []string{userErin}, ApprovalsRequired: 0},
 	}}
 
-	assert.Equal(t, map[string][]string{userCarol: {testRuleLeads}}, mr.LockedApprovers(),
-		"only a rule requiring every member locks its members")
+	assert.Equal(t, map[string][]string{userCarol: {testRuleLeads}, userDave: {"unreachable"}}, mr.LockedApprovers(),
+		"only a rule requiring every remaining member locks them")
 }
 
 func TestSetManagedApprovers_ReplacesOnlyTheManagedRule(t *testing.T) {
@@ -119,9 +120,31 @@ func TestRequiredApprovers(t *testing.T) {
 			[]string{testUsername, testOther},
 		},
 		{"one of several required", []ApproverRule{rule(testRuleTeam, 1, testUsername, testOther, userCarol)}, nil},
-		{"more required than members", []ApproverRule{rule(testRuleTeam, 3, testUsername, testOther)}, nil},
+		{
+			"more required than members: every remaining member is required",
+			[]ApproverRule{rule(testRuleTeam, 3, testUsername, testOther)},
+			[]string{testUsername, testOther},
+		},
 		{"no approval required", []ApproverRule{rule(testRuleTeam, 0, testUsername)}, nil},
-		{"rule without members", []ApproverRule{rule("empty", 0)}, nil},
+		{"rule without members", []ApproverRule{rule("empty", 1)}, nil},
+		{
+			"the author never counts, in the result or the count",
+			[]ApproverRule{rule(testRuleLeads, 2, userAuthor, testUsername, testOther)},
+			[]string{testUsername, testOther},
+		},
+		{
+			"an author-only rule makes no one required",
+			[]ApproverRule{rule(testRuleLeads, 1, userAuthor)},
+			nil,
+		},
+		{
+			"managed rule members are required whatever the count",
+			[]ApproverRule{{
+				Name: ManagedApproverRuleName, Approvers: []string{testUsername, testOther},
+				ApprovalsRequired: 1, Managed: true,
+			}},
+			[]string{testUsername, testOther},
+		},
 		{
 			"member of a required and an optional rule",
 			[]ApproverRule{rule(testRuleLeads, 1, testUsername), rule(testRuleTeam, 1, testUsername, testOther)},
@@ -140,7 +163,7 @@ func TestRequiredApprovers(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, RequiredApprovers(tc.rules))
+			assert.Equal(t, tc.want, RequiredApprovers(tc.rules, userAuthor))
 		})
 	}
 }

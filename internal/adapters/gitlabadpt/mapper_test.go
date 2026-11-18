@@ -521,7 +521,11 @@ var requiredApproverCases = []struct {
 		[]string{testUserAlice, testUserBob},
 	},
 	{"one of several required", []testRule{{testRuleTeam, 1, []string{testUserAlice, testUserBob, testUserCarol}}}, nil},
-	{"more required than members", []testRule{{testRuleTeam, 3, []string{testUserAlice, testUserBob}}}, nil},
+	{
+		"more required than members",
+		[]testRule{{testRuleTeam, 3, []string{testUserAlice, testUserBob}}},
+		[]string{testUserAlice, testUserBob},
+	},
 	{"no approval required", []testRule{{testRuleTeam, 0, []string{testUserAlice}}}, nil},
 	{
 		"member of a required and an optional rule",
@@ -612,6 +616,42 @@ func TestMergeMRFromGraphQL_RequiredApprovers(t *testing.T) {
 			assertRequiredApprovers(t, tc.want, MergeMRFromGraphQL(gqlMRWithRules(tc.rules), cached))
 		})
 	}
+}
+
+// TestRequiredApprovers_RESTAndGraphQLAgreeWhenTheAuthorIsExcluded covers a
+// rule needing 3 approvals of priya (the author), alice and bob on a project
+// that prevents author approval: the REST read lists all three, the GraphQL
+// read only alice and bob. Both give the same approvers.
+func TestRequiredApprovers_RESTAndGraphQLAgreeWhenTheAuthorIsExcluded(t *testing.T) {
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName),
+		basicUser(testUserCarol, testUserCarol))
+	m.Author = basicUser(testUserPriya, testUserPriya)
+	rest := MapMR(m, nil, approvals(),
+		[]*gl.MergeRequestApprovalRule{approvalRuleNeeding(testRuleTeam, 3, testUserPriya, testUserAlice, testUserBob)})
+
+	g := gqlMRWithRules([]testRule{{testRuleTeam, 3, []string{testUserAlice, testUserBob}}})
+	g.Author = pkggitlab.GQLUser{Username: testUserPriya}
+	gql := MapMRFromGraphQL(g)
+
+	want := []string{testUserAlice, testUserBob}
+	assertRequiredApprovers(t, want, rest)
+	assertRequiredApprovers(t, want, gql)
+	assert.Equal(t, rest.LockedApprovers(), gql.LockedApprovers())
+	assert.Equal(t, map[string][]string{testUserAlice: {testRuleTeam}, testUserBob: {testRuleTeam}},
+		gql.LockedApprovers(), "both remaining members are locked")
+}
+
+// TestMapMRFromGraphQL_ManagedRuleWithAnIneligibleMember covers a managed rule
+// of alice and bob needing 2 approvals that GraphQL reads as alice only (bob
+// pushed a commit on a project preventing committer approval): alice stays an
+// approver although the rule needs more approvals than it lists.
+func TestMapMRFromGraphQL_ManagedRuleWithAnIneligibleMember(t *testing.T) {
+	g := gqlMRWithRules([]testRule{{approversRuleName, 2, []string{testUserAlice}}})
+
+	got := MapMRFromGraphQL(g)
+
+	assert.Equal(t, []string{testUserAlice}, got.Approvers)
+	assert.Equal(t, []string{testUserAlice}, got.ManagedApprovers())
 }
 
 func TestMapMRFromGraphQL_OptionalApproverDoesNotHoldBackReadyToMerge(t *testing.T) {

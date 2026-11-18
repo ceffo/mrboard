@@ -45,8 +45,15 @@ func announceMR(age time.Duration, approvers ...string) domain.MergeRequest {
 func claimReqFor(mr domain.MergeRequest, prior []string) mrsvc.ClaimRequest {
 	return mrsvc.ClaimRequest{
 		ProjectID: int64(mr.ProjectID), MRIID: int64(mr.IID),
-		Approvers: domain.NormalizeApprovers(mr.Approvers), Prior: prior,
+		Approvers: domain.NormalizeApprovers(mr.Approvers), Prior: prior, Author: mr.Author,
 	}
+}
+
+// discoveredReqFor is claimReqFor for a set found on the first look at mr.
+func discoveredReqFor(mr domain.MergeRequest, prior []string) mrsvc.ClaimRequest {
+	req := claimReqFor(mr, prior)
+	req.Discovered = true
+	return req
 }
 
 // announceResults executes cmd, flattening a batch, and returns the announce results.
@@ -75,7 +82,7 @@ func (f *announceFixture) refresh(mrs ...domain.MergeRequest) []approverAnnounce
 func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(mr, nil)).Return(true, nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, nil)).Return(true, nil)
 	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil)
 
 	res := f.refresh(mr)
@@ -86,7 +93,7 @@ func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.
 func TestApproverAnnounce_OldMRFirstSight_PriorIsItsCurrentSet(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(72*time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(mr, []string{editorTestApprover})).Return(false, nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, []string{editorTestApprover})).Return(false, nil)
 
 	res := f.refresh(mr)
 	require.Len(t, res, 1)

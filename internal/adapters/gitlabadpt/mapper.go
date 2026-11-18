@@ -233,9 +233,9 @@ func approverRulesFromGQLRules(rules []pkggitlab.GQLApprovalRule) []domain.Appro
 }
 
 // appendApproverRule appends the rule name needing required approvals from
-// approvers set, and their user IDs when the read carries them, to rules. Only the first regular rule named
-// approversRuleName is managed: it is the one SaveApprovers writes. Callers pass
-// regular rules only.
+// approvers set, and their user IDs when the read carries them, to rules. Only
+// the first regular rule named approversRuleName is managed: it is the one
+// SaveApprovers writes. Callers pass regular rules only.
 func appendApproverRule(
 	rules []domain.ApproverRule, name string, required int, set map[string]bool, ids map[string]int64,
 ) []domain.ApproverRule {
@@ -312,11 +312,11 @@ func MapMR(
 		OpenThreads:    openThreads,
 		RoundTripCount: domain.CountRoundTrips(events),
 	}
-	domainMR.ApplyApproverRules(approverRulesFromRESTRules(approvalRules))
 	if mr.Author != nil {
 		domainMR.Author = mr.Author.Username
 		domainMR.AuthorName = mr.Author.Name
 	}
+	domainMR.ApplyApproverRules(approverRulesFromRESTRules(approvalRules))
 	if mr.Assignee != nil {
 		domainMR.Assignee = mr.Assignee.Username
 		domainMR.AssigneeName = mr.Assignee.Name

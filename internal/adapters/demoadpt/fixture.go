@@ -463,7 +463,7 @@ func approverRules(fm fixtureMR) []domain.ApproverRule {
 // lockApprovers adds the required approvers of mr's unmanaged rules to
 // Approvers and flags those among its reviewers, as GitLab's rules would.
 func lockApprovers(mr *domain.MergeRequest) {
-	required := domain.RequiredApprovers(mr.ApproverRules)
+	required := domain.RequiredApprovers(mr.ApproverRules, mr.Author)
 	if len(required) == 0 {
 		return
 	}

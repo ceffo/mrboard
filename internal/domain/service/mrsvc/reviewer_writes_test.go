@@ -326,6 +326,63 @@ func TestApplyReviewerChanges_NeverCopiesLockedApproversIntoTheManagedRule(t *te
 	}
 }
 
+// liveWithManagedRule is an MR with reviewers alice and bob whose managed
+// rule, as read, lists members and needs required approvals.
+func liveWithManagedRule(required int, members ...string) domain.MergeRequest {
+	mr := fetchedMR(domain.ReviewerInfo{Username: userAlice}, domain.ReviewerInfo{Username: userBob})
+	mr.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: members, ApprovalsRequired: required, Managed: true,
+		UserIDs: map[string]int64{userAlice: 101, userBob: 102},
+	}})
+	return mr
+}
+
+func TestApplyReviewerChanges_KeepsManagedMembersWhoseRuleNeedsFewerApprovals(t *testing.T) {
+	live := liveWithManagedRule(1, userAlice, userBob) // approvals required lowered by hand in GitLab
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+
+	before := []mrsvc.ReviewerEdit{
+		{Username: userAlice, UserID: 101, IsApprover: true},
+		{Username: userBob, UserID: 102, IsApprover: true},
+	}
+	after := append(append([]mrsvc.ReviewerEdit(nil), before...),
+		mrsvc.ReviewerEdit{Username: userCarol, UserID: 103, IsApprover: true})
+	mr, _, err := applyChanges(src,
+		mrsvc.ReviewerChange{Staged: after, Baseline: before, Mode: mrsvc.ReviewerWriteEdit}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{userAlice, userBob, userCarol}, mr.ManagedApprovers())
+}
+
+// A managed rule read with fewer members than it needs approvals: GitLab left
+// bob out of the read because he cannot approve (he pushed a commit).
+func TestApplyReviewerChanges_KeepsManagedMembersOfARuleReadShort(t *testing.T) {
+	live := liveWithManagedRule(2, userAlice)
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 103}).
+		Return(nil).Once()
+
+	before := []mrsvc.ReviewerEdit{
+		{Username: userAlice, UserID: 101, IsApprover: true},
+		{Username: userBob, UserID: 102},
+	}
+	after := append(append([]mrsvc.ReviewerEdit(nil), before...),
+		mrsvc.ReviewerEdit{Username: userCarol, UserID: 103, IsApprover: true})
+	mr, _, err := applyChanges(src,
+		mrsvc.ReviewerChange{Staged: after, Baseline: before, Mode: mrsvc.ReviewerWriteEdit}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{userAlice, userCarol}, mr.ManagedApprovers(), "alice survives the save")
+}
+
 func TestApplyReviewerChanges_UnionLeavesALockedApproverOutOfTheManagedRule(t *testing.T) {
 	src := mocks.NewMockMergeRequestSource(t) // no write EXPECT(): alice is an approver already
 	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(liveWithForeignRule(), nil).Once()

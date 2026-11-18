@@ -123,21 +123,22 @@ func TestReviewersFixture_UnionKeepsWhatEachRelatedMRAlreadyHas(t *testing.T) {
 		wantReviewers []string
 		wantApprovers []string
 	}{
-		{101, 502, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
+		// An MR's author is never its approver: grace wrote !502 and !509, katherine !505 and !511.
+		{101, 502, []string{userGrace, userKatherine, userLinus}, []string{userKatherine}},
 		{102, 503, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{103, 504, []string{userGrace, userKatherine, userLinus, userMargaret}, []string{userGrace, userKatherine}},
-		{101, 505, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
+		{101, 505, []string{userGrace, userKatherine, userLinus}, []string{userGrace}},
 		{102, 506, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{103, 507, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{101, 508, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{
 			102, 509,
 			[]string{userEdsger, userGrace, userKatherine, userLinus, userMargaret},
-			[]string{userGrace, userKatherine, userMargaret},
+			[]string{userKatherine, userMargaret},
 		},
 		{103, 510, []string{userBarbara, userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		// linus stays an approver although the staged edit lists him as a plain reviewer.
-		{101, 511, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine, userLinus}},
+		{101, 511, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userLinus}},
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("!%d", tc.iid), func(t *testing.T) {

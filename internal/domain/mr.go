@@ -161,7 +161,7 @@ type MergeRequest struct {
 	Reviewers           []ReviewerInfo
 
 	// Approvers are the MR's required approvers: the members of every
-	// approval rule that requires every member (ApproverRule.RequiresEveryMember),
+	// approval rule that requires every member (ApproverRule.RequiredMembers),
 	// regardless of whether they are currently assigned as a reviewer on this
 	// MR. Distinct from ReviewerInfo.IsApprover, which only flags entries
 	// already present in Reviewers.

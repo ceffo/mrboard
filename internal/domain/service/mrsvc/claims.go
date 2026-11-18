@@ -25,6 +25,15 @@ type ClaimRequest struct {
 	// the MR's live approver set, which can lag a write, is not consulted to
 	// detect a stale observation.
 	Authoritative bool
+	// Author is the MR's author, who never counts as an approver of their own
+	// MR; the live approver set is derived without them.
+	Author string
+	// Discovered marks Approvers as a set the caller found on its first look at
+	// the MR, without seeing it change. Against a ledger last written under the
+	// old approver meaning, such a set is not claimed: it may differ from the
+	// ledger only because the meaning changed, and nothing is announced or
+	// recorded for that.
+	Discovered bool
 }
 
 // ApproverClaims is the driven port for the approver-announcement ledger: a
