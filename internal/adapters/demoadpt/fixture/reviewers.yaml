@@ -24,6 +24,13 @@
 #   REV-300  two MRs with very long titles, one in a very long repository path —
 #            nothing may resize as the cursor moves over them
 #   REV-400  one MR with no related MRs                   — the editor saves directly
+#   REV-500  approvers from a rule mrboard did not create (`platform-owners`,
+#            as if copied from the project's settings):
+#              !550  edsger (reviewer) and barbara (not a reviewer) come from the
+#                    rule: edsger's row is ticked and locked, barbara is on the
+#                    "also approvers" line; grace is mrboard's own pick
+#              !551  no reviewers — applying adds edsger as a plain reviewer,
+#                    never as a member of mrboard's rule
 #   (none)   one MR with no ticket key and no reviewers
 #
 # SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes
@@ -66,6 +73,7 @@ issue_types:
   REV-100: Story
   REV-300: Task
   REV-400: Bug
+  REV-500: Story
 
 merge_requests:
   # ---- REV-100: the related group ----
@@ -323,6 +331,45 @@ merge_requests:
 
       ---
       🎫 [REV-400](https://tickets.demo.invalid/browse/REV-400) <!-- mrboard -->
+
+  # ---- REV-500: a rule mrboard did not create ----
+  - project_id: 102
+    iid: 550
+    id: 9550
+    title: "feat(REV-500): add an audit trail to the console"
+    author: ada
+    merge_status: mergeable
+    source_branch: rev-500-audit
+    created_ago: 3h
+    updated_ago: 40m
+    approvers: [grace]
+    approval_rules:
+      - {name: platform-owners, approvers: [edsger, barbara]}
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 3h}
+      - {username: edsger, state: not_started, waiting_ago: 3h}
+      - {username: linus, state: not_started, waiting_ago: 3h}
+    description: |-
+      Open the editor here: edsger and barbara are approvers through a rule
+      mrboard must never change.
+
+      ---
+      🎫 [REV-500](https://tickets.demo.invalid/browse/REV-500) <!-- mrboard -->
+
+  - project_id: 101
+    iid: 551
+    id: 9551
+    title: "feat(REV-500): record audit events on the API side"
+    author: ada
+    merge_status: mergeable
+    source_branch: rev-500-audit-api
+    created_ago: 2h
+    updated_ago: 30m
+    description: |-
+      No reviewers yet.
+
+      ---
+      🎫 [REV-500](https://tickets.demo.invalid/browse/REV-500) <!-- mrboard -->
 
   # ---- no ticket key ----
   - project_id: 103

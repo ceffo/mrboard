@@ -26,6 +26,8 @@ with `a`) is **removed** and replaced by a single reviewer editor opened with `r
   (empty array clears all reviewers). Independent of approvals.
 - **Approvers** = the `"Approvers"` approval rule's `user_ids` / `eligible_approvers`, written by
   the existing `SaveApprovers` (`Create/UpdateMRApprovalRule`). Independent of `reviewer_ids`.
+  (Superseded: mrboard now writes only its `approvers_mrboard` rule and never changes or deletes
+  any other rule; approvers from other rules are locked in the editor. See ADR-0002.)
 
 The editor presents these as one list with a flag, but **saving touches both APIs** (see §6).
 

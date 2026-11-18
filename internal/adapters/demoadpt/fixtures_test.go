@@ -289,3 +289,22 @@ func TestAutoAssignFixture_NeverReplacesAnMRThatAlreadyHasReviewers(t *testing.T
 	got, _ := reviewersOf(fetchMR(t, a, 101, 602))
 	assert.Equal(t, []string{userLinus}, got, "!602's own reviewer must be untouched")
 }
+
+func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T) {
+	a := newTestAdapterFor(t, reviewersFixture)
+	before := fetchMR(t, a, 102, 550)
+	require.Equal(t, map[string][]string{"barbara": {"platform-owners"}, "edsger": {"platform-owners"}},
+		before.LockedApprovers())
+
+	// Untick grace and drop edsger as a reviewer.
+	baseline := []mrsvc.ReviewerEdit{
+		{Username: userGrace, IsApprover: true}, {Username: "edsger", IsApprover: true}, {Username: userLinus},
+	}
+	staged := []mrsvc.ReviewerEdit{{Username: userGrace}, {Username: userLinus}}
+	applyChange(t, a, 102, 550, mrsvc.ReviewerChange{Staged: staged, Baseline: baseline, Mode: mrsvc.ReviewerWriteEdit})
+
+	after := fetchMR(t, a, 102, 550)
+	assert.Equal(t, before.LockedApprovers(), after.LockedApprovers(), "the project's rule must survive the write")
+	assert.Empty(t, after.ManagedApprovers(), "grace leaves mrboard's rule")
+	assert.Equal(t, []string{"barbara", "edsger"}, after.Approvers, "the rule's approvers stay approvers")
+}
