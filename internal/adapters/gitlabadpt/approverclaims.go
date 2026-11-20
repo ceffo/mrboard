@@ -87,11 +87,7 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (mrsv
 	if !owned {
 		return mrsvc.ClaimOutcome{}, nil
 	}
-	previous := req.Prior
-	if before := settled.Before[id]; before.Known {
-		previous = before.Approvers
-	}
-	return mrsvc.ClaimOutcome{Owned: true, Previous: previous}, nil
+	return mrsvc.ClaimOutcome{Owned: true, Previous: settled.Replaced(id, req.Prior)}, nil
 }
 
 // Release implements mrsvc.ApproverClaims.

@@ -120,6 +120,15 @@ type ClaimBefore struct {
 	Known bool
 }
 
+// Replaced returns the set the announcing entry id replaces: the folded one
+// when it is Known, else prior, the set the claimer assumed before the change.
+func (s ClaimLedgerState) Replaced(id int64, prior []string) []string {
+	if before := s.Before[id]; before.Known {
+		return before.Approvers
+	}
+	return prior
+}
+
 // FoldApproverClaims replays a ledger in ID order. An entry owns an
 // announcement exactly when it changes the running state and is not Silent;
 // later entries repeating the running state are redundant, which is what

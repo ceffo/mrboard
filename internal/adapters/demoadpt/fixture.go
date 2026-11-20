@@ -55,12 +55,17 @@ type Settings struct {
 	Team []string
 	// AutoAssignReviewers turns automatic reviewer assignment on.
 	AutoAssignReviewers bool
+	// AnnounceApproverChanges turns approver-change announcements on, against
+	// the in-memory ledger (ApproverClaims).
+	AnnounceApproverChanges bool
 }
 
 type fixtureSettings struct {
 	CurrentUser         string   `yaml:"current_user"`
 	Team                []string `yaml:"team"`
 	AutoAssignReviewers bool     `yaml:"auto_assign_reviewers"`
+	// AnnounceApproverChanges mirrors Settings.AnnounceApproverChanges.
+	AnnounceApproverChanges bool `yaml:"announce_approver_changes"`
 }
 
 // fixtureFile mirrors a fixture/<name>.yaml file. Field names deliberately
@@ -275,9 +280,10 @@ func loadFixture(name string, bootAt time.Time, baseURL string) (*dataset, error
 		issueTypes:     f.IssueTypes,
 		sprintKeys:     f.SprintTicketKeys,
 		settings: Settings{
-			CurrentUser:         f.Settings.CurrentUser,
-			Team:                f.Settings.Team,
-			AutoAssignReviewers: f.Settings.AutoAssignReviewers,
+			CurrentUser:             f.Settings.CurrentUser,
+			Team:                    f.Settings.Team,
+			AutoAssignReviewers:     f.Settings.AutoAssignReviewers,
+			AnnounceApproverChanges: f.Settings.AnnounceApproverChanges,
 		},
 		threads: make(map[domain.MRKey][]domain.Thread),
 		diffs:   make(map[domain.MRKey]domain.MRDiff),
