@@ -1,0 +1,57 @@
+# FIXTURE `announce`: approver-change announcements are ON (docs/adr/0014),
+# against an in-memory ledger. Run it with `scripts/demo-tui.sh announce`.
+#
+# The demo notifier delivers nothing: every announcement is a log line in the
+# demo log ($TMPDIR/mrboard-demo.log) naming who gained and who lost the
+# required-approver status, and whether mrboard made the change.
+#
+#   !801  created 2 days ago, approver grace, reviewer linus. Its set is long
+#         established, so the first refresh announces nothing. Open the
+#         reviewer editor on it and make linus an approver: the save logs
+#         `demo: approver change notification suppressed ... gained=[linus]
+#         lost=[] by_mrboard=true`, once; the refreshes after it log nothing.
+#
+# SAME RULES AS EVERY FIXTURE: every `*_ago` is a whole number of minutes, and
+# every MR whose title carries a ticket key ends its description with the
+# `<!-- mrboard -->` marker.
+schema: 1
+
+settings:
+  current_user: ada
+  team: [ada, grace, linus]
+  announce_approver_changes: true
+
+snapshot_written_ago: 14m
+
+people:
+  - {username: ada, name: Ada Lovelace, user_id: 1}
+  - {username: grace, name: Grace Hopper, user_id: 2}
+  - {username: linus, name: Linus Torvalds, user_id: 3}
+
+projects:
+  - id: 101
+    path: demo-corp/platform-api
+    members: [ada, grace, linus]
+
+issue_types:
+  ANN-1: Story
+
+merge_requests:
+  - project_id: 101
+    iid: 801
+    id: 9801
+    title: "feat(ANN-1): sign webhook payloads"
+    author: ada
+    merge_status: mergeable
+    source_branch: ann-1-sign-webhooks
+    created_ago: 2d
+    updated_ago: 30m
+    approvers: [grace]
+    reviewers:
+      - {username: grace, approver: true, state: not_started, waiting_ago: 2d}
+      - {username: linus, state: not_started, waiting_ago: 2d}
+    description: |-
+      Make linus an approver in the reviewer editor to see the announcement.
+
+      ---
+      🎫 [ANN-1](https://tickets.demo.invalid/browse/ANN-1) <!-- mrboard -->

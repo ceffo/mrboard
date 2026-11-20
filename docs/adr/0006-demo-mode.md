@@ -140,9 +140,14 @@ now a directory of fixtures, selected by name:
   and an MR with no related MRs. Automatic reviewer assignment is off.
 - **`auto-assign`** has the feature on, with one MR that qualifies and one for each reason a
   candidate is skipped.
+- **`announce`** (amended 2026-11-20, #105) has approver-change announcements on (ADR-0014):
+  `core.NewDemo` wires an in-memory approver ledger, single-instance, so a claim is decided the
+  moment it is appended. The demo notifier logs each announcement (gained, lost, by mrboard)
+  instead of delivering it; one long-established MR is there to be edited.
 
 Each file opens with a comment saying what it is for. A fixture may carry a `settings:` block —
-`current_user`, `team`, `auto_assign_reviewers` — which `core.NewDemo` applies onto the
+`current_user`, `team`, `auto_assign_reviewers`, `announce_approver_changes` — which
+`core.NewDemo` applies onto the
 `config.DemoConfig()` it started from; a field left out keeps its default, so `gif` has none and
 behaves as it always did. Settings live in the fixture because they are part of the scenario:
 `reviewers` and `auto-assign` need contradictory setups, and with the feature on the board
