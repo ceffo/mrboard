@@ -23,23 +23,23 @@ const DefaultClaimSettle = 1500 * time.Millisecond
 // Claim implements mrsvc.ApproverClaims. The ledger is the MR's internal notes
 // carrying a domain.ApproverClaim block; note IDs, assigned by GitLab, give
 // every instance the same order to replay.
-func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool, error) {
+func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (mrsvc.ClaimOutcome, error) {
 	logger := ilog.FromContext(ctx)
 	want := domain.ApproverSetHash(req.Approvers)
 
 	state, err := a.readClaimLedger(ctx, req.ProjectID, req.MRIID)
 	if err != nil {
-		return false, err
+		return mrsvc.ClaimOutcome{}, err
 	}
 	// Every ledger entry is a note that emails the MR's participants, so an
 	// empty ledger stays empty until there is a change to announce. The first
 	// entry on an empty ledger owns its announcement, so none is needed to
 	// baseline the prior set.
 	if state.Empty && domain.ApproverSetHash(req.Prior) == want {
-		return false, nil
+		return mrsvc.ClaimOutcome{}, nil
 	}
 	if !state.Empty && !state.Released && domain.ApproverSetHash(state.Approvers) == want {
-		return false, nil
+		return mrsvc.ClaimOutcome{}, nil
 	}
 	// A ledger last written under the old approver meaning cannot tell a
 	// discovered change from the meaning change itself, so a discovery leaves
@@ -49,7 +49,7 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 	if !state.Empty && state.Legacy && req.Discovered {
 		logger.Debug("gitlab: approver claim skipped, legacy ledger",
 			"project_id", req.ProjectID, "mr_iid", req.MRIID)
-		return false, nil
+		return mrsvc.ClaimOutcome{}, nil
 	}
 
 	// An observation can be stale by the time it is claimed; claiming it would
@@ -57,34 +57,41 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 	if !req.Authoritative {
 		live, liveErr := a.liveApprovers(ctx, req.ProjectID, req.MRIID)
 		if liveErr != nil {
-			return false, liveErr
+			return mrsvc.ClaimOutcome{}, liveErr
 		}
 		if domain.ApproverSetHash(live) != want {
 			logger.Debug("gitlab: approver claim skipped, observation stale",
 				"project_id", req.ProjectID, "mr_iid", req.MRIID)
-			return false, nil
+			return mrsvc.ClaimOutcome{}, nil
 		}
 	}
 
 	id, err := a.appendClaimID(ctx, req.ProjectID, req.MRIID, domain.ApproverClaim{Approvers: req.Approvers})
 	if err != nil {
-		return false, err
+		return mrsvc.ClaimOutcome{}, err
 	}
 	if a.cfg.ClaimSettle > 0 {
 		select {
 		case <-time.After(a.cfg.ClaimSettle):
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return mrsvc.ClaimOutcome{}, ctx.Err()
 		}
 	}
 	settled, err := a.readClaimLedger(ctx, req.ProjectID, req.MRIID)
 	if err != nil {
-		return false, err
+		return mrsvc.ClaimOutcome{}, err
 	}
 	owned := settled.Announcers[id]
 	logger.Info("gitlab: approver claim decided", "project_id", req.ProjectID, "mr_iid", req.MRIID,
 		"claim_id", id, "owned", owned)
-	return owned, nil
+	if !owned {
+		return mrsvc.ClaimOutcome{}, nil
+	}
+	previous := req.Prior
+	if before := settled.Before[id]; before.Known {
+		previous = before.Approvers
+	}
+	return mrsvc.ClaimOutcome{Owned: true, Previous: previous}, nil
 }
 
 // Release implements mrsvc.ApproverClaims.

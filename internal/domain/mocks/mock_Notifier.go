@@ -103,3 +103,66 @@ func (_c *MockNotifier_Notify_Call) RunAndReturn(run func(ctx context.Context, m
 	_c.Call.Return(run)
 	return _c
 }
+
+// NotifyApproverChange provides a mock function for the type MockNotifier
+func (_mock *MockNotifier) NotifyApproverChange(ctx context.Context, mr domain.MergeRequest, change domain.ApproverChange) error {
+	ret := _mock.Called(ctx, mr, change)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NotifyApproverChange")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.MergeRequest, domain.ApproverChange) error); ok {
+		r0 = returnFunc(ctx, mr, change)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockNotifier_NotifyApproverChange_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NotifyApproverChange'
+type MockNotifier_NotifyApproverChange_Call struct {
+	*mock.Call
+}
+
+// NotifyApproverChange is a helper method to define mock.On call
+//   - ctx context.Context
+//   - mr domain.MergeRequest
+//   - change domain.ApproverChange
+func (_e *MockNotifier_Expecter) NotifyApproverChange(ctx any, mr any, change any) *MockNotifier_NotifyApproverChange_Call {
+	return &MockNotifier_NotifyApproverChange_Call{Call: _e.mock.On("NotifyApproverChange", ctx, mr, change)}
+}
+
+func (_c *MockNotifier_NotifyApproverChange_Call) Run(run func(ctx context.Context, mr domain.MergeRequest, change domain.ApproverChange)) *MockNotifier_NotifyApproverChange_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 domain.MergeRequest
+		if args[1] != nil {
+			arg1 = args[1].(domain.MergeRequest)
+		}
+		var arg2 domain.ApproverChange
+		if args[2] != nil {
+			arg2 = args[2].(domain.ApproverChange)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockNotifier_NotifyApproverChange_Call) Return(err error) *MockNotifier_NotifyApproverChange_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockNotifier_NotifyApproverChange_Call) RunAndReturn(run func(ctx context.Context, mr domain.MergeRequest, change domain.ApproverChange) error) *MockNotifier_NotifyApproverChange_Call {
+	_c.Call.Return(run)
+	return _c
+}

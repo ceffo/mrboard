@@ -23,7 +23,8 @@ type ClaimRequest struct {
 	Prior []string
 	// Authoritative marks Approvers as a set the caller just wrote itself, so
 	// the MR's live approver set, which can lag a write, is not consulted to
-	// detect a stale observation.
+	// detect a stale observation. Such a change is announced as made by
+	// mrboard; any other as made elsewhere.
 	Authoritative bool
 	// Discovered marks Approvers as a set the caller found on its first look at
 	// the MR, without seeing it change. Against a ledger last written under the
@@ -33,16 +34,26 @@ type ClaimRequest struct {
 	Discovered bool
 }
 
+// ClaimOutcome is the result of a claim.
+type ClaimOutcome struct {
+	// Owned reports that the caller owns the announcement.
+	Owned bool
+	// Previous is the set the announced change replaces, when Owned: the set
+	// the ledger last announced before it, or the request's Prior when the
+	// ledger holds no set comparable under the current approver meaning.
+	Previous []string
+}
+
 // ApproverClaims is the driven port for the approver-announcement ledger: a
 // per-MR, append-only record shared by every mrboard instance, through which
 // independent instances agree on which of them announces a given change.
 type ApproverClaims interface {
 	// Claim records req.Approvers and reports whether the caller owns the
-	// announcement of that set. It reports false, without error, when the set
-	// is already recorded or announced, when another instance won the same
-	// race, or when the MR's live approver set no longer matches req.Approvers (unless
-	// req.Authoritative).
-	Claim(ctx context.Context, req ClaimRequest) (owned bool, err error)
+	// announcement of that set, and which set it replaces. It reports not
+	// owned, without error, when the set is already recorded or announced,
+	// when another instance won the same race, or when the MR's live approver
+	// set no longer matches req.Approvers (unless req.Authoritative).
+	Claim(ctx context.Context, req ClaimRequest) (ClaimOutcome, error)
 
 	// Release withdraws the caller's announcement of approvers after delivery
 	// failed, so the next instance to observe that set announces it instead.

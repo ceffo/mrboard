@@ -141,3 +141,69 @@ func TestFoldApproverClaims_ExposesRunningState(t *testing.T) {
 	st = FoldApproverClaims([]ApproverClaim{claim(1, "a"), released(2, "a")})
 	assert.True(t, st.Released)
 }
+
+func legacy(id int64, approvers ...string) ApproverClaim {
+	c := claim(id, approvers...)
+	c.Legacy = true
+	return c
+}
+
+func TestFoldApproverClaims_Before(t *testing.T) {
+	tests := []struct {
+		name   string
+		ledger []ApproverClaim
+		id     int64
+		want   ClaimBefore
+	}{
+		{"first entry has nothing before it", []ApproverClaim{claim(1, "a")}, 1, ClaimBefore{}},
+		{
+			"a change replaces the running set",
+			[]ApproverClaim{claim(1, "a"), claim(2, "a", "b")},
+			2,
+			ClaimBefore{Approvers: []string{"a"}, Known: true},
+		},
+		{
+			"a redundant entry does not move the running set",
+			[]ApproverClaim{claim(1, "a"), claim(2, "b"), claim(3, "b"), claim(4, "c")},
+			4,
+			ClaimBefore{Approvers: []string{"b"}, Known: true},
+		},
+		{
+			"a released set was never delivered, so its re-claim replaces the set before it",
+			[]ApproverClaim{claim(1, "a"), claim(2, "b"), released(3, "b"), claim(4, "b")},
+			4,
+			ClaimBefore{Approvers: []string{"a"}, Known: true},
+		},
+		{
+			"a silent baseline is a known set",
+			[]ApproverClaim{silent(1, "a"), claim(2, "b")},
+			2,
+			ClaimBefore{Approvers: []string{"a"}, Known: true},
+		},
+		{
+			"a legacy set is not comparable",
+			[]ApproverClaim{legacy(1, "a", "optional"), claim(2, "a", "b")},
+			2,
+			ClaimBefore{Approvers: []string{"a", "optional"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := FoldApproverClaims(tt.ledger)
+			require.True(t, st.Announcers[tt.id])
+			assert.Equal(t, tt.want, st.Before[tt.id])
+		})
+	}
+}
+
+func TestNewApproverChange(t *testing.T) {
+	c := NewApproverChange([]string{"b", "a"}, []string{"c", "a", "c"}, ApproverChangedByMrboard)
+	assert.Equal(t, []string{"c"}, c.Gained)
+	assert.Equal(t, []string{"b"}, c.Lost)
+	assert.Equal(t, ApproverChangedByMrboard, c.Source)
+	assert.False(t, c.Empty())
+
+	assert.True(t, NewApproverChange([]string{"a"}, []string{"a"}, ApproverChangedElsewhere).Empty())
+	assert.Equal(t, []string{"a"}, NewApproverChange(nil, []string{"a"}, ApproverChangedElsewhere).Gained)
+	assert.Equal(t, []string{"a"}, NewApproverChange([]string{"a"}, nil, ApproverChangedElsewhere).Lost)
+}
