@@ -29,19 +29,24 @@ type ApproverClaim struct {
 	// A release takes effect only while that set is still the ledger's
 	// running state; once another entry has moved on, it is ignored.
 	Released bool
+	// Legacy marks an entry written before an approver meant a required
+	// approver (docs/adr/0016): its set may hold members of optional rules.
+	// Entries are written in the current format; Legacy ones are only read.
+	Legacy bool
 }
 
 const (
 	claimTag    = "mrboard:approvers-claim"
-	claimMarker = "<!-- " + claimTag + " v1"
+	claimMarker = "<!-- " + claimTag + " v2"
 	claimEnd    = "<!-- /" + claimTag + " -->"
 	hashLen     = 16
 )
 
 // claimPattern matches one claim block anywhere in a note body, so text a
-// person adds around it does not hide the claim.
+// person adds around it does not hide the claim. v1 is the legacy format, v2
+// the current one; mrboard versions that read only v1 do not see v2 entries.
 var claimPattern = regexp.MustCompile(
-	`(?s)<!-- ` + claimTag + ` v1 released=(true|false) silent=(true|false) approvers=([A-Za-z0-9._,-]*) -->` +
+	`(?s)<!-- ` + claimTag + ` (v1|v2) released=(true|false) silent=(true|false) approvers=([A-Za-z0-9._,-]*) -->` +
 		`.*?<!-- /` + claimTag + ` -->`)
 
 // NormalizeApprovers returns usernames sorted and deduplicated.
@@ -79,10 +84,11 @@ func ParseApproverClaim(body string) (c ApproverClaim, ok bool) {
 	if m == nil {
 		return ApproverClaim{}, false
 	}
-	c.Released = m[1] == "true"
-	c.Silent = m[2] == "true"
-	if m[3] != "" {
-		c.Approvers = NormalizeApprovers(strings.Split(m[3], ","))
+	c.Legacy = m[1] == "v1"
+	c.Released = m[2] == "true"
+	c.Silent = m[3] == "true"
+	if m[4] != "" {
+		c.Approvers = NormalizeApprovers(strings.Split(m[4], ","))
 	}
 	return c, true
 }
@@ -95,6 +101,8 @@ type ClaimLedgerState struct {
 	Released bool
 	// Approvers is the set the latest entry recorded.
 	Approvers []string
+	// Legacy is true when the latest entry is a Legacy one.
+	Legacy bool
 	// Announcers holds the IDs of the entries that own an announcement.
 	Announcers map[int64]bool
 }
@@ -126,6 +134,7 @@ func FoldApproverClaims(claims []ApproverClaim) ClaimLedgerState {
 		st.Empty = false
 		st.Released = false
 		st.Approvers = c.Approvers
+		st.Legacy = c.Legacy
 	}
 	return st
 }

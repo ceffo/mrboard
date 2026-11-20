@@ -31,7 +31,7 @@ covers only the shape.
 | `phase` | string | One of `draft`, `needs_review`, `needs_author_action`, `ready_to_merge`, `unknown`. |
 | `author` | string | Author's GitLab username. |
 | `reviewer_states` | array of reviewer | One entry per reviewer; `[]` when the MR has none. |
-| `approvals_required` | number | Count of reviewers with `is_approver: true`; `0` when no approvers are designated. |
+| `approvals_required` | number | Count of reviewers with `is_approver: true`; `0` when no approvers are designated. Optional approvals (a rule needing fewer approvals than it has members) are not counted. |
 | `time_in_phase` | string | Display text for how long the MR has waited in its phase, e.g. `3h 12m`, `< 1m`, `2mo 4d`. |
 | `time_open` | string | Same format, since the MR was created. |
 | `merged_at` | string or `null` | `null` for an open MR; RFC 3339 for a merged one. Merged MRs only appear with `--merged-since`. |
@@ -51,7 +51,7 @@ covers only the shape.
 | --- | --- | --- |
 | `username` | string | Reviewer's GitLab username. |
 | `state` | string | One of `not_started`, `commented`, `re_review_requested`, `approved`, `unknown`. |
-| `is_approver` | boolean | `true` when the reviewer is a designated approver of the MR, `false` otherwise. |
+| `is_approver` | boolean | `true` when the reviewer is a required approver of the MR: a member of an approval rule that needs every member's approval, or of `approvers_mrboard` ([ADR-0016](adr/0016-required-approvers.md)). `false` otherwise, including for a member of a rule needing only some of its members (1 of 5) and for a member GitLab does not let approve this MR (an author or committer, when the project prevents their approval). |
 
 ## Keys relative to `current_user`
 

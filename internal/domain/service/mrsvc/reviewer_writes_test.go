@@ -293,7 +293,9 @@ func liveWithForeignRule() domain.MergeRequest {
 		domain.ReviewerInfo{Username: userBob},
 		domain.ReviewerInfo{Username: userCarol},
 	)
-	mr.ApproverRules = []domain.ApproverRule{{Name: "orekit-stelar", Approvers: []string{userAlice, userDave}}}
+	mr.ApproverRules = []domain.ApproverRule{
+		{Name: "orekit-stelar", Approvers: []string{userAlice, userDave}, ApprovalsRequired: 2},
+	}
 	mr.SetManagedApprovers([]string{userBob})
 	return mr
 }
@@ -322,6 +324,72 @@ func TestApplyReviewerChanges_NeverCopiesLockedApproversIntoTheManagedRule(t *te
 	for _, r := range mr.Reviewers {
 		assert.True(t, r.IsApprover, "@%s", r.Username)
 	}
+}
+
+// liveWithManagedRule is an MR reviewed by alice and bob whose managed rule has
+// both as members and eligible as its eligible approvers.
+func liveWithManagedRule(required int, eligible ...string) domain.MergeRequest {
+	mr := fetchedMR(domain.ReviewerInfo{Username: userAlice}, domain.ReviewerInfo{Username: userBob})
+	mr.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: eligible, Members: []string{userAlice, userBob},
+		ApprovalsRequired: required, Managed: true, UserIDs: map[string]int64{userAlice: 101, userBob: 102},
+	}})
+	return mr
+}
+
+func TestApplyReviewerChanges_KeepsManagedMembersWhoseRuleNeedsFewerApprovals(t *testing.T) {
+	live := liveWithManagedRule(1, userAlice, userBob) // approvals required lowered by hand in GitLab
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+
+	before := []mrsvc.ReviewerEdit{
+		{Username: userAlice, UserID: 101, IsApprover: true},
+		{Username: userBob, UserID: 102, IsApprover: true},
+	}
+	after := append(append([]mrsvc.ReviewerEdit(nil), before...),
+		mrsvc.ReviewerEdit{Username: userCarol, UserID: 103, IsApprover: true})
+	mr, _, err := applyChanges(src,
+		mrsvc.ReviewerChange{Staged: after, Baseline: before, Mode: mrsvc.ReviewerWriteEdit}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{userAlice, userBob, userCarol}, mr.ManagedApprovers())
+}
+
+// A managed rule whose eligible approvers leave bob out because he cannot
+// approve (he pushed a commit on a project preventing committer approval):
+// he is still a member, and adding carol keeps him on the rule.
+func TestApplyReviewerChanges_KeepsManagedMembersOfARuleReadShort(t *testing.T) {
+	live := liveWithManagedRule(2, userAlice)
+	src := mocks.NewMockMergeRequestSource(t)
+	src.EXPECT().FetchMR(mock.Anything, writeTestProjectID, writeTestMRIID).Return(live, nil).Twice()
+	src.EXPECT().SetReviewers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+	src.EXPECT().SaveApprovers(mock.Anything, writeTestProjectID, writeTestMRIID, []int64{101, 102, 103}).
+		Return(nil).Once()
+
+	before := []mrsvc.ReviewerEdit{
+		{Username: userAlice, UserID: 101, IsApprover: true},
+		{Username: userBob, UserID: 102, IsApprover: true},
+	}
+	after := append(append([]mrsvc.ReviewerEdit(nil), before...),
+		mrsvc.ReviewerEdit{Username: userCarol, UserID: 103, IsApprover: true})
+	mr, _, err := applyChanges(src,
+		mrsvc.ReviewerChange{Staged: after, Baseline: before, Mode: mrsvc.ReviewerWriteEdit}, map[string]int64{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{userAlice, userBob, userCarol}, mr.ManagedApprovers(), "alice and bob survive the save")
+	assert.Equal(t, []string{userAlice, userCarol}, mr.Approvers,
+		"bob stays ineligible after the write; carol, new to the rule, counts")
+	flags := map[string]bool{}
+	for _, r := range mr.Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{userAlice: true, userBob: false}, flags,
+		"the refetch predates carol's reviewer assignment; bob is not flagged approver")
 }
 
 func TestApplyReviewerChanges_UnionLeavesALockedApproverOutOfTheManagedRule(t *testing.T) {

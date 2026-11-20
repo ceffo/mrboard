@@ -123,21 +123,23 @@ func TestReviewersFixture_UnionKeepsWhatEachRelatedMRAlreadyHas(t *testing.T) {
 		wantReviewers []string
 		wantApprovers []string
 	}{
-		{101, 502, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
+		// Like GitLab by default, the demo does not let an author approve: grace wrote !502 and !509,
+		// katherine !505 and !511.
+		{101, 502, []string{userGrace, userKatherine, userLinus}, []string{userKatherine}},
 		{102, 503, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{103, 504, []string{userGrace, userKatherine, userLinus, userMargaret}, []string{userGrace, userKatherine}},
-		{101, 505, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
+		{101, 505, []string{userGrace, userKatherine, userLinus}, []string{userGrace}},
 		{102, 506, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{103, 507, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{101, 508, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		{
 			102, 509,
 			[]string{userEdsger, userGrace, userKatherine, userLinus, userMargaret},
-			[]string{userGrace, userKatherine, userMargaret},
+			[]string{userKatherine, userMargaret},
 		},
 		{103, 510, []string{userBarbara, userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine}},
 		// linus stays an approver although the staged edit lists him as a plain reviewer.
-		{101, 511, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userKatherine, userLinus}},
+		{101, 511, []string{userGrace, userKatherine, userLinus}, []string{userGrace, userLinus}},
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("!%d", tc.iid), func(t *testing.T) {
@@ -296,7 +298,7 @@ func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T)
 	a := newTestAdapterFor(t, reviewersFixture)
 	before := fetchMR(t, a, 102, 550)
 	require.Equal(t, map[string][]string{userBarbara: {"platform-owners"}, userEdsger: {"platform-owners"}},
-		before.LockedApprovers())
+		before.LockedApprovers(), "console-reviewers needs one of two approvals: it locks no one")
 
 	// Untick grace and drop edsger as a reviewer.
 	baseline := []mrsvc.ReviewerEdit{
@@ -307,6 +309,31 @@ func TestReviewersFixture_EditNeverChangesARuleMrboardDidNotCreate(t *testing.T)
 
 	after := fetchMR(t, a, 102, 550)
 	assert.Equal(t, before.LockedApprovers(), after.LockedApprovers(), "the project's rule must survive the write")
+	assert.Equal(t, unmanagedRules(before), unmanagedRules(after), "no unmanaged rule changes, optional ones included")
 	assert.Empty(t, after.ManagedApprovers(), "grace leaves mrboard's rule")
 	assert.Equal(t, []string{userBarbara, userEdsger}, after.Approvers, "the rule's approvers stay approvers")
+}
+
+func TestReviewersFixture_OptionalRuleMakesNoApprover(t *testing.T) {
+	a := newTestAdapterFor(t, reviewersFixture)
+	mr := fetchMR(t, a, 102, 550)
+
+	assert.Equal(t, []string{userBarbara, userEdsger, userGrace}, mr.Approvers,
+		"members of all-required rules only; console-reviewers needs one of two")
+	flags := map[string]bool{}
+	for _, r := range mr.Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{userGrace: true, userEdsger: true, userLinus: false}, flags)
+}
+
+// unmanagedRules returns mr's rules other than the managed one.
+func unmanagedRules(mr domain.MergeRequest) []domain.ApproverRule {
+	var out []domain.ApproverRule
+	for _, r := range mr.ApproverRules {
+		if !r.Managed {
+			out = append(out, r)
+		}
+	}
+	return out
 }

@@ -88,6 +88,7 @@ func (s *mrSource) SaveApprovers(ctx context.Context, projectID, mrIID int64, us
 	}
 	if !s.a.ds.mutate(key, func(mr *domain.MergeRequest) {
 		mr.SetManagedApprovers(usernames)
+		excludeAuthor(mr)
 	}) {
 		return fmt.Errorf("demo: no MR %d!%d", projectID, mrIID)
 	}

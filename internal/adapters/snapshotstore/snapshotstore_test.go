@@ -2,6 +2,7 @@ package snapshotstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -75,8 +76,8 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 // MR's stats unknown rather than an empty diff.
 func TestLoad_SnapshotWithoutDiffStats_LoadsWithStatsUnknown(t *testing.T) {
 	dir := t.TempDir()
-	legacy := `{"version": 1, "written_at": "2026-10-01T00:00:00Z",
-		"mrs": [{"ID": 1, "IID": 7, "ProjectID": 3, "Title": "old"}]}`
+	legacy := fmt.Sprintf(`{"version": %d, "written_at": "2026-10-01T00:00:00Z",
+		"mrs": [{"ID": 1, "IID": 7, "ProjectID": 3, "Title": "old"}]}`, currentVersion)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "snapshot.json"), []byte(legacy), fileMode))
 	store, err := New(Config{Dir: dir})
 	require.NoError(t, err)
@@ -112,4 +113,22 @@ func TestSaveLoad_DiffStatsRoundTrip(t *testing.T) {
 	assert.NotNil(t, out[1].DiffStats)
 	assert.Empty(t, out[1].DiffStats)
 	assert.Nil(t, out[2].DiffStats)
+}
+
+// TestLoad_SnapshotFromBeforeRequiredApprovers_IsAColdCache checks a version 1
+// snapshot, whose Approvers and IsApprover flags meant "eligible under any
+// rule", is discarded rather than shown with that meaning.
+func TestLoad_SnapshotFromBeforeRequiredApprovers_IsAColdCache(t *testing.T) {
+	dir := t.TempDir()
+	v1 := `{"version": 1, "written_at": "2026-10-01T00:00:00Z",
+		"mrs": [{"ID": 1, "IID": 7, "ProjectID": 3, "Approvers": ["alice"]}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "snapshot.json"), []byte(v1), fileMode))
+	store, err := New(Config{Dir: dir})
+	require.NoError(t, err)
+
+	mrs, writtenAt, err := store.Load()
+
+	require.NoError(t, err)
+	assert.Empty(t, mrs)
+	assert.True(t, writtenAt.IsZero())
 }

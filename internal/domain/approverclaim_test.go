@@ -61,7 +61,7 @@ func TestParseApproverClaim_RejectsMalformed(t *testing.T) {
 	for name, body := range map[string]string{
 		"plain comment": "looks good to me",
 		"no end tag":    "<!-- mrboard:approvers-claim v1 " + goodAttrs + " -->\nx",
-		"bad version":   block("v2", goodAttrs),
+		"bad version":   block("v3", goodAttrs),
 		"bad username":  block("v1", "released=false silent=false approvers=a b"),
 	} {
 		t.Run(name, func(t *testing.T) {

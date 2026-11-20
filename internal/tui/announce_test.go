@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -49,6 +50,13 @@ func claimReqFor(mr domain.MergeRequest, prior []string) mrsvc.ClaimRequest {
 	}
 }
 
+// discoveredReqFor is claimReqFor for a set found on the first look at mr.
+func discoveredReqFor(mr domain.MergeRequest, prior []string) mrsvc.ClaimRequest {
+	req := claimReqFor(mr, prior)
+	req.Discovered = true
+	return req
+}
+
 // announceResults executes cmd, flattening a batch, and returns the announce results.
 func announceResults(cmd tea.Cmd) []approverAnnounceResultMsg {
 	if cmd == nil {
@@ -75,7 +83,7 @@ func (f *announceFixture) refresh(mrs ...domain.MergeRequest) []approverAnnounce
 func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(mr, nil)).Return(true, nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, nil)).Return(true, nil)
 	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil)
 
 	res := f.refresh(mr)
@@ -86,7 +94,7 @@ func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.
 func TestApproverAnnounce_OldMRFirstSight_PriorIsItsCurrentSet(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(72*time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(mr, []string{editorTestApprover})).Return(false, nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, []string{editorTestApprover})).Return(false, nil)
 
 	res := f.refresh(mr)
 	require.Len(t, res, 1)
@@ -119,6 +127,23 @@ func TestApproverAnnounce_ChangeIsClaimedOnlyWhenSeenOnTwoRefreshes(t *testing.T
 
 	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).Return(false, nil).Once()
 	assert.Len(t, f.refresh(changed), 1)
+}
+
+func TestApproverAnnounce_OnlyTheFirstSightIsMarkedDiscovered(t *testing.T) {
+	f := newAnnounceFixture(t)
+	var got []mrsvc.ClaimRequest
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, req mrsvc.ClaimRequest) { got = append(got, req) }).
+		Return(false, nil).Times(2)
+
+	f.refresh(announceMR(time.Hour, editorTestApprover))
+	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
+	f.refresh(changed)
+	f.refresh(changed)
+
+	require.Len(t, got, 2)
+	assert.True(t, got[0].Discovered, "the first look at an MR finds its set without seeing it change")
+	assert.False(t, got[1].Discovered, "a change seen happening is not a discovery")
 }
 
 func TestApproverAnnounce_ChangeThatRevertsBeforeConfirmation_IsDropped(t *testing.T) {
@@ -198,7 +223,9 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	// A project rule keeps making dave an approver although he is no reviewer.
 	saved := before
 	saved.Reviewers = []domain.ReviewerInfo{{Username: editorTestOther}}
-	saved.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{testUserDave}}}
+	saved.ApproverRules = []domain.ApproverRule{
+		{Name: editorTestRepoRule, Approvers: []string{testUserDave}, ApprovalsRequired: 1},
+	}
 	saved.SetManagedApprovers([]string{editorTestOther})
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, testUserDave},
@@ -219,4 +246,49 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	confirmed.Approvers = []string{testUserDave, editorTestOther}
 	f.m.dirty = dirtySet{}
 	assert.Empty(t, f.refresh(confirmed), "the refresh that confirms the edit must not announce it again")
+}
+
+// A managed rule of alice and bob, where GitLab does not let bob approve (he
+// pushed a commit): saving carol in claims alice and carol, never bob, and the
+// read that confirms the save claims nothing.
+func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *testing.T) {
+	const carol = "carol"
+	f := newAnnounceFixture(t)
+	before := announceMR(time.Hour)
+	before.Reviewers = []domain.ReviewerInfo{{Username: editorTestApprover}, {Username: editorTestOther}}
+	before.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover},
+		Members: []string{editorTestApprover, editorTestOther}, ApprovalsRequired: 2, Managed: true,
+	}})
+	f.m.allMRs = []domain.MergeRequest{before}
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	require.Len(t, f.refresh(before), 1)
+
+	saved := before
+	saved.Reviewers = append(slices.Clone(before.Reviewers), domain.ReviewerInfo{Username: carol})
+	saved.SetManagedApprovers([]string{editorTestApprover, editorTestOther, carol})
+	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
+		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestApprover, carol},
+		Prior: []string{editorTestApprover}, Authoritative: true,
+	}).Return(true, nil).Once()
+	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil).Once()
+
+	_, cmd := f.m.handleReviewersSaved(ReviewersSavedMsg{MR: saved, ApproversChanged: true})
+	require.Len(t, announceResults(cmd), 1)
+	flags := map[string]bool{}
+	for _, r := range f.m.allMRs[0].Reviewers {
+		flags[r.Username] = r.IsApprover
+	}
+	assert.Equal(t, map[string]bool{editorTestApprover: true, editorTestOther: false, carol: true}, flags,
+		"bob gets no approver marker on the board")
+
+	confirmed := before
+	confirmed.Reviewers = saved.Reviewers
+	confirmed.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover, carol},
+		Members: []string{editorTestApprover, editorTestOther, carol}, ApprovalsRequired: 3, Managed: true,
+	}})
+	f.m.dirty = dirtySet{}
+	assert.Empty(t, f.refresh(confirmed), "the read confirming the save claims nothing")
+	assert.Empty(t, f.refresh(confirmed))
 }

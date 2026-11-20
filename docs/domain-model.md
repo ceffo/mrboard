@@ -113,14 +113,16 @@ type MergeRequest struct {
     TargetBranch        string
     Reviewers           []ReviewerInfo // Approvers appear first; distinguished by IsApprover
 
-    // Approvers is the union of every approval rule on the MR — usernames eligible to
-    // approve, regardless of whether they are currently assigned as a reviewer on this MR.
-    // Distinct from ReviewerInfo.IsApprover, which only flags entries already present in Reviewers.
+    // Approvers are the MR's required approvers: the members of every approval rule that
+    // needs every member's approval (docs/adr/0016), regardless of whether they are currently
+    // assigned as a reviewer on this MR. Distinct from ReviewerInfo.IsApprover, which only
+    // flags entries already present in Reviewers.
     Approvers []string
 
-    // ApproverRules are the rules Approvers is the union of: name, sorted approvers, and
-    // Managed for approvers_mrboard, the one rule mrboard writes (docs/adr/0002). Approvers
-    // of the other rules are locked as far as mrboard is concerned (LockedApprovers).
+    // ApproverRules are the rules Approvers is derived from: name, sorted eligible approvers,
+    // Members (the users added to the rule), ApprovalsRequired, and Managed for
+    // approvers_mrboard, the one rule mrboard writes (docs/adr/0002). Approvers of the other rules that require every member are locked
+    // as far as mrboard is concerned (LockedApprovers); optional rules lock no one.
     ApproverRules []ApproverRule
 
     CreatedAt         time.Time
@@ -155,14 +157,23 @@ type ReviewerInfo struct {
     State        ReviewerState
     WaitingSince time.Time // when ball landed in their court (or author's)
     ApprovedAt   time.Time // zero unless State == ReviewerApproved
-    IsApprover   bool      // true if this reviewer is eligible under any approval rule on the MR
+    IsApprover   bool      // true if this reviewer is a required approver of the MR
 }
 ```
 
-An **Approver** is a reviewer who is eligible to approve under any MR-level GitLab approval rule.
-Being an Approver is not a separate role — it is a property of a reviewer.
-`IsApprover` is populated from `GET .../merge_requests/:iid/approval_rules` (all rules, unioned;
-`eligible_approvers[].username`). If the MR has no approval rules, all `IsApprover` fields are false.
+An **Approver** is a reviewer whose approval is required: an eligible approver of a regular MR-level
+GitLab approval rule that needs at least one approval and at least as many as it has eligible
+approvers ([ADR-0016](adr/0016-required-approvers.md)). A rule needing more than it has members is
+one GitLab's read dropped members from, and every remaining member must approve. Members of a rule
+needing fewer approvals than it has members (1 of 5), or none, are not approvers; a user in both a
+required and an optional rule is one. The managed rule's (`approvers_mrboard`) eligible approvers
+are always approvers. Eligible approvers are counted exactly as GitLab returns them: GitLab already
+leaves out the author or committers when the project prevents their approval, and a managed member
+left out is still kept on the rule by a save (`ManagedApprovers` reads the rule's members). Being
+an Approver is not a separate role — it is a property of a reviewer. `IsApprover` is derived from
+the MR's approval rules (REST `approval_state` rules: `approvals_required`, `eligible_approvers[].username`;
+GraphQL `approvalState.rules`: `approvalsRequired`, `eligibleApprovers`) by `MergeRequest.ApplyApproverRules`. If no rule requires every member, all
+`IsApprover` fields are false.
 
 `WaitingSince` is computed and stored for every reviewer regardless of `IsApprover` — it is an
 objective fact about when their current state began, not a display decision. Basic reviewers are

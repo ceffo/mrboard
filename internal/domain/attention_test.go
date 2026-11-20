@@ -155,3 +155,43 @@ func TestNeedsAttention_AuthorOfWaitingMRWithApproversIsNotPrompted(t *testing.T
 	assert.False(t, mr.NeedsAttention(attnMe))
 	assert.True(t, mr.Concerns(attnMe), "the user's own MR stays visible")
 }
+
+// ruledReviewMR has reviewers alice, in a rule needing her approval, and bob
+// and carol, in a rule needing one approval of two: only alice is an approver.
+func ruledReviewMR() MergeRequest {
+	mr := MergeRequest{
+		Phase: PhaseNeedsReview,
+		Reviewers: []ReviewerInfo{
+			{Username: testUsername, State: ReviewerNotStarted},
+			{Username: testOther, State: ReviewerNotStarted},
+			{Username: userCarol, State: ReviewerApproved},
+		},
+	}
+	mr.ApplyApproverRules([]ApproverRule{
+		{Name: testRuleLeads, Approvers: []string{testUsername}, ApprovalsRequired: 1},
+		{Name: testRuleTeam, Approvers: []string{testOther, userCarol}, ApprovalsRequired: 1},
+	})
+	return mr
+}
+
+func TestNeedsReviewBy_OptionalRuleMemberIsNotAskedToReview(t *testing.T) {
+	mr := ruledReviewMR()
+
+	assert.True(t, mr.NeedsReviewBy(testUsername), "alice's approval is required")
+	assert.False(t, mr.NeedsReviewBy(testOther), "bob's approval is optional and he has not started")
+}
+
+func TestRolesOf_OptionalRuleMemberIsGatedOut(t *testing.T) {
+	mr := ruledReviewMR()
+
+	assert.Contains(t, mr.RolesOf(testUsername), RoleReviewer)
+	assert.NotContains(t, mr.RolesOf(testOther), RoleReviewer, "only required approvers count once an MR has one")
+}
+
+func TestClassifyPhase_OptionalApprovalIsNotAwaited(t *testing.T) {
+	mr := ruledReviewMR()
+	mr.Reviewers[0].State = ReviewerApproved
+
+	assert.Equal(t, PhaseReadyToMerge, ClassifyPhase(false, true, mr.Reviewers),
+		"alice approved; bob's optional approval does not hold the MR back")
+}

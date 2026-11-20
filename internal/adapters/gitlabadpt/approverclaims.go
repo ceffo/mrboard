@@ -41,6 +41,16 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool
 	if !state.Empty && !state.Released && domain.ApproverSetHash(state.Approvers) == want {
 		return false, nil
 	}
+	// A ledger last written under the old approver meaning cannot tell a
+	// discovered change from the meaning change itself, so a discovery leaves
+	// it alone: no entry (which would email the participants), no announcement.
+	// The next change this or another instance sees happen is recorded in the
+	// current format.
+	if !state.Empty && state.Legacy && req.Discovered {
+		logger.Debug("gitlab: approver claim skipped, legacy ledger",
+			"project_id", req.ProjectID, "mr_iid", req.MRIID)
+		return false, nil
+	}
 
 	// An observation can be stale by the time it is claimed; claiming it would
 	// announce a revert of a change another instance already announced.
@@ -143,5 +153,5 @@ func (a *GitLabAdapter) liveApprovers(ctx context.Context, projectID, mrIID int6
 	if err != nil {
 		return nil, err
 	}
-	return sortedUsernames(approverSetFromRESTRules(rules)), nil
+	return domain.RequiredApprovers(approverRulesFromRESTRules(rules)), nil
 }

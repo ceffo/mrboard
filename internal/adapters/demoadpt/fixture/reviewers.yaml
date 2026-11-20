@@ -345,13 +345,15 @@ merge_requests:
     approvers: [grace]
     approval_rules:
       - {name: platform-owners, approvers: [edsger, barbara]}
+      - {name: console-reviewers, approvals_required: 1, approvers: [linus, barbara]}
     reviewers:
       - {username: grace, approver: true, state: not_started, waiting_ago: 3h}
       - {username: edsger, state: not_started, waiting_ago: 3h}
       - {username: linus, state: not_started, waiting_ago: 3h}
     description: |-
       Open the editor here: edsger and barbara are approvers through a rule
-      mrboard must never change.
+      mrboard must never change. linus is only in console-reviewers, which
+      needs one approval of two: he is not an approver.
 
       ---
       🎫 [REV-500](https://tickets.demo.invalid/browse/REV-500) <!-- mrboard -->

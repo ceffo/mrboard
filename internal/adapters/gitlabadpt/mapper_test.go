@@ -1,6 +1,7 @@
 package gitlabadpt
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -31,6 +32,8 @@ const (
 	testUserBobName   = "Bob"
 	testUserPriya     = "priya"
 	testRepoRule      = "orekit-stelar"
+	testRuleLeads     = "leads"
+	testRuleTeam      = "team"
 )
 
 func basicUser(username, name string) *gl.BasicUser {
@@ -285,12 +288,20 @@ func TestMapMR_RoundTripCount(t *testing.T) {
 	assert.Equal(t, 2, result.RoundTripCount)
 }
 
+// approvalRule is a regular rule that needs every one of usernames to approve.
 func approvalRule(name string, usernames ...string) *gl.MergeRequestApprovalRule {
+	return approvalRuleNeeding(name, len(usernames), usernames...)
+}
+
+// approvalRuleNeeding is a regular rule that needs required approvals from usernames.
+func approvalRuleNeeding(name string, required int, usernames ...string) *gl.MergeRequestApprovalRule {
 	eligible := make([]*gl.BasicUser, len(usernames))
 	for i, u := range usernames {
 		eligible[i] = basicUser(u, u)
 	}
-	return &gl.MergeRequestApprovalRule{Name: name, RuleType: ruleTypeRegular, EligibleApprovers: eligible}
+	return &gl.MergeRequestApprovalRule{
+		Name: name, RuleType: ruleTypeRegular, ApprovalsRequired: int64(required), EligibleApprovers: eligible,
+	}
 }
 
 func TestMapMR_IsApprover_InApproversRule(t *testing.T) {
@@ -438,7 +449,7 @@ func TestMapMR_Approvers_IgnoresSystemManagedRules(t *testing.T) {
 	}
 }
 
-func TestApproverSetFromGQLRules_IgnoresSystemManagedRules(t *testing.T) {
+func TestMapMRFromGraphQL_Approvers_IgnoresSystemManagedRules(t *testing.T) {
 	codeOwners := pkggitlab.GQLApprovalRule{
 		Name:              "*",
 		Type:              "CODE_OWNER",
@@ -450,8 +461,11 @@ func TestApproverSetFromGQLRules_IgnoresSystemManagedRules(t *testing.T) {
 		Type:              gqlRuleTypeRegular,
 		EligibleApprovers: []pkggitlab.GQLUser{{Username: testUserAlice}},
 	}
-	set := approverSetFromGQLRules([]pkggitlab.GQLApprovalRule{codeOwners, anyApprover, regular})
-	assert.Equal(t, map[string]bool{testUserAlice: true}, set)
+	regular.ApprovalsRequired = 1
+	codeOwners.ApprovalsRequired = 1
+	mr := pkggitlab.GQLMergeRequest{}
+	mr.ApprovalState.Rules = []pkggitlab.GQLApprovalRule{codeOwners, anyApprover, regular}
+	assert.Equal(t, []string{testUserAlice}, MapMRFromGraphQL(mr).Approvers)
 }
 
 func TestMapMR_ApproverRules_MarksOnlyTheManagedRule(t *testing.T) {
@@ -465,8 +479,8 @@ func TestMapMR_ApproverRules_MarksOnlyTheManagedRule(t *testing.T) {
 	}
 	result := MapMR(m, nil, approvals(), rules)
 	assert.Equal(t, []domain.ApproverRule{
-		{Name: testRepoRule, Approvers: []string{testUserAlice, testUserCarol}},
-		{Name: approversRuleName, Approvers: []string{testUserBob}, Managed: true},
+		{Name: testRepoRule, Approvers: []string{testUserAlice, testUserCarol}, ApprovalsRequired: 2},
+		{Name: approversRuleName, Approvers: []string{testUserBob}, ApprovalsRequired: 1, Managed: true},
 	}, result.ApproverRules)
 	assert.Equal(t, []string{testUserBob}, result.ManagedApprovers())
 	assert.Equal(t, map[string][]string{testUserAlice: {testRepoRule}, testUserCarol: {testRepoRule}},
@@ -481,8 +495,8 @@ func TestMergeMRFromGraphQL_ApproverRules_FromFreshRules(t *testing.T) {
 	}
 	result := MergeMRFromGraphQL(mr, domain.MergeRequest{})
 	assert.Equal(t, []domain.ApproverRule{
-		{Name: testRepoRule, Approvers: []string{testUserCarol}},
-		{Name: approversRuleName, Approvers: []string{testUserAlice}, Managed: true},
+		{Name: testRepoRule, Approvers: []string{testUserCarol}, ApprovalsRequired: 1},
+		{Name: approversRuleName, Approvers: []string{testUserAlice}, ApprovalsRequired: 1, Managed: true},
 	}, result.ApproverRules)
 }
 
@@ -492,4 +506,194 @@ func TestMapMR_ApproverRules_CarriesManagedMemberIDs(t *testing.T) {
 	managed.EligibleApprovers[0].ID = 42
 	result := MapMR(m, nil, approvals(), []*gl.MergeRequestApprovalRule{managed})
 	assert.Equal(t, map[string]int64{testUserBob: 42}, result.ManagedApproverIDs())
+}
+
+// requiredApproverCases are the rule sets the required-approver definition is
+// tested against, keyed by the reviewers alice, bob and carol.
+var requiredApproverCases = []struct {
+	name  string
+	rules []testRule
+	want  []string
+}{
+	{
+		"every member required",
+		[]testRule{{testRuleLeads, 2, []string{testUserAlice, testUserBob}}},
+		[]string{testUserAlice, testUserBob},
+	},
+	{"one of several required", []testRule{{testRuleTeam, 1, []string{testUserAlice, testUserBob, testUserCarol}}}, nil},
+	{
+		"more required than members",
+		[]testRule{{testRuleTeam, 3, []string{testUserAlice, testUserBob}}},
+		[]string{testUserAlice, testUserBob},
+	},
+	{"no approval required", []testRule{{testRuleTeam, 0, []string{testUserAlice}}}, nil},
+	{
+		"member of a required and an optional rule",
+		[]testRule{{testRuleLeads, 1, []string{testUserAlice}}, {testRuleTeam, 1, []string{testUserAlice, testUserBob}}},
+		[]string{testUserAlice},
+	},
+	{
+		"several rules",
+		[]testRule{
+			{testRuleLeads, 1, []string{testUserAlice}},
+			{"security", 1, []string{testUserCarol}},
+			{testRuleTeam, 1, []string{testUserBob, testUserCarol}},
+		},
+		[]string{testUserAlice, testUserCarol},
+	},
+}
+
+type testRule struct {
+	name     string
+	required int
+	members  []string
+}
+
+func (r testRule) rest() *gl.MergeRequestApprovalRule {
+	return approvalRuleNeeding(r.name, r.required, r.members...)
+}
+
+func (r testRule) gql() pkggitlab.GQLApprovalRule {
+	rule := gqlApprovalRule(r.name, r.members...)
+	rule.ApprovalsRequired = r.required
+	return rule
+}
+
+// assertRequiredApprovers checks mr's Approvers and the IsApprover flags of
+// its reviewers alice, bob and carol against want.
+func assertRequiredApprovers(t *testing.T, want []string, mr domain.MergeRequest) {
+	t.Helper()
+	assert.Equal(t, want, mr.Approvers)
+	require.Len(t, mr.Reviewers, 3)
+	for _, r := range mr.Reviewers {
+		assert.Equal(t, slices.Contains(want, r.Username), r.IsApprover, "IsApprover for %s", r.Username)
+	}
+}
+
+func TestMapMR_RequiredApprovers(t *testing.T) {
+	for _, tc := range requiredApproverCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName),
+				basicUser(testUserCarol, testUserCarol))
+			var rules []*gl.MergeRequestApprovalRule
+			for _, r := range tc.rules {
+				rules = append(rules, r.rest())
+			}
+			assertRequiredApprovers(t, tc.want, MapMR(m, nil, approvals(), rules))
+		})
+	}
+}
+
+func gqlMRWithRules(rules []testRule) pkggitlab.GQLMergeRequest {
+	mr := pkggitlab.GQLMergeRequest{}
+	for _, u := range []string{testUserAlice, testUserBob, testUserCarol} {
+		mr.Reviewers.Nodes = append(mr.Reviewers.Nodes, pkggitlab.GQLUser{Username: u, Name: u})
+	}
+	for _, r := range rules {
+		mr.ApprovalState.Rules = append(mr.ApprovalState.Rules, r.gql())
+	}
+	return mr
+}
+
+// TestMapMRFromGraphQL_RequiredApprovers covers the fat and thin open-MR reads
+// and the merged-MR read, which all map through MapMRFromGraphQL.
+func TestMapMRFromGraphQL_RequiredApprovers(t *testing.T) {
+	for _, tc := range requiredApproverCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertRequiredApprovers(t, tc.want, MapMRFromGraphQL(gqlMRWithRules(tc.rules)))
+		})
+	}
+}
+
+func TestMergeMRFromGraphQL_RequiredApprovers(t *testing.T) {
+	for _, tc := range requiredApproverCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cached := domain.MergeRequest{Reviewers: []domain.ReviewerInfo{
+				{Username: testUserAlice, IsApprover: true},
+				{Username: testUserBob, IsApprover: true},
+				{Username: testUserCarol, IsApprover: true},
+			}}
+			assertRequiredApprovers(t, tc.want, MergeMRFromGraphQL(gqlMRWithRules(tc.rules), cached))
+		})
+	}
+}
+
+// restAndGQLWithAuthor maps one rule, needing required approvals from
+// eligible, through REST and GraphQL for an MR priya wrote. Every eligible
+// approver except priya is a reviewer.
+func restAndGQLWithAuthor(required int, eligible ...string) (rest, gql domain.MergeRequest) {
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName),
+		basicUser(testUserCarol, testUserCarol))
+	m.Author = basicUser(testUserPriya, testUserPriya)
+	rest = MapMR(m, nil, approvals(),
+		[]*gl.MergeRequestApprovalRule{approvalRuleNeeding(testRuleTeam, required, eligible...)})
+
+	g := gqlMRWithRules([]testRule{{testRuleTeam, required, eligible}})
+	g.Author = pkggitlab.GQLUser{Username: testUserPriya}
+	return rest, MapMRFromGraphQL(g)
+}
+
+// When the project prevents author approval, GitLab leaves priya out of both
+// reads' eligible approvers; the rule needs more approvals than remain, so
+// every remaining one is required.
+func TestRequiredApprovers_AuthorApprovalPrevented(t *testing.T) {
+	rest, gql := restAndGQLWithAuthor(3, testUserAlice, testUserBob)
+
+	want := []string{testUserAlice, testUserBob}
+	assertRequiredApprovers(t, want, rest)
+	assertRequiredApprovers(t, want, gql)
+	assert.Equal(t, rest.LockedApprovers(), gql.LockedApprovers())
+	assert.Equal(t, map[string][]string{testUserAlice: {testRuleTeam}, testUserBob: {testRuleTeam}},
+		gql.LockedApprovers(), "both remaining members are locked")
+}
+
+// When the project lets the author approve, priya is eligible like anyone
+// else: any 2 of the 3 approvals do, so no one is required.
+func TestRequiredApprovers_AuthorApprovalAllowed(t *testing.T) {
+	rest, gql := restAndGQLWithAuthor(2, testUserPriya, testUserAlice, testUserBob)
+
+	assertRequiredApprovers(t, nil, rest)
+	assertRequiredApprovers(t, nil, gql)
+	assert.Empty(t, rest.LockedApprovers())
+	assert.Empty(t, gql.LockedApprovers())
+}
+
+// TestMapMRFromGraphQL_ManagedRuleWithAnIneligibleMember covers a managed rule
+// of alice and bob needing 2 approvals that GraphQL lists with alice as its
+// only eligible approver (bob pushed a commit on a project preventing
+// committer approval): alice is an approver, and bob stays a managed member.
+func TestMapMRFromGraphQL_ManagedRuleWithAnIneligibleMember(t *testing.T) {
+	g := gqlMRWithRules([]testRule{{approversRuleName, 2, []string{testUserAlice}}})
+	g.ApprovalState.Rules[0].Users.Nodes = []pkggitlab.GQLUser{{Username: testUserAlice}, {Username: testUserBob}}
+
+	got := MapMRFromGraphQL(g)
+
+	assert.Equal(t, []string{testUserAlice}, got.Approvers)
+	assert.Equal(t, []string{testUserAlice, testUserBob}, got.ManagedApprovers())
+}
+
+// TestMapMR_ManagedRuleWithAnIneligibleMember is the REST read of the same
+// rule: bob's ID comes from the rule's users, so a write can keep him.
+func TestMapMR_ManagedRuleWithAnIneligibleMember(t *testing.T) {
+	rule := approvalRuleNeeding(approversRuleName, 2, testUserAlice)
+	rule.EligibleApprovers[0].ID = 101
+	rule.Users = []*gl.BasicUser{{ID: 101, Username: testUserAlice}, {ID: 102, Username: testUserBob}}
+	m := mr(basicUser(testUserAlice, testUserAliceName), basicUser(testUserBob, testUserBobName))
+
+	got := MapMR(m, nil, approvals(), []*gl.MergeRequestApprovalRule{rule})
+
+	assert.Equal(t, []string{testUserAlice}, got.Approvers)
+	assert.Equal(t, []string{testUserAlice, testUserBob}, got.ManagedApprovers())
+	assert.Equal(t, map[string]int64{testUserAlice: 101, testUserBob: 102}, got.ManagedApproverIDs())
+}
+
+func TestMapMRFromGraphQL_OptionalApproverDoesNotHoldBackReadyToMerge(t *testing.T) {
+	mr := gqlMRWithRules([]testRule{
+		{testRuleLeads, 1, []string{testUserAlice}},
+		{testRuleTeam, 1, []string{testUserBob, testUserCarol}},
+	})
+	mr.ApprovedBy.Nodes = []pkggitlab.GQLUser{{Username: testUserAlice}}
+
+	assert.Equal(t, domain.PhaseReadyToMerge, MapMRFromGraphQL(mr).Phase,
+		"bob and carol are optional: alice's approval is the only one required")
 }

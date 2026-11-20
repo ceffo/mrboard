@@ -488,7 +488,7 @@ func lockedFocusedMR() domain.MergeRequest {
 	mr := focusedMR()
 	mr.Reviewers = append(mr.Reviewers, domain.ReviewerInfo{Username: editorTestLocked})
 	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{
-		Name: editorTestRepoRule, Approvers: []string{editorTestLocked, editorTestLockedOnly},
+		Name: editorTestRepoRule, Approvers: []string{editorTestLocked, editorTestLockedOnly}, ApprovalsRequired: 2,
 	})
 	mr.SetManagedApprovers(mr.ManagedApprovers())
 	return mr
@@ -513,6 +513,25 @@ func TestReviewerEditorWidget_LockedRow_ToggleIsNoop(t *testing.T) {
 
 	assert.True(t, w2.staged[1].IsApprover, "space must not untick a locked approver")
 	assert.Equal(t, []string{editorTestRepoRule}, w2.staged[1].LockedBy)
+}
+
+func TestReviewerEditorWidget_OptionalRuleMemberIsNotLocked(t *testing.T) {
+	mr := lockedFocusedMR()
+	mr.ApproverRules[len(mr.ApproverRules)-1].ApprovalsRequired = 1
+	mr.SetManagedApprovers(mr.ManagedApprovers())
+	w := newReviewerEditorWidget(
+		context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
+		domain.NewTicketKeyMatcher(false),
+	)
+	require.Len(t, w.staged, 2)
+	require.Equal(t, editorTestLocked, w.staged[1].Username)
+	assert.Empty(t, w.staged[1].LockedBy, "a rule needing one of two approvals locks no one")
+	assert.False(t, w.staged[1].IsApprover, "a member of an optional rule starts unticked")
+	assert.NotContains(t, w.render(), "🔒", "no row is locked")
+
+	w.cursor = 1
+	updated, _ := w.Update(tea.KeyPressMsg{Text: " ", Code: ' '})
+	assert.True(t, updated.(*reviewerEditorWidget).staged[1].IsApprover, "space ticks an optional rule's member")
 }
 
 func TestReviewerEditorWidget_LockedRow_RendersRuleNameAndSummary(t *testing.T) {
@@ -572,7 +591,9 @@ func TestMakeReviewerWriteCmd_OldSnapshotWithoutRulesWritesOnlyTheManagedDelta(t
 		Approvers: []string{editorTestLocked},
 	}
 	live := snapshot
-	live.ApproverRules = []domain.ApproverRule{{Name: editorTestRepoRule, Approvers: []string{editorTestLocked}}}
+	live.ApproverRules = []domain.ApproverRule{
+		{Name: editorTestRepoRule, Approvers: []string{editorTestLocked}, ApprovalsRequired: 1},
+	}
 	live.SetManagedApprovers(nil)
 
 	w := newReviewerEditorWidget(
@@ -604,7 +625,9 @@ func TestReviewerEditorWidget_OtherApproversLine_FitsTheModalWidth(t *testing.T)
 	for i := range 30 {
 		many = append(many, "approver-with-a-long-username-"+string(rune('a'+i%26)))
 	}
-	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{Name: "a-very-long-project-rule", Approvers: many})
+	mr.ApproverRules = append(mr.ApproverRules, domain.ApproverRule{
+		Name: "a-very-long-project-rule", Approvers: many, ApprovalsRequired: len(many),
+	})
 	mr.SetManagedApprovers(mr.ManagedApprovers())
 	w := newReviewerEditorWidget(
 		context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap, nil, nil,
@@ -615,4 +638,23 @@ func TestReviewerEditorWidget_OtherApproversLine_FitsTheModalWidth(t *testing.T)
 	require.NotEmpty(t, line)
 	assert.LessOrEqual(t, lip.Width(line), max(lip.Width(reviewerListHint), lip.Width(reviewerSibHint)),
 		"the summary line is truncated to the modal's content width")
+}
+
+func TestReviewerEditorWidget_ManagedMemberGitLabDoesNotLetApprove_StartsTicked(t *testing.T) {
+	mr := domain.MergeRequest{
+		IID: 10, ProjectID: 100, ProjectPath: editorTestRepo,
+		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover}, {Username: editorTestOther}},
+	}
+	mr.ApplyApproverRules([]domain.ApproverRule{{
+		Name: domain.ManagedApproverRuleName, Approvers: []string{editorTestApprover},
+		Members: []string{editorTestApprover, editorTestOther}, ApprovalsRequired: 2, Managed: true,
+	}})
+	require.False(t, mr.Reviewers[1].IsApprover, "GitLab leaves the other member out of the eligible approvers")
+
+	w := newReviewerEditorWidget(context.Background(), mr, nil, Styles{}, DefaultReviewerEditorKeyMap,
+		mocks.NewMockMergeRequestSource(t), nil, domain.NewTicketKeyMatcher(false))
+
+	require.Len(t, w.staged, 2)
+	assert.True(t, w.staged[0].IsApprover)
+	assert.True(t, w.staged[1].IsApprover, "a managed member stays ticked, so a save keeps them on the rule")
 }

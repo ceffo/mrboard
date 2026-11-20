@@ -25,9 +25,11 @@ Each MR carries an append-only **ledger** of internal notes. An instance that se
 has not handled appends a claim for that set; replaying the ledger in note-ID order decides the
 announcer.
 
-- **Entry.** A self-delimiting block, `<!-- mrboard:approvers-claim v1 released=… silent=…
+- **Entry.** A self-delimiting block, `<!-- mrboard:approvers-claim v2 released=… silent=…
   approvers=a,b -->` … `<!-- /mrboard:approvers-claim -->`, found anywhere in a note body
-  (`domain.FormatApproverClaim` / `ParseApproverClaim`). System notes are ignored.
+  (`domain.FormatApproverClaim` / `ParseApproverClaim`). System notes are ignored. `v1` entries,
+  written before an approver meant a required approver, are still read, as legacy; a set found on the
+  first look at an MR is not claimed against a legacy ledger (ADR-0016).
 - **Election.** `domain.FoldApproverClaims` replays the entries. An entry owns an announcement
   exactly when it changes the running state and is not silent. Entries repeating the running state
   are redundant, so instances racing on one change collapse to the lowest note ID, and every instance
