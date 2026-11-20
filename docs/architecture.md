@@ -141,10 +141,13 @@ MR via `FetchMR` after a successful write.
 The Notify keybinding (`n`) calls `domain.Notifier.Notify(ctx, mr)`, implemented by `teamsnotify`
 for Microsoft Teams.
 
-With `notifications.teams.announce_approver_changes`, every fetch also hands each MR whose approver
-set changed to `mrsvc.AnnounceApproverChange`: `mrsvc.ApproverClaims` (implemented by `gitlabadpt`
-as a ledger of internal MR notes, folded by `domain.FoldApproverClaims`) elects one instance to call
-`Notify`. See `docs/adr/0014-approver-change-announcements.md`.
+With `notifications.teams.announce_approver_changes`, every fetch also hands each MR whose
+required-approver set changed to `mrsvc.AnnounceApproverChange`, and so does the approver editor's
+save: `mrsvc.ApproverClaims` (implemented by `gitlabadpt` as a ledger of internal MR notes, folded by
+`domain.FoldApproverClaims`) elects one instance and returns the set the change replaces. The winner
+builds a `domain.ApproverChange` (who gained and who lost required-approver status, and whether
+mrboard's editor or something else changed the rule) and calls `domain.Notifier.NotifyApproverChange`.
+See `docs/adr/0014-approver-change-announcements.md`.
 
 `internal/tui/version.go`'s `versionWidget` owns the update check end to end: a forced check on
 launch, a recurring one every `update_check.cache_ttl`, the footer badge and its `u` hint, the

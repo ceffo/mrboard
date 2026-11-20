@@ -95,3 +95,9 @@ func (n *notifier) Notify(_ context.Context, mr domain.MergeRequest) error {
 	n.a.logger.Info("demo: notification suppressed", "mr_iid", mr.IID, "title", mr.Title)
 	return nil
 }
+
+func (n *notifier) NotifyApproverChange(_ context.Context, mr domain.MergeRequest, change domain.ApproverChange) error {
+	n.a.logger.Info("demo: approver change notification suppressed", "mr_iid", mr.IID, "title", mr.Title,
+		"gained", change.Gained, "lost", change.Lost, "by_mrboard", change.Source == domain.ApproverChangedByMrboard)
+	return nil
+}

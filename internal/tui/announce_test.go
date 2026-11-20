@@ -83,8 +83,8 @@ func (f *announceFixture) refresh(mrs ...domain.MergeRequest) []approverAnnounce
 func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, nil)).Return(true, nil)
-	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, nil)).Return(mrsvc.ClaimOutcome{Owned: true}, nil)
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	res := f.refresh(mr)
 	require.Len(t, res, 1)
@@ -94,7 +94,8 @@ func TestApproverAnnounce_NewMRWithApprovers_IsClaimedWithEmptyPrior(t *testing.
 func TestApproverAnnounce_OldMRFirstSight_PriorIsItsCurrentSet(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(72*time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, []string{editorTestApprover})).Return(false, nil)
+	f.claims.EXPECT().Claim(mock.Anything, discoveredReqFor(mr, []string{editorTestApprover})).
+		Return(mrsvc.ClaimOutcome{}, nil)
 
 	res := f.refresh(mr)
 	require.Len(t, res, 1)
@@ -109,7 +110,8 @@ func TestApproverAnnounce_NoApproversAndNoHistory_MakesNoCalls(t *testing.T) {
 func TestApproverAnnounce_UnchangedSet_MakesNoFurtherCalls(t *testing.T) {
 	f := newAnnounceFixture(t)
 	mr := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(mr), 1)
 
 	assert.Empty(t, f.refresh(mr))
@@ -119,13 +121,15 @@ func TestApproverAnnounce_UnchangedSet_MakesNoFurtherCalls(t *testing.T) {
 func TestApproverAnnounce_ChangeIsClaimedOnlyWhenSeenOnTwoRefreshes(t *testing.T) {
 	f := newAnnounceFixture(t)
 	first := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(first), 1)
 
 	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
 	assert.Empty(t, f.refresh(changed), "a change seen once may be a stale read")
 
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	assert.Len(t, f.refresh(changed), 1)
 }
 
@@ -134,7 +138,7 @@ func TestApproverAnnounce_OnlyTheFirstSightIsMarkedDiscovered(t *testing.T) {
 	var got []mrsvc.ClaimRequest
 	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
 		Run(func(_ context.Context, req mrsvc.ClaimRequest) { got = append(got, req) }).
-		Return(false, nil).Times(2)
+		Return(mrsvc.ClaimOutcome{}, nil).Times(2)
 
 	f.refresh(announceMR(time.Hour, editorTestApprover))
 	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
@@ -149,7 +153,8 @@ func TestApproverAnnounce_OnlyTheFirstSightIsMarkedDiscovered(t *testing.T) {
 func TestApproverAnnounce_ChangeThatRevertsBeforeConfirmation_IsDropped(t *testing.T) {
 	f := newAnnounceFixture(t)
 	original := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(original), 1)
 
 	assert.Empty(t, f.refresh(announceMR(time.Hour, editorTestOther)))
@@ -168,12 +173,13 @@ func TestApproverAnnounce_UnconfirmedLocalWrite_IsSkipped(t *testing.T) {
 func TestApproverAnnounce_FailureRestoresThePreviousSetSoTheChangeIsRetried(t *testing.T) {
 	f := newAnnounceFixture(t)
 	first := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(first), 1)
 
 	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
 	require.Empty(t, f.refresh(changed))
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, assert.AnError).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(mrsvc.ClaimOutcome{}, assert.AnError).Once()
 	res := f.refresh(changed)
 	require.Len(t, res, 1)
 	require.Error(t, res[0].Err)
@@ -182,19 +188,21 @@ func TestApproverAnnounce_FailureRestoresThePreviousSetSoTheChangeIsRetried(t *t
 	f.m = next.(Model)
 
 	require.Empty(t, f.refresh(changed), "after a failure the change is pending again")
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	assert.Len(t, f.refresh(changed), 1)
 }
 
 func TestApproverAnnounce_NotPermitted_IsNotRetried(t *testing.T) {
 	f := newAnnounceFixture(t)
 	first := announceMR(time.Hour, editorTestApprover)
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(first), 1)
 
 	changed := announceMR(time.Hour, editorTestApprover, editorTestOther)
 	require.Empty(t, f.refresh(changed))
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, mrsvc.ErrClaimNotPermitted).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(mrsvc.ClaimOutcome{}, mrsvc.ErrClaimNotPermitted).Once()
 	res := f.refresh(changed)
 	require.Len(t, res, 1)
 
@@ -217,7 +225,8 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	f := newAnnounceFixture(t)
 	before := announceMR(time.Hour, editorTestApprover)
 	f.m.allMRs = []domain.MergeRequest{before}
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(before), 1)
 
 	// A project rule keeps making dave an approver although he is no reviewer.
@@ -230,8 +239,11 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, testUserDave},
 		Prior: []string{editorTestApprover}, Authoritative: true,
-	}).Return(true, nil).Once()
-	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil).Once()
+	}).Return(mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, domain.ApproverChange{
+		Gained: []string{editorTestOther, testUserDave}, Lost: []string{editorTestApprover},
+		Source: domain.ApproverChangedByMrboard,
+	}).Return(nil).Once()
 
 	_, cmd := f.m.handleReviewersSaved(ReviewersSavedMsg{MR: saved, ApproversChanged: true})
 	var announced int
@@ -261,7 +273,8 @@ func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *tes
 		Members: []string{editorTestApprover, editorTestOther}, ApprovalsRequired: 2, Managed: true,
 	}})
 	f.m.allMRs = []domain.MergeRequest{before}
-	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).Return(false, nil).Once()
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
 	require.Len(t, f.refresh(before), 1)
 
 	saved := before
@@ -270,8 +283,8 @@ func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *tes
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestApprover, carol},
 		Prior: []string{editorTestApprover}, Authoritative: true,
-	}).Return(true, nil).Once()
-	f.notifier.EXPECT().Notify(mock.Anything, mock.Anything).Return(nil).Once()
+	}).Return(mrsvc.ClaimOutcome{Owned: true}, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	_, cmd := f.m.handleReviewersSaved(ReviewersSavedMsg{MR: saved, ApproversChanged: true})
 	require.Len(t, announceResults(cmd), 1)
@@ -291,4 +304,93 @@ func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *tes
 	f.m.dirty = dirtySet{}
 	assert.Empty(t, f.refresh(confirmed), "the read confirming the save claims nothing")
 	assert.Empty(t, f.refresh(confirmed))
+}
+
+func TestApproverAnnounce_ChangeFoundOnRefresh_IsAttributedElsewhere(t *testing.T) {
+	f := newAnnounceFixture(t)
+	first := announceMR(72*time.Hour, editorTestApprover)
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Len(t, f.refresh(first), 1)
+
+	changed := announceMR(72*time.Hour, editorTestOther)
+	require.Empty(t, f.refresh(changed))
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(changed, []string{editorTestApprover})).
+		Return(mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, domain.ApproverChange{
+		Gained: []string{editorTestOther}, Lost: []string{editorTestApprover},
+		Source: domain.ApproverChangedElsewhere,
+	}).Return(nil).Once()
+
+	res := f.refresh(changed)
+	require.Len(t, res, 1)
+	assert.True(t, res[0].Announced)
+}
+
+func TestApproverAnnounce_ChangeInAnOptionalRuleOnly_MakesNoClaim(t *testing.T) {
+	f := newAnnounceFixture(t)
+	required := domain.ApproverRule{
+		Name: editorTestRepoRule, Approvers: []string{editorTestApprover}, ApprovalsRequired: 1,
+	}
+	mr := announceMR(72 * time.Hour)
+	mr.ApplyApproverRules([]domain.ApproverRule{required})
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Len(t, f.refresh(mr), 1)
+
+	changed := announceMR(72 * time.Hour)
+	changed.ApplyApproverRules([]domain.ApproverRule{required, {
+		Name: "optional", Approvers: []string{editorTestOther, testUserDave}, ApprovalsRequired: 1,
+	}})
+	assert.Empty(t, f.refresh(changed))
+	assert.Empty(t, f.refresh(changed), "a member of a rule needing one of two approvals is not required")
+}
+
+// An editor save whose Teams delivery fails is released and re-claimed by the
+// refreshes that confirm it: exactly one card goes out, and it reads "outside
+// mrboard", because the re-claim is not the editor's (docs/adr/0014).
+func TestApproverAnnounce_EditorSaveWithFailedDelivery_IsAnnouncedOnceByTheRefreshes(t *testing.T) {
+	f := newAnnounceFixture(t)
+	before := announceMR(72*time.Hour, editorTestApprover)
+	f.m.allMRs = []domain.MergeRequest{before}
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Len(t, f.refresh(before), 1)
+
+	saved := before
+	saved.Approvers = []string{editorTestOther}
+	edited := mrsvc.ClaimRequest{
+		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther},
+		Prior: []string{editorTestApprover}, Authoritative: true,
+	}
+	owned := mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}
+	f.claims.EXPECT().Claim(mock.Anything, edited).Return(owned, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.MatchedBy(
+		func(c domain.ApproverChange) bool { return c.Source == domain.ApproverChangedByMrboard },
+	)).Return(assert.AnError).Once()
+	f.claims.EXPECT().Release(mock.Anything, int64(7), int64(42), []string{editorTestOther}).Return(nil).Once()
+
+	res := announceResults(f.m.announceEditedApprovers(saved, before.Approvers))
+	require.Len(t, res, 1)
+	require.Error(t, res[0].Err)
+	next, _ := f.m.handleApproverAnnounceResult(res[0])
+	f.m = next.(Model)
+
+	var delivered []domain.ApproverChange
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(saved, []string{editorTestApprover})).
+		Return(owned, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ domain.MergeRequest, c domain.ApproverChange) {
+			delivered = append(delivered, c)
+		}).Return(nil).Once()
+
+	assert.Empty(t, f.refresh(saved), "the first refresh only sees the change once")
+	res = f.refresh(saved)
+	require.Len(t, res, 1)
+	assert.True(t, res[0].Announced)
+	assert.Equal(t, []domain.ApproverChange{{
+		Gained: []string{editorTestOther}, Lost: []string{editorTestApprover},
+		Source: domain.ApproverChangedElsewhere,
+	}}, delivered)
+	assert.Empty(t, f.refresh(saved), "a later refresh announces nothing more")
 }
