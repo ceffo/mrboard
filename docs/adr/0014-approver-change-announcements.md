@@ -1,6 +1,7 @@
 # ADR-0014: Approver Changes Are Announced Once, Through a Ledger on the MR
 
-**Status**: Accepted
+**Status**: Accepted. Amended by #105: an announcement names who gained and who lost
+required-approver status and says who changed the rule.
 
 ## Context
 
@@ -39,9 +40,26 @@ announcer.
   already records the set; confirm the live approver set still matches the observation (a stale
   instance would otherwise announce a revert); append the claim; wait `ClaimSettle` so concurrent
   claims land; read again; own the announcement only if this entry won.
-- **Delivery** (`mrsvc.AnnounceApproverChange`). The winner posts the existing Teams card. If that
-  fails it appends a `released` entry, which reopens the announcement for the next instance, and the
-  release only takes effect while that set is still the running state.
+- **Delivery** (`mrsvc.AnnounceApproverChange`). The winner posts a card through
+  `domain.Notifier.NotifyApproverChange`. If that fails it appends a `released` entry, which reopens
+  the announcement for the next instance, and the release only takes effect while that set is still
+  the running state.
+- **What is announced** (`domain.ApproverChange`). The sets are required approvers (ADR-0016), so a
+  change that only affects optional rules changes no set and is never claimed. The card names who
+  became a required approver (mentioned, since they are asked to act) and who stopped being one
+  (named, not mentioned). Both are the difference between the claimed set and the set it replaces,
+  which `Claim` returns (`mrsvc.ClaimOutcome.Previous`) from the fold (`ClaimLedgerState.Before`):
+  the running set before the winning entry, or, when that set's announcement was released, the set
+  before it, since a released set was never delivered. Every instance reading the ledger computes the
+  same difference. When no entry precedes the winner, or the preceding one is `v1` (its set may hold
+  members of optional rules), the claimer's `Prior` stands in, so the meaning change of ADR-0016 is
+  never announced as someone losing the status. A claimed set that differs from the one it replaces
+  by no one is recorded and not delivered.
+- **Source.** The card says whether the rule was changed through mrboard or outside it (a repository
+  rule, or an edit by hand in GitLab). A claim the editor makes for its own write
+  (`ClaimRequest.Authoritative`) is attributed to mrboard; a change found on a refresh, to another
+  source. The ledger does not record the source: the instance that wins the announcement attributes
+  it from what it knows.
 - **Prior set.** Each claim carries the set assumed to precede the MR's recorded history. An MR with
   no ledger whose observed set equals that prior gets no entry, so history mrboard never saw is not
   announced; otherwise the claim is the ledger's first entry and owns the announcement. An MR found
@@ -90,3 +108,7 @@ lower ID hidden from a reader who could see a higher one.
   changes; it never announces unilaterally. Any other write failure reports an error and retries on
   the next refresh.
 - Instances that do not enable the feature neither read nor write ledgers, and do not announce.
+- An editor write announced by an instance other than the writer is attributed to another source.
+  That happens only when the writer did not deliver it: its delivery failed and it released the
+  claim, it lacks the role to write the ledger, or it stopped before claiming. Recording the source in
+  the ledger entry would close this gap, at the cost of a ledger format change.
