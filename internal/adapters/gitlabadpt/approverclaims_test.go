@@ -381,6 +381,37 @@ func TestClaim_ChangeSeenAgainstLegacyLedger_ReportsThePriorNotTheLegacySet(t *t
 		"linus was only ever in an optional rule: he must not be announced as lost")
 }
 
+// The set this claim replaces is the last one delivered: bob's announcement
+// was released, so no one ever heard of him, and the change reads alice → carol.
+func TestClaim_DifferentSetAfterARelease_ReportsTheLastDeliveredSet(t *testing.T) {
+	const testUserCarol = "carol"
+	c := newFakeLedgerClient(testUserCarol)
+	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserAlice}}), false)
+	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserBob}}), false)
+	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserBob}, Released: true}), false)
+	a := &GitLabAdapter{client: c}
+
+	out, err := a.Claim(context.Background(), claimReq([]string{testUserCarol}, []string{testUserBob}))
+	require.NoError(t, err)
+	assert.Equal(t, mrsvc.ClaimOutcome{Owned: true, Previous: []string{testUserAlice}}, out)
+}
+
+// A loss seen against a v1 ledger: edsger left, and linus, who was only ever
+// in an optional rule, is not announced as lost with him.
+func TestClaim_LossSeenAgainstLegacyLedger_LostHasNoOptionalMember(t *testing.T) {
+	c := legacyLedgerClient(t)
+	c.liveRules[0] = approvalRule("approvers", testUserGrace)
+	a := &GitLabAdapter{client: c}
+	req := claimReq([]string{testUserGrace}, []string{testUserEdsger, testUserGrace})
+
+	out, err := a.Claim(context.Background(), req)
+	require.NoError(t, err)
+	require.True(t, out.Owned)
+	change := domain.NewApproverChange(out.Previous, req.Approvers, domain.ApproverChangedElsewhere)
+	assert.Equal(t, []string{testUserEdsger}, change.Lost)
+	assert.Empty(t, change.Gained)
+}
+
 func TestClaim_ChangeInAnOptionalRuleOnly_WritesNothing(t *testing.T) {
 	c := newFakeLedgerClient(testUserAlice)
 	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserAlice}}), false)

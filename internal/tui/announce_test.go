@@ -345,3 +345,52 @@ func TestApproverAnnounce_ChangeInAnOptionalRuleOnly_MakesNoClaim(t *testing.T) 
 	assert.Empty(t, f.refresh(changed))
 	assert.Empty(t, f.refresh(changed), "a member of a rule needing one of two approvals is not required")
 }
+
+// An editor save whose Teams delivery fails is released and re-claimed by the
+// refreshes that confirm it: exactly one card goes out, and it reads "outside
+// mrboard", because the re-claim is not the editor's (docs/adr/0014).
+func TestApproverAnnounce_EditorSaveWithFailedDelivery_IsAnnouncedOnceByTheRefreshes(t *testing.T) {
+	f := newAnnounceFixture(t)
+	before := announceMR(72*time.Hour, editorTestApprover)
+	f.m.allMRs = []domain.MergeRequest{before}
+	f.claims.EXPECT().Claim(mock.Anything, mock.Anything).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Len(t, f.refresh(before), 1)
+
+	saved := before
+	saved.Approvers = []string{editorTestOther}
+	edited := mrsvc.ClaimRequest{
+		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther},
+		Prior: []string{editorTestApprover}, Authoritative: true,
+	}
+	owned := mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}
+	f.claims.EXPECT().Claim(mock.Anything, edited).Return(owned, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.MatchedBy(
+		func(c domain.ApproverChange) bool { return c.Source == domain.ApproverChangedByMrboard },
+	)).Return(assert.AnError).Once()
+	f.claims.EXPECT().Release(mock.Anything, int64(7), int64(42), []string{editorTestOther}).Return(nil).Once()
+
+	res := announceResults(f.m.announceEditedApprovers(saved, before.Approvers))
+	require.Len(t, res, 1)
+	require.Error(t, res[0].Err)
+	next, _ := f.m.handleApproverAnnounceResult(res[0])
+	f.m = next.(Model)
+
+	var delivered []domain.ApproverChange
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(saved, []string{editorTestApprover})).
+		Return(owned, nil).Once()
+	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ domain.MergeRequest, c domain.ApproverChange) {
+			delivered = append(delivered, c)
+		}).Return(nil).Once()
+
+	assert.Empty(t, f.refresh(saved), "the first refresh only sees the change once")
+	res = f.refresh(saved)
+	require.Len(t, res, 1)
+	assert.True(t, res[0].Announced)
+	assert.Equal(t, []domain.ApproverChange{{
+		Gained: []string{editorTestOther}, Lost: []string{editorTestApprover},
+		Source: domain.ApproverChangedElsewhere,
+	}}, delivered)
+	assert.Empty(t, f.refresh(saved), "a later refresh announces nothing more")
+}

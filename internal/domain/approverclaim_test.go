@@ -175,6 +175,12 @@ func TestFoldApproverClaims_Before(t *testing.T) {
 			ClaimBefore{Approvers: []string{"a"}, Known: true},
 		},
 		{
+			"a different set claimed after a release replaces the last delivered set",
+			[]ApproverClaim{claim(1, "a"), claim(2, "b"), released(3, "b"), claim(4, "c")},
+			4,
+			ClaimBefore{Approvers: []string{"a"}, Known: true},
+		},
+		{
 			"a silent baseline is a known set",
 			[]ApproverClaim{silent(1, "a"), claim(2, "b")},
 			2,

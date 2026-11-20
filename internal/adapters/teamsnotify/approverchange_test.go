@@ -57,6 +57,16 @@ func TestBuildApproverChangeCard_LossOnly_HasNoMentions(t *testing.T) {
 	assert.Nil(t, card.MsTeams)
 }
 
+func TestBuildApproverChangePayload_LossOnly_SummaryNamesNoOneAsGained(t *testing.T) {
+	cfg := Config{UserIDs: map[string]string{approverUser: approverEmail}}
+	change := domain.ApproverChange{Lost: []string{approverUser}, Source: domain.ApproverChangedByMrboard}
+
+	p := buildApproverChangePayload(baseMR(), change, cfg)
+
+	assert.Equal(t, "Fix the flux capacitor · !42 delorean — no longer required: doc", p.Summary)
+	assert.NotContains(t, p.Summary, "<at>", "who lost the status is not pinged")
+}
+
 func TestSourceText_TellsTheSourcesApart(t *testing.T) {
 	assert.Contains(t, sourceText(domain.ApproverChangedByMrboard), "through mrboard")
 	assert.Contains(t, sourceText(domain.ApproverChangedElsewhere), "outside mrboard")
