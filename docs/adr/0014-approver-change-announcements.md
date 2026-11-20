@@ -108,7 +108,13 @@ lower ID hidden from a reader who could see a higher one.
   changes; it never announces unilaterally. Any other write failure reports an error and retries on
   the next refresh.
 - Instances that do not enable the feature neither read nor write ledgers, and do not announce.
-- An editor write announced by an instance other than the writer is attributed to another source.
-  That happens only when the writer did not deliver it: its delivery failed and it released the
-  claim, it lacks the role to write the ledger, or it stopped before claiming. Recording the source in
-  the ledger entry would close this gap, at the cost of a ledger format change.
+- An editor write is attributed to another source whenever its editor claim does not deliver it.
+  If the delivery fails (the claim is released) or the claim itself errors, the writer restores the
+  set it had handled before, and the change is claimed again on a later refresh: by the writer or by
+  any other instance, without `Authoritative`, so as found outside mrboard. The same holds when the
+  writer lacks the role to write the ledger, or stopped before claiming, and another instance
+  announces the change. Recording the source in the ledger would close this gap.
+- An editor save made while a change found outside mrboard is still being debounced (seen on one
+  refresh, not yet claimed) announces both together: the difference is taken against the set the
+  ledger last announced, so the outside change's gain or loss appears under "changed through
+  mrboard". The window is one refresh interval.

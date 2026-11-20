@@ -26,6 +26,9 @@ func AnnounceApproverChange(
 	if err != nil || !outcome.Owned {
 		return false, err
 	}
+	// The source describes the claim, not each user in it: an editor write
+	// claimed while an outside change is still unclaimed announces both
+	// under the editor's source (docs/adr/0014).
 	source := domain.ApproverChangedElsewhere
 	if req.Authoritative {
 		source = domain.ApproverChangedByMrboard
