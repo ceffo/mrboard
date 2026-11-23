@@ -48,22 +48,22 @@ func (_m *MockApproverClaims) EXPECT() *MockApproverClaims_Expecter {
 }
 
 // Claim provides a mock function for the type MockApproverClaims
-func (_mock *MockApproverClaims) Claim(ctx context.Context, req mrsvc.ClaimRequest) (bool, error) {
+func (_mock *MockApproverClaims) Claim(ctx context.Context, req mrsvc.ClaimRequest) (mrsvc.ClaimOutcome, error) {
 	ret := _mock.Called(ctx, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Claim")
 	}
 
-	var r0 bool
+	var r0 mrsvc.ClaimOutcome
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.ClaimRequest) (bool, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.ClaimRequest) (mrsvc.ClaimOutcome, error)); ok {
 		return returnFunc(ctx, req)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.ClaimRequest) bool); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, mrsvc.ClaimRequest) mrsvc.ClaimOutcome); ok {
 		r0 = returnFunc(ctx, req)
 	} else {
-		r0 = ret.Get(0).(bool)
+		r0 = ret.Get(0).(mrsvc.ClaimOutcome)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, mrsvc.ClaimRequest) error); ok {
 		r1 = returnFunc(ctx, req)
@@ -103,12 +103,12 @@ func (_c *MockApproverClaims_Claim_Call) Run(run func(ctx context.Context, req m
 	return _c
 }
 
-func (_c *MockApproverClaims_Claim_Call) Return(owned bool, err error) *MockApproverClaims_Claim_Call {
-	_c.Call.Return(owned, err)
+func (_c *MockApproverClaims_Claim_Call) Return(claimOutcome mrsvc.ClaimOutcome, err error) *MockApproverClaims_Claim_Call {
+	_c.Call.Return(claimOutcome, err)
 	return _c
 }
 
-func (_c *MockApproverClaims_Claim_Call) RunAndReturn(run func(ctx context.Context, req mrsvc.ClaimRequest) (bool, error)) *MockApproverClaims_Claim_Call {
+func (_c *MockApproverClaims_Claim_Call) RunAndReturn(run func(ctx context.Context, req mrsvc.ClaimRequest) (mrsvc.ClaimOutcome, error)) *MockApproverClaims_Claim_Call {
 	_c.Call.Return(run)
 	return _c
 }

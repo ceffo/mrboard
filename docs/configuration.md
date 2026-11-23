@@ -146,10 +146,14 @@ notifications:
     new_mr_window: 24h                # default 24h
 ```
 
-With `announce_approver_changes`, every running mrboard announces approver changes it discovers on
-any MR it shows — including ones made directly in GitLab by someone who does not use mrboard —
-and the instances agree through a ledger of internal notes on the MR so each change is announced
-once. An MR whose approvers have not changed since mrboard first saw it gets no note;
+With `announce_approver_changes`, every running mrboard announces changes of required approvers
+([adr/0016-required-approvers.md](adr/0016-required-approvers.md)) it discovers on any MR it shows —
+including ones made directly in GitLab by someone who does not use mrboard — and the instances agree
+through a ledger of internal notes on the MR so each change is announced once. The card mentions who
+became a required approver, names who stopped being one, and says whether the rule was changed
+through mrboard or outside it (a GitLab rule or an edit by hand). A change that only affects optional
+rules announces nothing. An MR whose approvers have not changed since mrboard first saw
+it gets no note;
 `new_mr_window` is how recent an MR must be for its first approver set to count as news. Each
 ledger note emails the MR's participants like any comment would. See
 [adr/0014-approver-change-announcements.md](adr/0014-approver-change-announcements.md).

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ceffo/mrboard/internal/adapters/demoadpt"
 	"github.com/ceffo/mrboard/internal/config"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 	ilog "github.com/ceffo/mrboard/internal/log"
 )
 
@@ -19,6 +20,7 @@ func applyDemoSettings(cfg *config.AppConfig, s demoadpt.Settings) {
 		cfg.Sources = []config.Source{{Type: "user", IDs: s.Team}}
 	}
 	cfg.AutoAssignReviewers.Enabled = s.AutoAssignReviewers
+	cfg.Notifications.Teams.AnnounceApproverChanges = s.AnnounceApproverChanges
 }
 
 // NewDemo wires the application against the built-in demo dataset: no clients,
@@ -52,7 +54,12 @@ func NewDemo(_ context.Context, cfg *config.AppConfig, fixture string) (*Core, e
 
 	// One instance serves both ticket ports, as in New.
 	ticketAdpt := adpt.Tickets()
+	var approverClaims mrsvc.ApproverClaims
+	if cfg.Notifications.Teams.AnnounceApproverChanges {
+		approverClaims = adpt.ApproverClaims()
+	}
 	return &Core{
+		ApproverClaims:      approverClaims,
 		MRSource:            adpt.MRSource(),
 		StateStore:          adpt.StateStore(),
 		SnapshotStore:       adpt.SnapshotStore(),

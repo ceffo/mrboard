@@ -12,6 +12,7 @@ import (
 const (
 	approverUser        = "doc"
 	approverDisplayName = "Emmett Brown"
+	approverEmail       = "doc@example.com"
 )
 
 func baseMR() domain.MergeRequest {
@@ -55,7 +56,7 @@ func TestBuildCard_FallbackText_NoApprovers_OmitsPingSuffix(t *testing.T) {
 func TestBuildPayload_SummaryUsesEmailMentionTags(t *testing.T) {
 	cfg := Config{
 		UserMappings: map[string]string{approverUser: approverDisplayName},
-		UserIDs:      map[string]string{approverUser: "doc@example.com"},
+		UserIDs:      map[string]string{approverUser: approverEmail},
 	}
 	p := buildPayload(baseMR(), cfg)
 
@@ -63,7 +64,7 @@ func TestBuildPayload_SummaryUsesEmailMentionTags(t *testing.T) {
 	assert.NotEmpty(t, p.Summary, "Summary must not be empty")
 	// Summary uses <at>email</at> for approvers with a configured UserID so
 	// Teams resolves them as @mentions and fires push notifications.
-	assert.Contains(t, p.Summary, "<at>doc@example.com</at>",
+	assert.Contains(t, p.Summary, "<at>"+approverEmail+"</at>",
 		"Summary should contain email mention tag, got %q", p.Summary)
 	// FallbackText uses plain display names (for email/non-card clients) and
 	// must NOT contain <at> tags.

@@ -195,7 +195,9 @@ func TestEveryFixtureIsSelfConsistent(t *testing.T) {
 
 func TestFixtures_ListsEveryEmbeddedDataset(t *testing.T) {
 	assert.Contains(t, Fixtures(), DefaultFixture, "the default fixture must be embedded")
-	assert.Equal(t, []string{"auto-assign", "gif", "load", "refresh-failure", "review-size", "reviewers"}, Fixtures())
+	assert.Equal(t,
+		[]string{"announce", "auto-assign", "gif", "load", "refresh-failure", "review-size", "reviewers"},
+		Fixtures())
 }
 
 func TestNew_UnknownFixtureNamesTheAvailableOnes(t *testing.T) {

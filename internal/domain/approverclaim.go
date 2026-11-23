@@ -105,6 +105,28 @@ type ClaimLedgerState struct {
 	Legacy bool
 	// Announcers holds the IDs of the entries that own an announcement.
 	Announcers map[int64]bool
+	// Before holds, per announcing entry, the set its announcement replaces.
+	Before map[int64]ClaimBefore
+}
+
+// ClaimBefore is the set an announcing entry replaces: the running set before
+// it, or, when that set's announcement was released, the set before that one,
+// since a released set was never delivered.
+type ClaimBefore struct {
+	Approvers []string
+	// Known is false when no entry precedes the announcing one, or when the
+	// preceding entry is Legacy: its set may hold members of optional rules,
+	// so comparing against it would report the meaning change as a change.
+	Known bool
+}
+
+// Replaced returns the set the announcing entry id replaces: the folded one
+// when it is Known, else prior, the set the claimer assumed before the change.
+func (s ClaimLedgerState) Replaced(id int64, prior []string) []string {
+	if before := s.Before[id]; before.Known {
+		return before.Approvers
+	}
+	return prior
 }
 
 // FoldApproverClaims replays a ledger in ID order. An entry owns an
@@ -116,8 +138,11 @@ func FoldApproverClaims(claims []ApproverClaim) ClaimLedgerState {
 	ordered := slices.Clone(claims)
 	slices.SortFunc(ordered, func(a, b ApproverClaim) int { return int(a.ID - b.ID) })
 
-	st := ClaimLedgerState{Empty: true, Announcers: make(map[int64]bool)}
+	st := ClaimLedgerState{
+		Empty: true, Announcers: make(map[int64]bool), Before: make(map[int64]ClaimBefore),
+	}
 	var running string
+	var before ClaimBefore
 	for _, c := range ordered {
 		hash := ApproverSetHash(c.Approvers)
 		if c.Released {
@@ -127,8 +152,14 @@ func FoldApproverClaims(claims []ApproverClaim) ClaimLedgerState {
 			}
 			continue
 		}
-		if (st.Empty || hash != running) && !c.Silent {
-			st.Announcers[c.ID] = true
+		if st.Empty || hash != running {
+			if !st.Released {
+				before = ClaimBefore{Approvers: st.Approvers, Known: !st.Empty && !st.Legacy}
+			}
+			if !c.Silent {
+				st.Announcers[c.ID] = true
+				st.Before[c.ID] = before
+			}
 		}
 		running = hash
 		st.Empty = false
