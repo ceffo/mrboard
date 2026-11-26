@@ -138,7 +138,7 @@ func ApplyReviewerChanges(
 	if err != nil {
 		return domain.MergeRequest{}, false, fmt.Errorf("re-read MR before writing reviewers: %w", err)
 	}
-	desired := ResolveReviewerSet(withManagedApprovers(live), change)
+	desired := ResolveReviewerSet(WithManagedApprovers(live), change)
 	if knownIDs == nil {
 		knownIDs = make(map[string]int64)
 	}
@@ -198,11 +198,11 @@ func ApplyReviewerChanges(
 	return mr, approversChanged, err
 }
 
-// withManagedApprovers returns live's reviewers with every member of the
+// WithManagedApprovers returns live's reviewers with every member of the
 // managed rule flagged approver, including one GitLab does not let approve
 // this MR: the flag only comes off by a write that flips it, so a save keeps
 // them on the rule.
-func withManagedApprovers(live domain.MergeRequest) []domain.ReviewerInfo {
+func WithManagedApprovers(live domain.MergeRequest) []domain.ReviewerInfo {
 	managed := live.ManagedApprovers()
 	reviewers := slices.Clone(live.Reviewers)
 	for i := range reviewers {

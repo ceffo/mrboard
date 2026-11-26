@@ -732,7 +732,7 @@ func (w *reviewerEditorWidget) renderSiblings(sb *strings.Builder) {
 // that applying the staged edit to sib's MR would add, sorted. Applying to a
 // sibling only ever adds (mrsvc.ReviewerWriteUnion).
 func (w *reviewerEditorWidget) siblingAdditions(sib domain.MergeRequest) []string {
-	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(w.staged, sib, true)
+	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(w.staged, nil, sib, true)
 	added := append(append([]string{}, reviewersAdded...), approversAdded...)
 	sort.Strings(added)
 	return added

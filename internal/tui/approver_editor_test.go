@@ -19,12 +19,13 @@ import (
 const (
 	editorTestApprover = "alice"
 	editorTestOther    = "bob"
+	editorTestAuthor   = "carol"
 	editorTestRepo     = "org/alpha"
 )
 
 func focusedMR() domain.MergeRequest {
 	mr := domain.MergeRequest{
-		ID: 1, IID: 10, ProjectID: 100, Author: "carol", ProjectPath: editorTestRepo,
+		ID: 1, IID: 10, ProjectID: 100, Author: editorTestAuthor, ProjectPath: editorTestRepo,
 		Title:     "feat(OD-1): change",
 		Reviewers: []domain.ReviewerInfo{{Username: editorTestApprover}},
 	}
@@ -379,7 +380,7 @@ func TestReviewerWriteDiff_ApproverAdditionDropsRedundantReviewerEntry(t *testin
 	mr := siblingMR(20) // no reviewers yet
 	staged := []stagedReviewer{{Username: editorTestApprover, IsApprover: true}}
 
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, mr, false)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, nil, mr, false)
 
 	assert.Empty(t, reviewersAdded, "a brand new approver must not also show as a plain reviewer addition")
 	assert.Empty(t, reviewersRemoved)
@@ -389,9 +390,10 @@ func TestReviewerWriteDiff_ApproverAdditionDropsRedundantReviewerEntry(t *testin
 
 func TestReviewerWriteDiff_ApproverRemovalDropsRedundantReviewerEntry(t *testing.T) {
 	mr := siblingMR(20, editorTestApprover) // currently a reviewer and approver
-	var staged []stagedReviewer             // removed entirely
+	baseline := []stagedReviewer{{Username: editorTestApprover, IsApprover: true}}
+	var staged []stagedReviewer // removed entirely
 
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, mr, false)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, baseline, mr, false)
 
 	assert.Empty(t, reviewersAdded)
 	assert.Empty(t, approversAdded)
@@ -399,11 +401,65 @@ func TestReviewerWriteDiff_ApproverRemovalDropsRedundantReviewerEntry(t *testing
 	assert.Empty(t, reviewersRemoved, "a removed approver must not also show as a plain reviewer removal")
 }
 
+// authoredMR is focusedMR with its author, editorTestAuthor, also a reviewer
+// and a member of the managed approval rule; the reviewer editor never lists
+// the author.
+func authoredMR() domain.MergeRequest {
+	mr := focusedMR()
+	mr.Author = editorTestAuthor
+	mr.Reviewers = append(mr.Reviewers, domain.ReviewerInfo{Username: editorTestAuthor})
+	mr.SetManagedApprovers([]string{editorTestApprover, editorTestAuthor})
+	return mr
+}
+
+// previewFromEditor confirms the editor opened on focused, with siblings, and
+// builds the batch preview its confirm hands off to.
+func previewFromEditor(t *testing.T, w *reviewerEditorWidget) *batchPreviewWidget {
+	t.Helper()
+	_, cmd := w.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.NotNil(t, cmd)
+	msg, ok := cmd().(BatchReviewerEditorPreviewMsg)
+	require.True(t, ok, "expected BatchReviewerEditorPreviewMsg")
+	return newBatchPreviewWidget(
+		msg.Staged, msg.Baseline, msg.Siblings, msg.FocusedMR, msg.KnownIDs, Styles{}, DefaultBatchPreviewKeyMap)
+}
+
+func TestBatchPreview_UneditedSaveLeavesTheAuthorAlone(t *testing.T) {
+	focused := authoredMR()
+	w := newReviewerEditorWidget(
+		context.Background(), focused, []domain.MergeRequest{focused, siblingMR(20, editorTestApprover)},
+		Styles{}, DefaultReviewerEditorKeyMap, nil, nil, domain.NewTicketKeyMatcher(false),
+	)
+
+	p := previewFromEditor(t, w)
+
+	require.NotEmpty(t, p.rows)
+	assert.False(t, p.rows[0].hasChange, "an unedited save changes nothing on the MR")
+	assert.Empty(t, p.collectTargets(), "an unedited save writes nothing")
+	assert.NotContains(t, p.render(), "-@"+editorTestAuthor, "the author is never shown as removed")
+}
+
+func TestBatchPreview_EditLeavesTheAuthorAlone(t *testing.T) {
+	focused := authoredMR()
+	w := newReviewerEditorWidget(
+		context.Background(), focused, []domain.MergeRequest{focused, siblingMR(20)},
+		Styles{}, DefaultReviewerEditorKeyMap, nil, nil, domain.NewTicketKeyMatcher(false),
+	)
+	w.staged = append(w.staged, stagedReviewer{Username: editorTestOther, UserID: 2})
+
+	p := previewFromEditor(t, w)
+
+	require.NotEmpty(t, p.rows)
+	row := p.renderRow(0)
+	assert.Contains(t, row, "+@"+editorTestOther, "the reviewer the user added is a change")
+	assert.NotContains(t, row, "-@", "nothing is removed: the author stays a reviewer and an approver")
+}
+
 func TestReviewerWriteDiff_UnionReportsOnlyAdditions(t *testing.T) {
 	mr := siblingMR(20, editorTestApprover) // currently a reviewer and approver
 	staged := []stagedReviewer{{Username: editorTestOther, IsApprover: true}}
 
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, mr, true)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, nil, mr, true)
 
 	assert.Empty(t, reviewersAdded, "a new approver is reported as an approver addition only")
 	assert.Equal(t, []string{editorTestOther}, approversAdded)
@@ -415,7 +471,7 @@ func TestReviewerWriteDiff_UnionNeverClearsApproverFlag(t *testing.T) {
 	mr := siblingMR(20, editorTestApprover)
 	staged := []stagedReviewer{{Username: editorTestApprover}} // staged as a plain reviewer
 
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, mr, true)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(staged, nil, mr, true)
 
 	assert.Empty(t, reviewersAdded)
 	assert.Empty(t, reviewersRemoved)
@@ -554,7 +610,7 @@ func TestReviewerWriteDiff_UnionLockedApproverIsPlainReviewer(t *testing.T) {
 	mr := siblingMR(20) // no reviewers
 	staged := []stagedReviewer{{Username: editorTestLocked, IsApprover: true, LockedBy: []string{editorTestRepoRule}}}
 
-	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(staged, mr, true)
+	reviewersAdded, _, approversAdded, _ := reviewerWriteDiff(staged, nil, mr, true)
 
 	assert.Equal(t, []string{editorTestLocked}, reviewersAdded)
 	assert.Empty(t, approversAdded, "a rule's approver on the edited MR is not the user's pick elsewhere")
