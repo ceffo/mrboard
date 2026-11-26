@@ -22,6 +22,9 @@ const (
 	headerZoneGap = 2
 	// headerSegSep separates the filter bar's segments.
 	headerSegSep = " · "
+	// headerSprintMinName is the fewest name runes (ellipsis included) the
+	// sprint segment is squeezed to before it is dropped whole.
+	headerSprintMinName = 4
 )
 
 // headerFilterState summarizes every active filter dimension for the header's
@@ -59,7 +62,8 @@ func (s headerFilterState) active() bool {
 type headerPiece int
 
 const (
-	pieceTitle headerPiece = iota
+	pieceSprintInfo headerPiece = iota
+	pieceTitle
 	pieceSort
 	pieceTickets
 	pieceReviewers
@@ -99,6 +103,10 @@ type headerWidget struct {
 	snapshotWrittenAt time.Time
 	refreshing        bool
 	spinnerFrame      string
+	sprintName        string    // active sprint shown beside the filter bar; "" for none
+	sprintEnd         time.Time // zero when the tracker reports no end
+	sprintMaxName     int       // name runes allowed by width pressure; 0 means no cap
+	now               func() time.Time
 }
 
 func newHeaderWidget(styles Styles) headerWidget {
@@ -111,6 +119,13 @@ func (h *headerWidget) SetMRs(mrs []domain.MergeRequest) { h.shown = len(mrs) }
 func (h *headerWidget) SetTitle(t string)                { h.title = t }
 func (h *headerWidget) SetStats(s string)                { h.statsOverride = s }
 func (h *headerWidget) SetSort(label string)             { h.sortIndicator = label }
+
+// SetSprint records the active sprint ("" name clears it). The segment itself
+// only shows while the sprint scope is on.
+func (h *headerWidget) SetSprint(name string, end time.Time) {
+	h.sprintName = name
+	h.sprintEnd = end
+}
 
 // SetCount sets the filter bar's count for a view whose MRs are not a board
 // list: shown out of total.
@@ -165,6 +180,7 @@ func (h headerWidget) borrowed() bool { return h.statsOverride != "" }
 
 func (h headerWidget) render() string {
 	pieces := h.presentPieces()
+	h.sprintMaxName = 0
 	// An unset width is "not measured yet", not "no room": dropping against it
 	// would sacrifice every piece before the first resize arrives.
 	if h.width <= 0 {
@@ -172,7 +188,22 @@ func (h headerWidget) render() string {
 	}
 	for {
 		z := h.zones(pieces)
-		if z.width() <= h.width || !pieces.dropNext() {
+		over := z.width() - h.width
+		if over <= 0 {
+			return h.compose(z)
+		}
+		// The sprint segment gives up name runes before anything else gives
+		// up a piece, and goes whole once the name is down to its minimum.
+		if pieces[pieceSprintInfo] {
+			if keep := lip.Width(h.sprintDisplayName()) - over; keep >= headerSprintMinName {
+				h.sprintMaxName = keep
+			} else {
+				pieces[pieceSprintInfo] = false
+				h.sprintMaxName = 0
+			}
+			continue
+		}
+		if !pieces.dropNext() {
 			return h.compose(z)
 		}
 	}
@@ -190,6 +221,7 @@ func (h headerWidget) presentPieces() headerPieces {
 	p[pieceAge] = !h.snapshotWrittenAt.IsZero()
 	p[pieceMine] = h.filter.Mine
 	p[pieceSprint] = h.filter.Sprint
+	p[pieceSprintInfo] = h.filter.Sprint && h.sprintName != ""
 	p[pieceColumns] = h.filter.Columns > 0
 	p[pieceAssignees] = h.filter.Assignees > 0
 	p[pieceReviewers] = h.filter.Reviewers > 0
@@ -308,7 +340,34 @@ func (h headerWidget) renderBar(p headerPieces) string {
 	}
 
 	pad := bar.Render(" ")
-	return pad + content + pad
+	return pad + content + pad + h.renderSprintInfo(p)
+}
+
+// sprintDisplayName is the sprint name cut to the width the header allows.
+func (h headerWidget) sprintDisplayName() string {
+	r := []rune(h.sprintName)
+	if h.sprintMaxName <= 0 || len(r) <= h.sprintMaxName {
+		return h.sprintName
+	}
+	return string(r[:h.sprintMaxName-1]) + "…"
+}
+
+// renderSprintInfo is the sprint segment on the plain header background,
+// beside the filter bar: "<name> · <time left>", or the name alone when the
+// sprint has no end.
+func (h headerWidget) renderSprintInfo(p headerPieces) string {
+	if !p[pieceSprintInfo] {
+		return ""
+	}
+	now := time.Now
+	if h.now != nil {
+		now = h.now
+	}
+	text := h.sprintDisplayName()
+	if left := sprintTimeLeft(h.sprintEnd, now()); left != "" {
+		text += headerSegSep + left
+	}
+	return h.styles.Header.Render(" ") + h.styles.HeaderSprint.Inherit(h.styles.Header).Render(text)
 }
 
 // renderRight builds the board chrome pinned to the right edge: snapshot age

@@ -2100,7 +2100,17 @@ func (m *Model) applyMRFilter() {
 	m.selected = m.board.SetMRs(displayMRs, m.selected)
 	m.header.SetMRs(displayMRs)
 	m.header.SetFilterState(len(src), m.headerFilterState())
+	m.setHeaderSprint()
 	m.refreshLoad()
+}
+
+// setHeaderSprint hands the header the held sprint, or clears it.
+func (m *Model) setHeaderSprint() {
+	if m.sprint == nil {
+		m.header.SetSprint("", time.Time{})
+		return
+	}
+	m.header.SetSprint(m.sprint.Name, m.sprint.End)
 }
 
 // filterOptions are the header filters and board sort as the board applies them.
