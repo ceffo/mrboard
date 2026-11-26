@@ -30,18 +30,24 @@ func owned(previous []string) mrsvc.ClaimOutcome {
 }
 
 func TestAnnounceApproverChange_DeliversWhoGainedAndLost(t *testing.T) {
+	const (
+		elsewhere = domain.ApproverChangedElsewhere
+		editor    = domain.ApproverChangedByMrboard
+	)
 	tests := map[string]struct {
-		authoritative bool
-		want          domain.ApproverChangeSource
+		requested, recorded, want domain.ApproverChangeSource
 	}{
-		"found on a refresh":          {false, domain.ApproverChangedElsewhere},
-		"written by mrboard's editor": {true, domain.ApproverChangedByMrboard},
+		"found on a refresh":                     {elsewhere, elsewhere, elsewhere},
+		"written by this session's editor":       {editor, elsewhere, editor},
+		"recorded in the ledger as the editor's": {elsewhere, editor, editor},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			claims, notifier, req := announceFixture(t)
-			req.Authoritative = tt.authoritative
-			claims.EXPECT().Claim(mock.Anything, req).Return(owned([]string{userBob}), nil)
+			req.Source = tt.requested
+			outcome := owned([]string{userBob})
+			outcome.Source = tt.recorded
+			claims.EXPECT().Claim(mock.Anything, req).Return(outcome, nil)
 			notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, domain.ApproverChange{
 				Gained: []string{userAlice}, Lost: []string{userBob}, Source: tt.want,
 			}).Return(nil)

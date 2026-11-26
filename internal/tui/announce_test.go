@@ -238,7 +238,7 @@ func TestApproverAnnounce_EditorSave_IsClaimedAuthoritativelyAndNotRepeatedOnRef
 	saved.SetManagedApprovers([]string{editorTestOther})
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther, testUserDave},
-		Prior: []string{editorTestApprover}, Authoritative: true,
+		Prior: []string{editorTestApprover}, Authoritative: true, Source: domain.ApproverChangedByMrboard,
 	}).Return(mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}, nil).Once()
 	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, domain.ApproverChange{
 		Gained: []string{editorTestOther, testUserDave}, Lost: []string{editorTestApprover},
@@ -282,7 +282,7 @@ func TestApproverAnnounce_EditorSave_NeverClaimsAnIneligibleManagedMember(t *tes
 	saved.SetManagedApprovers([]string{editorTestApprover, editorTestOther, carol})
 	f.claims.EXPECT().Claim(mock.Anything, mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestApprover, carol},
-		Prior: []string{editorTestApprover}, Authoritative: true,
+		Prior: []string{editorTestApprover}, Authoritative: true, Source: domain.ApproverChangedByMrboard,
 	}).Return(mrsvc.ClaimOutcome{Owned: true}, nil).Once()
 	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -361,7 +361,7 @@ func TestApproverAnnounce_EditorSaveWithFailedDelivery_IsAnnouncedOnceByTheRefre
 	saved.Approvers = []string{editorTestOther}
 	edited := mrsvc.ClaimRequest{
 		ProjectID: 7, MRIID: 42, Approvers: []string{editorTestOther},
-		Prior: []string{editorTestApprover}, Authoritative: true,
+		Prior: []string{editorTestApprover}, Authoritative: true, Source: domain.ApproverChangedByMrboard,
 	}
 	owned := mrsvc.ClaimOutcome{Owned: true, Previous: []string{editorTestApprover}}
 	f.claims.EXPECT().Claim(mock.Anything, edited).Return(owned, nil).Once()
@@ -377,8 +377,9 @@ func TestApproverAnnounce_EditorSaveWithFailedDelivery_IsAnnouncedOnceByTheRefre
 	f.m = next.(Model)
 
 	var delivered []domain.ApproverChange
-	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(saved, []string{editorTestApprover})).
-		Return(owned, nil).Once()
+	retry := claimReqFor(saved, []string{editorTestApprover})
+	retry.Source = domain.ApproverChangedByMrboard
+	f.claims.EXPECT().Claim(mock.Anything, retry).Return(owned, nil).Once()
 	f.notifier.EXPECT().NotifyApproverChange(mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, _ domain.MergeRequest, c domain.ApproverChange) {
 			delivered = append(delivered, c)
@@ -390,7 +391,32 @@ func TestApproverAnnounce_EditorSaveWithFailedDelivery_IsAnnouncedOnceByTheRefre
 	assert.True(t, res[0].Announced)
 	assert.Equal(t, []domain.ApproverChange{{
 		Gained: []string{editorTestOther}, Lost: []string{editorTestApprover},
-		Source: domain.ApproverChangedElsewhere,
-	}}, delivered)
+		Source: domain.ApproverChangedByMrboard,
+	}}, delivered, "the retry of the editor's own set is still the editor's change")
 	assert.Empty(t, f.refresh(saved), "a later refresh announces nothing more")
+}
+
+// After the session's editor wrote a set, a change made by hand to another set
+// and then back to the edited one is not the editor's: the session forgets its
+// edit once it claims a different set.
+func TestApproverAnnounce_SetChangedByHandAfterAnEdit_IsAttributedElsewhere(t *testing.T) {
+	f := newAnnounceFixture(t)
+	before := announceMR(72*time.Hour, editorTestApprover)
+	saved := before
+	saved.Approvers = []string{editorTestOther}
+	f.claims.EXPECT().Claim(mock.Anything, mock.MatchedBy(func(r mrsvc.ClaimRequest) bool {
+		return r.Authoritative
+	})).Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Len(t, announceResults(f.m.announceEditedApprovers(saved, before.Approvers)), 1)
+
+	byHand := announceMR(72*time.Hour, testUserDave)
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(byHand, []string{editorTestOther})).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Empty(t, f.refresh(byHand))
+	require.Len(t, f.refresh(byHand), 1)
+
+	f.claims.EXPECT().Claim(mock.Anything, claimReqFor(saved, []string{testUserDave})).
+		Return(mrsvc.ClaimOutcome{}, nil).Once()
+	require.Empty(t, f.refresh(saved))
+	assert.Len(t, f.refresh(saved), 1)
 }

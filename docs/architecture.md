@@ -144,7 +144,8 @@ for Microsoft Teams.
 With `notifications.teams.announce_approver_changes`, every fetch also hands each MR whose
 required-approver set changed to `mrsvc.AnnounceApproverChange`, and so does the approver editor's
 save: `mrsvc.ApproverClaims` (implemented by `gitlabadpt` as a ledger of internal MR notes, folded by
-`domain.FoldApproverClaims`) elects one instance and returns the set the change replaces. The winner
+`domain.FoldApproverClaims`) elects one instance and returns the set the change replaces and, as the
+ledger records it, whether mrboard's editor wrote the new set. The winner
 builds a `domain.ApproverChange` (who gained and who lost required-approver status, and whether
 mrboard's editor or something else changed the rule) and calls `domain.Notifier.NotifyApproverChange`.
 See `docs/adr/0014-approver-change-announcements.md`.

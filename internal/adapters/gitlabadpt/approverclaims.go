@@ -66,7 +66,8 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (mrsv
 		}
 	}
 
-	id, err := a.appendClaimID(ctx, req.ProjectID, req.MRIID, domain.ApproverClaim{Approvers: req.Approvers})
+	id, err := a.appendClaimID(ctx, req.ProjectID, req.MRIID,
+		domain.ApproverClaim{Approvers: req.Approvers, Source: req.Source})
 	if err != nil {
 		return mrsvc.ClaimOutcome{}, err
 	}
@@ -87,7 +88,7 @@ func (a *GitLabAdapter) Claim(ctx context.Context, req mrsvc.ClaimRequest) (mrsv
 	if !owned {
 		return mrsvc.ClaimOutcome{}, nil
 	}
-	return mrsvc.ClaimOutcome{Owned: true, Previous: settled.Replaced(id, req.Prior)}, nil
+	return mrsvc.ClaimOutcome{Owned: true, Previous: settled.Replaced(id, req.Prior), Source: settled.Source(id)}, nil
 }
 
 // Release implements mrsvc.ApproverClaims.
