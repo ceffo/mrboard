@@ -48,6 +48,7 @@ func TestStartDetached(t *testing.T) {
 			assert.Equal(t, "job", res.CommandName)
 			assert.Equal(t, tt.wantErr, res.Err != nil)
 			assert.Equal(t, tt.wantStderr, res.Stderr)
+			assert.Zero(t, res.MR, "a detached command's exit refreshes no MR")
 			leftovers, err := os.ReadDir(tmp)
 			require.NoError(t, err)
 			assert.Empty(t, leftovers, "the stderr temp file must be removed once the outcome is known")
