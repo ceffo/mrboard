@@ -9,6 +9,7 @@ import (
 	lip "charm.land/lipgloss/v2"
 
 	"github.com/ceffo/mrboard/internal/domain"
+	"github.com/ceffo/mrboard/internal/domain/service/mrsvc"
 )
 
 // BatchPreviewBackMsg is sent when the user presses Esc in the batch preview screen,
@@ -91,13 +92,13 @@ func newBatchPreviewWidget(
 	rows = append(rows, previewMRRow{
 		mr:        focusedMR,
 		included:  true,
-		hasChange: hasWriteDiff(staged, focusedMR, false),
+		hasChange: hasWriteDiff(staged, baseline, focusedMR, false),
 		focused:   true,
 	})
 	for _, sib := range siblings {
 		rows = append(rows, previewMRRow{
 			mr:        sib,
-			hasChange: hasWriteDiff(staged, sib, true),
+			hasChange: hasWriteDiff(staged, nil, sib, true),
 		})
 	}
 	w := &batchPreviewWidget{
@@ -110,23 +111,29 @@ func newBatchPreviewWidget(
 		rows:      rows,
 	}
 	for _, row := range rows {
-		ra, rr, aa, ar := reviewerWriteDiff(staged, row.mr, !row.focused)
+		ra, rr, aa, ar := reviewerWriteDiff(staged, baseline, row.mr, !row.focused)
 		w.detailLines = max(w.detailLines, len(ra)+len(rr)+len(aa)+len(ar))
 	}
 	return w
 }
 
 // hasWriteDiff reports whether applying staged to mr would change it.
-func hasWriteDiff(staged []stagedReviewer, mr domain.MergeRequest, union bool) bool {
-	ra, rr, aa, ar := reviewerWriteDiff(staged, mr, union)
+func hasWriteDiff(staged, baseline []stagedReviewer, mr domain.MergeRequest, union bool) bool {
+	ra, rr, aa, ar := reviewerWriteDiff(staged, baseline, mr, union)
 	return len(ra)+len(rr)+len(aa)+len(ar) > 0
 }
 
 // reviewerWriteDiff reports how applying staged to mr would change its reviewer
 // and approver membership: reviewersAdded/reviewersRemoved are reviewer username
 // additions/removals; approversAdded/approversRemoved are IsApprover-flag
-// transitions for usernames that remain reviewers on both sides. Mirrors the two
-// writes ApplyReviewerChanges performs (SetReviewers, SaveApprovers).
+// transitions. The reviewer set it compares against is the one
+// ApplyReviewerChanges would write (mrsvc.ResolveReviewerSet over mr's
+// reviewers, managed-rule members flagged approver), so the preview never
+// reports a change the write would not make.
+//
+// Without union, the edit is the user's own one on mr (mrsvc.ReviewerWriteEdit):
+// only what changed between baseline and staged is applied, so a reviewer the
+// editor never listed — the MR's author — is left as it is.
 //
 // With union set, only additions are reported: the write for a sibling MR never
 // removes a reviewer or clears an approver flag (mrsvc.ReviewerWriteUnion), and
@@ -138,42 +145,42 @@ func hasWriteDiff(staged []stagedReviewer, mr domain.MergeRequest, union bool) b
 // addition/removal alongside its approver one would just be the same person
 // twice under two labels — the approver entry is the more specific one and wins.
 func reviewerWriteDiff(
-	staged []stagedReviewer, mr domain.MergeRequest, union bool,
+	staged, baseline []stagedReviewer, mr domain.MergeRequest, union bool,
 ) (reviewersAdded, reviewersRemoved, approversAdded, approversRemoved []string) {
+	change := mrsvc.ReviewerChange{Mode: mrsvc.ReviewerWriteEdit}
 	if union {
 		staged = propagatedPicks(staged)
+		change.Mode = mrsvc.ReviewerWriteUnion
 	}
-	type reviewerState struct {
-		isApprover bool
+	change.Staged = reviewerEdits(staged)
+	change.Baseline = reviewerEdits(baseline)
+	current := mrsvc.WithManagedApprovers(mr)
+	desired := mrsvc.ResolveReviewerSet(current, change)
+
+	isApprover := make(map[string]bool, len(current))
+	for _, r := range current {
+		isApprover[r.Username] = r.IsApprover
 	}
-	current := make(map[string]reviewerState, len(mr.Reviewers))
-	for _, r := range mr.Reviewers {
-		current[r.Username] = reviewerState{isApprover: r.IsApprover}
-	}
-	stagedSet := make(map[string]bool, len(staged))
+	desiredSet := make(map[string]bool, len(desired))
 	approversAddedSet := make(map[string]bool)
 	approversRemovedSet := make(map[string]bool)
-	for _, s := range staged {
-		stagedSet[s.Username] = true
-		cur, existed := current[s.Username]
+	for _, d := range desired {
+		desiredSet[d.Username] = true
+		wasApprover, existed := isApprover[d.Username]
 		if !existed {
-			reviewersAdded = append(reviewersAdded, s.Username)
-			if s.IsApprover {
-				approversAdded = append(approversAdded, s.Username)
-				approversAddedSet[s.Username] = true
-			}
-			continue
+			reviewersAdded = append(reviewersAdded, d.Username)
 		}
-		if s.IsApprover && !cur.isApprover {
-			approversAdded = append(approversAdded, s.Username)
-			approversAddedSet[s.Username] = true
-		} else if !union && !s.IsApprover && cur.isApprover {
-			approversRemoved = append(approversRemoved, s.Username)
-			approversRemovedSet[s.Username] = true
+		switch {
+		case d.IsApprover && !wasApprover:
+			approversAdded = append(approversAdded, d.Username)
+			approversAddedSet[d.Username] = true
+		case !d.IsApprover && wasApprover:
+			approversRemoved = append(approversRemoved, d.Username)
+			approversRemovedSet[d.Username] = true
 		}
 	}
-	for _, r := range mr.Reviewers {
-		if union || stagedSet[r.Username] {
+	for _, r := range current {
+		if desiredSet[r.Username] {
 			continue
 		}
 		reviewersRemoved = append(reviewersRemoved, r.Username)
@@ -374,7 +381,8 @@ func padRight(s string, width int) string {
 // text in the muted hint style, so it reads as "what you'd get" rather than
 // "what will happen".
 func (w *batchPreviewWidget) renderRowInlineDiff(row previewMRRow) string {
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(w.staged, row.mr, !row.focused)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(
+		w.staged, w.baseline, row.mr, !row.focused)
 	added := append(append([]string{}, reviewersAdded...), approversAdded...)
 	removed := append(append([]string{}, reviewersRemoved...), approversRemoved...)
 	sort.Strings(added)
@@ -406,7 +414,8 @@ func (w *batchPreviewWidget) renderRowDetails() []string {
 		return nil
 	}
 	row := w.rows[w.cursor]
-	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(w.staged, row.mr, !row.focused)
+	reviewersAdded, reviewersRemoved, approversAdded, approversRemoved := reviewerWriteDiff(
+		w.staged, w.baseline, row.mr, !row.focused)
 	added, removed := w.styles.DiffAdded, w.styles.DiffRemoved
 	if !row.included {
 		added, removed = w.styles.PopupHint, w.styles.PopupHint
