@@ -338,6 +338,47 @@ func TestClaim_Authoritative_SkipsTheLiveCheck(t *testing.T) {
 	assert.True(t, out.Owned)
 }
 
+func TestClaim_Source_IsRecordedAndReported(t *testing.T) {
+	for name, src := range map[string]domain.ApproverChangeSource{
+		"found on a refresh":          domain.ApproverChangedElsewhere,
+		"written by mrboard's editor": domain.ApproverChangedByMrboard,
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := newFakeLedgerClient(testUserAlice)
+			a := &GitLabAdapter{client: c}
+
+			req := claimReq([]string{testUserAlice}, nil)
+			req.Source = src
+			out, err := a.Claim(context.Background(), req)
+			require.NoError(t, err)
+			require.True(t, out.Owned)
+			assert.Equal(t, src, out.Source)
+			require.Len(t, c.claims(), 1)
+			assert.Equal(t, src, c.claims()[0].Source)
+		})
+	}
+}
+
+// The editor's delivery failed and it released its claim; another instance
+// that finds the set on a refresh announces it as the editor's change.
+func TestClaim_SetTheEditorReleased_IsReportedAsTheEditorsWhoeverReclaimsIt(t *testing.T) {
+	c := newFakeLedgerClient(testUserAlice)
+	a := &GitLabAdapter{client: c}
+
+	edit := claimReq([]string{testUserAlice}, nil)
+	edit.Authoritative = true
+	edit.Source = domain.ApproverChangedByMrboard
+	out, err := a.Claim(context.Background(), edit)
+	require.NoError(t, err)
+	require.True(t, out.Owned)
+	require.NoError(t, a.Release(context.Background(), 1, 2, []string{testUserAlice}))
+
+	out, err = a.Claim(context.Background(), claimReq([]string{testUserAlice}, nil))
+	require.NoError(t, err)
+	require.True(t, out.Owned)
+	assert.Equal(t, domain.ApproverChangedByMrboard, out.Source)
+}
+
 func TestClaim_GainThroughAnotherRule_ReportsTheSetItReplaces(t *testing.T) {
 	c := newFakeLedgerClient(testUserAlice, testUserBob) // bob was added to a rule outside mrboard
 	c.add(domain.FormatApproverClaim(domain.ApproverClaim{Approvers: []string{testUserAlice}}), false)

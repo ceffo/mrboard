@@ -40,12 +40,12 @@ func (l *approverLedger) Claim(_ context.Context, req mrsvc.ClaimRequest) (mrsvc
 	if !state.Empty && !state.Released && domain.ApproverSetHash(state.Approvers) == want {
 		return mrsvc.ClaimOutcome{}, nil
 	}
-	id := l.append(key, domain.ApproverClaim{Approvers: domain.NormalizeApprovers(req.Approvers)})
+	id := l.append(key, domain.ApproverClaim{Approvers: domain.NormalizeApprovers(req.Approvers), Source: req.Source})
 	settled := domain.FoldApproverClaims(l.entries[key])
 	if !settled.Announcers[id] {
 		return mrsvc.ClaimOutcome{}, nil
 	}
-	return mrsvc.ClaimOutcome{Owned: true, Previous: settled.Replaced(id, req.Prior)}, nil
+	return mrsvc.ClaimOutcome{Owned: true, Previous: settled.Replaced(id, req.Prior), Source: settled.Source(id)}, nil
 }
 
 func (l *approverLedger) Release(_ context.Context, projectID, mrIID int64, approvers []string) error {

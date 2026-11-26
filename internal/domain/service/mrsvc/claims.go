@@ -3,6 +3,8 @@ package mrsvc
 import (
 	"context"
 	"errors"
+
+	"github.com/ceffo/mrboard/internal/domain"
 )
 
 // ErrClaimNotPermitted reports that the caller may not write the ledger
@@ -23,9 +25,13 @@ type ClaimRequest struct {
 	Prior []string
 	// Authoritative marks Approvers as a set the caller just wrote itself, so
 	// the MR's live approver set, which can lag a write, is not consulted to
-	// detect a stale observation. Such a change is announced as made by
-	// mrboard; any other as made elsewhere.
+	// detect a stale observation.
 	Authoritative bool
+	// Source says who changed the set to Approvers, as far as the caller
+	// knows: domain.ApproverChangedByMrboard for a set its approver editor
+	// wrote. The ledger records it, so whichever instance announces the set
+	// attributes it the same way.
+	Source domain.ApproverChangeSource
 	// Discovered marks Approvers as a set the caller found on its first look at
 	// the MR, without seeing it change. Against a ledger last written under the
 	// old approver meaning, such a set is not claimed: it may differ from the
@@ -42,6 +48,8 @@ type ClaimOutcome struct {
 	// the ledger last announced before it, or the request's Prior when the
 	// ledger holds no set comparable under the current approver meaning.
 	Previous []string
+	// Source is who changed the set, as the ledger records it, when Owned.
+	Source domain.ApproverChangeSource
 }
 
 // ApproverClaims is the driven port for the approver-announcement ledger: a

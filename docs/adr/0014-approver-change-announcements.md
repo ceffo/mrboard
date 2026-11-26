@@ -1,7 +1,8 @@
 # ADR-0014: Approver Changes Are Announced Once, Through a Ledger on the MR
 
 **Status**: Accepted. Amended by #105: an announcement names who gained and who lost
-required-approver status and says who changed the rule.
+required-approver status and says who changed the rule. Amended by #119: the ledger records which
+sets mrboard's editor wrote.
 
 ## Context
 
@@ -28,7 +29,10 @@ announcer.
 
 - **Entry.** A self-delimiting block, `<!-- mrboard:approvers-claim v2 released=… silent=…
   approvers=a,b -->` … `<!-- /mrboard:approvers-claim -->`, found anywhere in a note body
-  (`domain.FormatApproverClaim` / `ParseApproverClaim`). System notes are ignored. `v1` entries,
+  (`domain.FormatApproverClaim` / `ParseApproverClaim`). An entry recording a set the approver editor
+  wrote also carries `<!-- mrboard:approvers-source editor -->` inside its block. The header and
+  version are unchanged: every reader matches anything between the header and the end marker, so
+  versions that predate the line fold the entry as before. System notes are ignored. `v1` entries,
   written before an approver meant a required approver, are still read, as legacy; a set found on the
   first look at an MR is not claimed against a legacy ledger (ADR-0016).
 - **Election.** `domain.FoldApproverClaims` replays the entries. An entry owns an announcement
@@ -56,10 +60,16 @@ announcer.
   never announced as someone losing the status. A claimed set that differs from the one it replaces
   by no one is recorded and not delivered.
 - **Source.** The card says whether the rule was changed through mrboard or outside it (a repository
-  rule, or an edit by hand in GitLab). A claim the editor makes for its own write
-  (`ClaimRequest.Authoritative`) is attributed to mrboard; a change found on a refresh, to another
-  source. The ledger does not record the source: the instance that wins the announcement attributes
-  it from what it knows.
+  rule, or an edit by hand in GitLab). The editor's claim for its own write carries
+  `ClaimRequest.Source`, separate from `Authoritative` (which only skips the live check), and its
+  entry records it. `FoldApproverClaims` attributes an announcing entry to mrboard when any entry of
+  its run carries the editor line. A run is the entries from one recording a new set up to the next
+  such entry: redundant entries of instances that lost the race, releases of that set, and the
+  re-claim after a release. So whichever instance announces, from the ledger alone, the set the
+  editor wrote reads as changed through mrboard (`ClaimOutcome.Source`). The writing session also
+  remembers the set it wrote until it claims a different one, so its own retries keep the editor's
+  source even when its entry was never written. A set the editor wrote that later comes back by hand
+  starts a new run and reads as outside mrboard.
 - **Prior set.** Each claim carries the set assumed to precede the MR's recorded history. An MR with
   no ledger whose observed set equals that prior gets no entry, so history mrboard never saw is not
   announced; otherwise the claim is the ledger's first entry and owns the announcement. An MR found
@@ -108,12 +118,16 @@ lower ID hidden from a reader who could see a higher one.
   changes; it never announces unilaterally. Any other write failure reports an error and retries on
   the next refresh.
 - Instances that do not enable the feature neither read nor write ledgers, and do not announce.
-- An editor write is attributed to another source whenever its editor claim does not deliver it.
-  If the delivery fails (the claim is released) or the claim itself errors, the writer restores the
-  set it had handled before, and the change is claimed again on a later refresh: by the writer or by
-  any other instance, without `Authoritative`, so as found outside mrboard. The same holds when the
-  writer lacks the role to write the ledger, or stopped before claiming, and another instance
-  announces the change. Recording the source in the ledger would close this gap.
+- An editor write whose editor claim does not deliver it is still announced as changed through
+  mrboard: after a failed delivery (the claim is released), after a claim error, and when another
+  instance's entry wins the race, by any instance that reads the editor's entry, or by the writer's
+  own retry. Versions that predate the editor line still announce such a re-claim as outside
+  mrboard.
+- Known gaps: the editor's change reads as outside mrboard when its entry was never written and
+  another instance announces it. That happens when the writer lacks the Planner role (it cannot write
+  any private record, and GitLab exposes no actor for a rule edit), or when it stopped before its
+  claim appended the entry. Closing either would mean claiming before the rule is written, which
+  would announce a set that may never become live.
 - An editor save made while a change found outside mrboard is still being debounced (seen on one
   refresh, not yet claimed) announces both together: the difference is taken against the set the
   ledger last announced, so the outside change's gain or loss appears under "changed through

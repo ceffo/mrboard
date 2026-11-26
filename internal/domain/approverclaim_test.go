@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,12 @@ func released(id int64, approvers ...string) ApproverClaim {
 	return c
 }
 
+func edited(id int64, approvers ...string) ApproverClaim {
+	c := claim(id, approvers...)
+	c.Source = ApproverChangedByMrboard
+	return c
+}
+
 func TestApproverSetHash(t *testing.T) {
 	assert.Equal(t, ApproverSetHash([]string{"a", "b"}), ApproverSetHash([]string{"b", "a", "a"}))
 	assert.NotEqual(t, ApproverSetHash([]string{"a", "b"}), ApproverSetHash([]string{"a"}))
@@ -35,12 +42,14 @@ func TestApproverClaim_FormatParseRoundTrip(t *testing.T) {
 		"silent":   {Approvers: []string{testUsername}, Silent: true},
 		"empty":    {},
 		"released": {Approvers: []string{testUsername}, Released: true},
+		"edited":   {Approvers: []string{testUsername}, Source: ApproverChangedByMrboard},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, ok := ParseApproverClaim(FormatApproverClaim(in))
 			require.True(t, ok)
 			assert.Equal(t, in.Silent, got.Silent)
 			assert.Equal(t, in.Released, got.Released)
+			assert.Equal(t, in.Source, got.Source)
 			assert.ElementsMatch(t, in.Approvers, got.Approvers)
 		})
 	}
@@ -51,6 +60,43 @@ func TestParseApproverClaim_FindsBlockInsideOtherText(t *testing.T) {
 	got, ok := ParseApproverClaim(body)
 	require.True(t, ok)
 	assert.Equal(t, []string{testUsername}, got.Approvers)
+}
+
+// releasedClaimPattern is the claim pattern of every mrboard release that
+// reads v2 entries. A ledger is shared with those releases, so an entry written
+// now must still be one block to them, with the same attributes.
+var releasedClaimPattern = regexp.MustCompile(
+	`(?s)<!-- mrboard:approvers-claim (v1|v2) released=(true|false) silent=(true|false) ` +
+		`approvers=([A-Za-z0-9._,-]*) -->.*?<!-- /mrboard:approvers-claim -->`)
+
+func TestFormatApproverClaim_EditorEntryIsReadByReleasedReaders(t *testing.T) {
+	body := "note\n" + FormatApproverClaim(edited(0, testUsername, testOther)) + "\nafter"
+	m := releasedClaimPattern.FindStringSubmatch(body)
+	require.NotNil(t, m)
+	assert.Equal(t, []string{"v2", "false", "false", testUsername + "," + testOther}, m[1:])
+	assert.Contains(t, m[0], "mrboard:approvers-source editor", "the source line lies inside the block")
+	assert.NotContains(t, m[0], "after")
+}
+
+func TestParseApproverClaim_Source(t *testing.T) {
+	const head = "<!-- mrboard:approvers-claim v2 released=false silent=false approvers=a -->\n"
+	const end = "<!-- /mrboard:approvers-claim -->"
+	const line = "<!-- mrboard:approvers-source "
+	for name, tt := range map[string]struct {
+		body string
+		want ApproverChangeSource
+	}{
+		"no source line":                {head + "x\n" + end, ApproverChangedElsewhere},
+		"editor":                        {head + line + "editor -->\n" + end, ApproverChangedByMrboard},
+		"unknown source":                {head + line + "robot -->\n" + end, ApproverChangedElsewhere},
+		"source line outside the block": {head + end + "\n" + line + "editor -->", ApproverChangedElsewhere},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, ok := ParseApproverClaim(tt.body)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, got.Source)
+		})
+	}
 }
 
 func TestParseApproverClaim_RejectsMalformed(t *testing.T) {
@@ -198,6 +244,50 @@ func TestFoldApproverClaims_Before(t *testing.T) {
 			st := FoldApproverClaims(tt.ledger)
 			require.True(t, st.Announcers[tt.id])
 			assert.Equal(t, tt.want, st.Before[tt.id])
+		})
+	}
+}
+
+func TestFoldApproverClaims_Source(t *testing.T) {
+	tests := []struct {
+		name   string
+		ledger []ApproverClaim
+		id     int64
+		want   ApproverChangeSource
+	}{
+		{"an entry without a source line", []ApproverClaim{claim(1, "a"), claim(2, "b")}, 2, ApproverChangedElsewhere},
+		{"the editor's entry wins", []ApproverClaim{claim(1, "a"), edited(2, "b")}, 2, ApproverChangedByMrboard},
+		{
+			"another instance's entry wins the race against the editor's",
+			[]ApproverClaim{claim(1, "a"), claim(2, "b"), edited(3, "b")},
+			2, ApproverChangedByMrboard,
+		},
+		{
+			"the editor's entry was released and another instance re-claims the set",
+			[]ApproverClaim{claim(1, "a"), edited(2, "b"), released(3, "b"), claim(4, "b")},
+			4, ApproverChangedByMrboard,
+		},
+		{
+			"a set the editor wrote earlier and that came back by hand",
+			[]ApproverClaim{edited(1, "a"), claim(2, "b"), claim(3, "a")},
+			3, ApproverChangedElsewhere,
+		},
+		{
+			"an editor entry for another set does not leak into the run",
+			[]ApproverClaim{claim(1, "a"), claim(2, "b"), edited(3, "c")},
+			2, ApproverChangedElsewhere,
+		},
+		{
+			"a stale release of the editor's set does not join a later run",
+			[]ApproverClaim{edited(1, "a"), claim(2, "b"), released(3, "a"), claim(4, "a")},
+			4, ApproverChangedElsewhere,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := FoldApproverClaims(tt.ledger)
+			require.True(t, st.Announcers[tt.id])
+			assert.Equal(t, tt.want, st.Source(tt.id))
 		})
 	}
 }

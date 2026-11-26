@@ -28,13 +28,32 @@ type announceTracker struct {
 	// GitLab's approval-rule read can briefly return the set from before a
 	// write, and claiming that would announce a revert.
 	pending map[domain.MRKey]string
+	// edited holds the hash of the set this session's approver editor last
+	// wrote, until a different set is claimed. A claim of that set, including
+	// a retry after the editor's own claim failed, is attributed to the editor.
+	edited map[domain.MRKey]string
 }
 
 func newAnnounceTracker() announceTracker {
 	return announceTracker{
 		handled: make(map[domain.MRKey][]string),
 		pending: make(map[domain.MRKey]string),
+		edited:  make(map[domain.MRKey]string),
 	}
+}
+
+// source returns who changed set on key as far as this session knows, and
+// forgets an edit once a different set is claimed.
+func (a announceTracker) source(key domain.MRKey, set []string) domain.ApproverChangeSource {
+	hash, ok := a.edited[key]
+	if !ok {
+		return domain.ApproverChangedElsewhere
+	}
+	if hash == domain.ApproverSetHash(set) {
+		return domain.ApproverChangedByMrboard
+	}
+	delete(a.edited, key)
+	return domain.ApproverChangedElsewhere
 }
 
 // approverAnnounceResultMsg carries the outcome of one claim-and-deliver round.
@@ -102,6 +121,7 @@ func (m *Model) makeApproverAnnounceCmds() tea.Cmd {
 			Approvers:  set,
 			Prior:      prior,
 			Discovered: !seen,
+			Source:     m.announce.source(key, set),
 		}, prev, seen))
 	}
 	if len(cmds) == 0 {
@@ -170,6 +190,7 @@ func (m *Model) announceEditedApprovers(mr domain.MergeRequest, before []string)
 	key := mr.Key()
 	prev, seen := m.announce.handled[key]
 	m.announce.handled[key] = set
+	m.announce.edited[key] = domain.ApproverSetHash(set)
 	delete(m.announce.pending, key)
 	return m.approverAnnounceCmd(mr, mrsvc.ClaimRequest{
 		ProjectID:     int64(mr.ProjectID),
@@ -177,5 +198,6 @@ func (m *Model) announceEditedApprovers(mr domain.MergeRequest, before []string)
 		Approvers:     set,
 		Prior:         domain.NormalizeApprovers(before),
 		Authoritative: true,
+		Source:        domain.ApproverChangedByMrboard,
 	}, prev, seen)
 }
