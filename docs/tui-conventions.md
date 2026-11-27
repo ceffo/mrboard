@@ -328,6 +328,10 @@ child process takes over the terminal entirely until it exits, at which point
 mrboard redraws. There is nothing to spin — the terminal isn't mrboard's to
 render into for the duration of the call.
 
+When a foreground command returns (any exit code), mrboard refetches only that MR in the
+background, with no spinner either, and replaces its card in place; a failed refetch is toasted
+and the old card stays (ADR-0004 "Refresh on return"). Detached commands refresh nothing.
+
 ## UX rules
 
 - Focus starts on the first non-empty column's first card at startup

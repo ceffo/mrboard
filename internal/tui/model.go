@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -196,6 +197,20 @@ type CommandResultMsg struct {
 	CommandName string
 	Err         error
 	Stderr      string // tail of a detached command's stderr; "" for foreground commands
+	// MR is the MR a foreground command ran on: the handler refetches it on any
+	// exit, since the command may have changed its state. Zero for a detached
+	// command or an unresolved argv, which refresh nothing.
+	MR domain.MRKey
+}
+
+// commandRefreshResultMsg carries the single-MR refetch that follows a
+// foreground command's exit. FetchStartedAt plays the role it plays in
+// FetchResultMsg for the dirty-set guard (docs/adr/0005).
+type commandRefreshResultMsg struct {
+	Key            domain.MRKey
+	MR             domain.MergeRequest
+	Err            error
+	FetchStartedAt time.Time
 }
 
 // TicketIssueTypeMsg carries the result of a background issue-type fetch.
@@ -790,7 +805,7 @@ func (m Model) coreUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NotifyResultMsg, approverAnnounceResultMsg:
 		return m.handleNotificationResult(msg)
 
-	case CommandResultMsg, CommandStartedMsg:
+	case CommandResultMsg, CommandStartedMsg, commandRefreshResultMsg:
 		return m.handleCommandMsg(msg)
 
 	case updateCheckTickMsg, updateCheckResultMsg, selfUpdateRequestedMsg, selfUpdateResultMsg,
@@ -1315,9 +1330,15 @@ func (m Model) execCommandCmd(mr domain.MergeRequest, cmd config.Command) tea.Cm
 	//nolint:gosec // G204: cmd.Binary is an admin-configured mrboard.toml entry, not attacker input;
 	// no shell is involved, so there is no injection surface beyond running the configured binary itself.
 	execCmd := exec.Command(cmd.Binary, argv...)
-	return execForeground(execCmd, func(err error) tea.Msg {
-		return CommandResultMsg{CommandName: cmd.Name, Err: err, Stderr: outputTail(err)}
-	})
+	return execForeground(execCmd, foregroundResult(cmd.Name, mr.Key()))
+}
+
+// foregroundResult builds the exit callback of a foreground command run on the
+// MR keyed key: its CommandResultMsg names that MR so the handler refreshes it.
+func foregroundResult(name string, key domain.MRKey) tea.ExecCallback {
+	return func(err error) tea.Msg {
+		return CommandResultMsg{CommandName: name, Err: err, Stderr: outputTail(err), MR: key}
+	}
 }
 
 // handleWidgetMsg serves the messages a child widget owns or raises: the
@@ -1345,26 +1366,87 @@ func (m Model) handleWidgetMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleCommandResult reports a configured command's outcome. Success shows no
 // toast — for a foreground command the resumed, redrawn board is itself the
-// success signal; a detached one already toasted "launched".
+// success signal; a detached one already toasted "launched". A foreground
+// command's MR is refetched on any exit, success or failure, since a tool can
+// change the MR and still exit non-zero (docs/adr/0004, "Refresh on return").
 func (m Model) handleCommandResult(msg CommandResultMsg) (tea.Model, tea.Cmd) {
+	var refresh tea.Cmd
+	if msg.MR != (domain.MRKey{}) {
+		refresh = m.refreshMRCmd(msg.MR)
+	}
 	if msg.Err != nil {
 		m.logger.Error("tui: command failed", "command", msg.CommandName, "err", msg.Err, "stderr", msg.Stderr)
 		text := fmt.Sprintf("%s failed: %s", msg.CommandName, msg.Err)
 		if msg.Stderr != "" {
 			text += ": " + msg.Stderr
 		}
-		return m, m.toast(toast.ErrorAlert, text)
+		return m, tea.Batch(m.toast(toast.ErrorAlert, text), refresh)
+	}
+	return m, refresh
+}
+
+// handleCommandMsg routes the outcomes of a configured command run.
+func (m Model) handleCommandMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case CommandStartedMsg:
+		return m.handleCommandStarted(msg)
+	case CommandResultMsg:
+		return m.handleCommandResult(msg)
+	case commandRefreshResultMsg:
+		return m.handleCommandRefresh(msg)
 	}
 	return m, nil
 }
 
-// handleCommandMsg routes the two outcomes of a configured command run.
-func (m Model) handleCommandMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if started, ok := msg.(CommandStartedMsg); ok {
-		return m.handleCommandStarted(started)
+// refreshMRCmd fetches the single MR keyed key, with no spinner: the refresh
+// is silent unless it fails.
+func (m Model) refreshMRCmd(key domain.MRKey) tea.Cmd {
+	src, base := m.src, m.baseCtx
+	startedAt := time.Now()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(base, fetchTimeout)
+		defer cancel()
+		mr, err := src.FetchMR(ctx, int64(key.ProjectID), int64(key.IID))
+		return commandRefreshResultMsg{Key: key, MR: mr, Err: err, FetchStartedAt: startedAt}
 	}
-	result, _ := msg.(CommandResultMsg)
-	return m.handleCommandResult(result)
+}
+
+// handleCommandRefresh lands a single-MR refetch on the board. A failure is
+// toasted and leaves the card as it was. A result older than a local write to
+// the MR is dropped, as a stale landing is (docs/adr/0005). Otherwise the
+// card is replaced in place, or dropped from the open board once the MR is
+// merged, and the MR is marked dirty at the fetch's start so a full fetch
+// started earlier cannot land its older copy over this one. Focus, scroll and
+// filters survive: applyMRFilter keeps focus by MRKey.
+func (m Model) handleCommandRefresh(msg commandRefreshResultMsg) (tea.Model, tea.Cmd) {
+	mrRef := fmt.Sprintf("!%d", msg.Key.IID)
+	if msg.Err != nil {
+		m.logger.Warn("tui: MR refresh after command failed",
+			"project_id", msg.Key.ProjectID, "mr_iid", msg.Key.IID, "err", msg.Err)
+		return m, m.toast(toast.ErrorAlert, fmt.Sprintf("Refresh %s failed: %s", mrRef, msg.Err))
+	}
+	if writeAt, dirty := m.dirty[msg.Key]; dirty && msg.FetchStartedAt.Before(writeAt) {
+		m.logger.Debug("tui: dropping MR refresh older than a local write",
+			"project_id", msg.Key.ProjectID, "mr_iid", msg.Key.IID)
+		return m, nil
+	}
+	idx := slices.IndexFunc(m.allMRs, func(mr domain.MergeRequest) bool { return mr.Key() == msg.Key })
+	if idx < 0 {
+		m.logger.Debug("tui: refreshed MR is no longer on the board",
+			"project_id", msg.Key.ProjectID, "mr_iid", msg.Key.IID)
+		return m, nil
+	}
+	if msg.MR.Merged() {
+		m.allMRs = slices.Delete(slices.Clone(m.allMRs), idx, idx+1)
+	} else {
+		m.allMRs[idx] = keepDiffStats(m.allMRs[idx], msg.MR)
+	}
+	m.dirty.Mark(msg.Key, msg.FetchStartedAt)
+	m.applyMRFilter()
+	m.updateTicketKey()
+	m.logger.Info("tui: refreshed MR after command",
+		"project_id", msg.Key.ProjectID, "mr_iid", msg.Key.IID, "merged", msg.MR.Merged())
+	return m, nil
 }
 
 // handleCommandStarted toasts that a detached command is running and starts

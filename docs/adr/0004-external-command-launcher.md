@@ -186,6 +186,27 @@ the board for them makes it flash away and back for nothing.
 4. **Out of scope.** No output display, PID tracking or cancel from mrboard. Foreground commands
    keep the `tea.ExecProcess` path unchanged.
 
+### Refresh on return (resolved 2026-11-26, #126)
+
+A foreground command can change its MR's state (comments, approvals, reviewers, threads), and the
+board kept the old card until the next refresh.
+
+1. **What is refreshed.** Only the MR the command ran on, with the single-MR `FetchMR` read the
+   write paths already use; never a full board refetch. `CommandResultMsg.MR` names it, set by the
+   foreground exit callback (`foregroundResult`). It stays zero for a detached command and for an
+   argv that failed to resolve (nothing ran), and a zero key refreshes nothing.
+2. **When.** On every exit, success or failure: a tool can change the MR and still exit non-zero.
+   A failure still shows its error toast; the refresh runs alongside it.
+3. **No spinner.** The refresh is silent unless it fails (`docs/tui-conventions.md`, the launcher
+   exception). A `FetchMR` error is toasted (`Refresh !<iid> failed: <err>`) and the old card stays.
+4. **Landing.** The card is replaced in place by MRKey (keeping its diff stats when the head did not
+   move), so focus, scroll and filters survive. A merged MR leaves the open board. The landing
+   follows the dirty-set guard of ADR-0005: a result whose fetch started before a local write to
+   the MR is dropped, and a landed one marks the MR dirty at its fetch start, so a full fetch
+   started earlier cannot land its older copy over it.
+
+`mrboard fetch` is unaffected: it runs no command, and its fetch path and flags are unchanged.
+
 ## Consequences
 
 - `internal/tui/keymap.go` gains a second Context-construction path (slice-based, alongside the
