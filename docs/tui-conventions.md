@@ -143,6 +143,7 @@ derives the active context stack from its state (`baseStack()`), and `footer.go`
 | `jira_icons.go` | Issue-type icon lookup for JIRA-linked MR titles |
 | `footer.go` | Footer bar — priority-filled keybinding hints, with `version.go`'s segment pinned right |
 | `header.go` | Header bar — filter bar, title, and board chrome, each in its own zone (docs/adr/0012-header-filter-state.md) |
+| `sprint_left.go` | `sprintTimeLeft` — pure "3d left" / "5h left" / "ends today" / "ended" wording for the header's sprint segment |
 | `spinner.go` | Loading overlay |
 | `state.go` | Shared TUI state types |
 | `viewport.go` | Viewport helper |

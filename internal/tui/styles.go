@@ -48,6 +48,7 @@ type Styles struct {
 	HeaderCountTotal            lip.Style // "/total mrs" denominator and the "+N" overflow marker
 	HeaderFilterBar             lip.Style // background strip behind the whole filter bar
 	HeaderFilterReduce          lip.Style // exclusion segments: col×N, asg×N, rev×N, tkt×N
+	HeaderSprint                lip.Style // active sprint name and time left, beside the filter bar
 	HeaderFilterScope           lip.Style // scope segments the user toggles: me, sprint
 	HeaderFilterSep             lip.Style // separator between filter-bar segments
 	MRNumberBang                lip.Style
@@ -113,6 +114,8 @@ func NewStyles(th theme.Theme[ColorKey], isDark bool) Styles {
 			Foreground(c(FgMedium)),
 		HeaderFilterBar: lip.NewStyle().
 			Background(c(BgElevated)),
+		HeaderSprint: lip.NewStyle().
+			Foreground(c(FgMedium)),
 		HeaderFilterScope: lip.NewStyle().
 			Foreground(c(Accent)).Bold(true),
 		HeaderFilterReduce: lip.NewStyle().

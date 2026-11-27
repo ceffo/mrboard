@@ -95,13 +95,27 @@ Pieces are dropped **whole** as the terminal narrows — never truncated mid-seg
 order, mirroring the policy `footerWidget.fitItems` already uses for the other chrome line:
 
 ```
-title → sort → tkt → rev → col → asg → age → sprint → me
+(sprint name → ) title → sort → tkt → rev → col → asg → age → sprint → me
 ```
 
 Reductions outrank the title and the sort mode because a forgotten filter misrepresents the
 board while a missing app name costs nothing. Among the reductions, hidden *people* survive
 longest: they are the exclusions most likely to hide someone's work at a standup. Scopes survive
 longest of all, since they change what every other number on the line means.
+
+### Sprint segment
+
+While the `sprint` scope is on and a sprint is held (`Model.sprint`), the bar is followed by a
+separate segment on the plain header background: `Sprint 42 · 3d left`. It is not part of the
+filter bar's accounting (it explains no part of `shown < total`) and is not a scope tag.
+`headerWidget.SetSprint(name, end)` feeds it from `applyMRFilter`; a zero `End` renders the
+name alone. The wording comes from the pure `sprintTimeLeft(end, now)`: `Nd left` from a day
+out, `Nh left` under a day, `ends today` in the last hour, `ended` after. It is computed at
+render time from the wall clock, so there is no tick of its own; it refreshes whenever the
+board repaints.
+
+It is the lowest-ranked piece, below the title. Under width pressure it first gives up name
+runes (ellipsis, down to four), then goes whole, before any other piece is touched.
 
 Anything dropped from the bar is counted by a trailing `+n`, so "there is more than you can see"
 — the one thing `[filtered]` did well — survives, quantified and present only when true. The
